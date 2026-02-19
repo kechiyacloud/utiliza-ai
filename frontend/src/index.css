@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.input-field{
+    @apply p-2 px-4 rounded bg-[#ffffff20] text-white placeholder-white placeholder:text-xs placeholder:opacity-70 border border-transparent transition-all duration-200 ease-in-out;
+}
+
+.input-field:focus {
+  @apply outline-none border-CD_Blue bg-[#ffffff30] shadow-[0_0_0_3px_rgba(77,179,255,0.25)];
+}
+
+.input-password{
+    @apply p-0 rounded bg-[#ffffff00] text-white placeholder-white placeholder:text-xs placeholder:opacity-70 border border-transparent transition-all duration-200 ease-in-out pr-10;
+}
+
+.input-password:focus {
+  @apply outline-none border-0;
+}
+
+.input-password-icon{
+    @apply absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-CD_Blue transition-colors;
+}
+.intro-text{
+    @apply text-white text-xs mb-4 text-center;
+}
+
+.form-button{
+    @apply my-2 text-white font-semibold bg-CD_Blue p-2 rounded;
+}
+
+/* Hide the default eye icon in Edge */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
+/* Hide the key icon/decoration in Chrome, Safari, and Edge */
+input::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute; 
+  right: 0;
+}
+
+/* Specific fix for the decoration container in some Webkit browsers */
+input[type="password"]::-webkit-textfield-decoration-container {
+  visibility: hidden;
+}
+
+.count-card{
+  @apply relative ml-4 bg-white rounded-xl border-2 w-[150px] h-fit border-mainTheme/10 shadow-lg p-3 pl-4;
+}
+
+.count-card-icon{
+  @apply absolute -left-3 top-3 bg-mainTheme/80 text-white rounded-full w-fit h-fit flex items-center justify-center shadow-md;
+}
+
+.card-icon{
+  @apply w-6 h-6 p-1;
+}
+
+/* Custom scrollbar for components using .custom-scrollbar */
+.custom-scrollbar{
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) transparent; /* firefox */
+}
+
+/* Webkit browsers */
+.custom-scrollbar::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track{
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb{
+  background-color: rgba(255,255,255,0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb{
+  background-color: rgba(255,255,255,0.22);
+}
+
+/* Optional: hide default scrollbar overlay on Windows for a cleaner look while retaining scroll */
+
+/* Card Transitions */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+/* Progress bar for auto-cycling cards */
+@keyframes progress-bar {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+.animate-progress-bar {
+  transform-origin: left;
+  animation: progress-bar 5s linear forwards;
+}
