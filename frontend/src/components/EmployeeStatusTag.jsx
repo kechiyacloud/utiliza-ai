@@ -17,8 +17,8 @@ import React from 'react';
 
 // Derive one of the 4 tag types from status + billable
 export const getEmployeeTag = (status, billable) => {
-    const s = (status || '').toLowerCase();
-    const b = (billable || '').toLowerCase();
+    const s = String(status || "").toLowerCase();
+    const b = String(billable || '').toLowerCase();
 
     if (s === 'notice period') {
         return {

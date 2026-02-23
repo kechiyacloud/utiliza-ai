@@ -13,37 +13,10 @@ import {
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-// import { getEmployeeById } from '../../api/employeeApi'   // ← API call commented out for mock mode
+import { getEmployeeById } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 
-// ─── Mock projects generator — derived from employee's skills ───────────────
-const generateMockProjects = (emp) => {
-    const allSkills = emp.skills || ['React', 'Node.js', 'SQL', 'Git'];
-    const colors = ['#3BA9FB', '#22c55e', '#f59e0b', '#a855f7', '#ef4444'];
-    const projectNames = [
-        'Project Alpha', 'Project Beta', 'Digital Transform',
-        'Cloud Migration', 'Data Platform', 'Portal v2'
-    ];
-    // Generate 2-3 projects based on allocation
-    const alloc = emp.employee_allocations || 80;
-    if (alloc === 0) return []; // Bench — no projects
-    const count = alloc >= 100 ? 3 : 2;
-    return Array.from({ length: count }, (_, i) => ({
-        name: projectNames[i % projectNames.length],
-        value: i === 0 ? Math.round(alloc * 0.6) : Math.round(alloc * 0.4 / (count - 1)),
-        color: colors[i % colors.length],
-        skills: allSkills.slice(i * 2, i * 2 + 2),
-        startWeek: i * 2,
-        durationWeeks: 8 - i * 2,
-    }));
-};
 
-// ─── Mock experience generator ───────────────────────────────────────────────
-const mockExperience = (emp, index = 0) => {
-    const years = [2, 3, 5, 7, 9, 12][index % 6];
-    const cdYears = Math.min(years, [1, 2, 3, 4][index % 4]);
-    return { total: `${years} Years`, cd: `${cdYears} Years` };
-};
 
 const EmployeeDetails = () => {
     const navigate = useNavigate();
@@ -56,62 +29,45 @@ const EmployeeDetails = () => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        // ── MOCK MODE: read employee from router state passed by Employee.jsx ──
-        const mockEmp = location.state?.employee;
-
-        if (mockEmp) {
-            // Extract index from employee_id for deterministic mock data (EMP-1001 → 0)
-            const idx = parseInt((mockEmp.employee_id || 'EMP-1001').replace(/\D/g, '')) - 1001;
-            const exp = mockExperience(mockEmp, idx);
-            const projects = generateMockProjects(mockEmp);
-
-            setUserData({
-                // Identity
-                id: mockEmp.employee_id,
-                name: mockEmp.employee_name,
-                designation: mockEmp.role_designation,
-                profilePic: mockEmp.photo_url || null,
-                email: `${(mockEmp.employee_name || 'emp').toLowerCase().replace(/\s+/g, '.')}@company.com`,
-                phone: `+91 9${String(1000000000 + idx * 7).slice(1)}`,
-
-                // Status fields (used by EmployeeStatusTag)
-                employee_status: mockEmp.employee_status,
-                billable: mockEmp.billable,
-
-                // Profile Details card
-                department: mockEmp.department,
-                reportingManager: ['Suresh Babu', 'Meera Balan', 'Karthik Raj', 'Deepa Nambiar'][idx % 4],
-                joiningDate: mockEmp.date_of_joining || '2022-01-15',
-                totalExperience: exp.total,
-                cdExperience: exp.cd,
-                shiftTiming: ['9:00 AM – 6:00 PM', '10:00 AM – 7:00 PM', '8:00 AM – 5:00 PM'][idx % 3],
-                status: {
-                    allocated: mockEmp.employee_status === 'Allocated' ? 'Allocated' : mockEmp.employee_status,
-                    workMode: ['Hybrid', 'Remote', 'On-site'][idx % 3],
-                    location: mockEmp.location,
-                },
-
-                // Projects (middle column)
-                projects,
-
-                // Skills & Certificates (right column)
-                masterSkills: mockEmp.skills || ['React', 'Node.js', 'SQL', 'Git'],
-                certificates: [
-                    'AWS Certified Developer – Associate',
-                    'Microsoft Azure Fundamentals',
-                    'Certified Scrum Master (CSM)',
-                ].slice(0, (idx % 3) + 1),
-            });
-            setLoading(false);
-            return;
-        }
-
-        // ── REAL API MODE (commented out — uncomment when backend is ready) ──
-        /*
         const fetchEmployeeDetails = async () => {
+            if (!id) return;
+
             try {
-                const data = await getEmployeeById(id);
-                setUserData(data);
+                const res = await getEmployeeById(id);
+                // Extract inner data if nested
+                const sourceData = res.data || res;
+
+                // Inject status/billable into projects for tags
+                const enhancedProjects = (sourceData.projects || []).map(p => ({
+                    ...p,
+                    status: sourceData.employee_status || 'Allocated',
+                    billable: sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'), // default fallback
+                    name: p.project_name || p.name,
+                    value: p.allocation_percentage || p.value || 0
+                }));
+
+                // Map backend keys to what the JSX components previously expected
+                setUserData({
+                    ...sourceData,
+                    name: sourceData.employee_name || sourceData.name || sourceData.employee_id,
+                    designation: sourceData.role_designation || sourceData.designation,
+                    id: sourceData.employee_id || sourceData.id,
+                    reportingManager: sourceData.reporting_manager || sourceData.reporting_manager_id || sourceData.reportingManager,
+                    joiningDate: sourceData.date_of_joining || sourceData.joiningDate,
+                    totalExperience: sourceData.total_experience !== undefined ? sourceData.total_experience : sourceData.totalExperience,
+                    cdExperience: sourceData.experience_in_cd !== undefined ? sourceData.experience_in_cd : (sourceData.cd_experience !== undefined ? sourceData.cd_experience : sourceData.cdExperience),
+                    shiftTiming: sourceData.shift || sourceData.shiftTiming,
+                    status: {
+                        allocated: sourceData.employee_status,
+                        workMode: sourceData.mode_of_work,
+                        location: sourceData.location || (sourceData.status && sourceData.status.location)
+                    },
+                    projects: enhancedProjects,
+                    masterSkills: (sourceData.skills || []).map(s => {
+                        if (typeof s === 'string') return s;
+                        return s.skill_name || s.skill || s.name;
+                    })
+                });
             } catch (err) {
                 console.error("Failed to fetch employee details", err);
                 setError("Failed to load employee details.");
@@ -120,16 +76,8 @@ const EmployeeDetails = () => {
             }
         };
 
-        if (id) {
-            fetchEmployeeDetails();
-        }
-        */
-
-        // Fallback if navigated directly without state (e.g. browser refresh)
-        setError('Employee data not available. Please go back and click on an employee from the table.');
-        setLoading(false);
-
-    }, [id, location.state]);
+        fetchEmployeeDetails();
+    }, [id]);
 
 
     // Loading State
@@ -161,8 +109,8 @@ const EmployeeDetails = () => {
     // If projects is empty or undefined, handle gracefully
     const projects = userData.projects || [];
     const chartData = projects.map(p => ({
-        name: p.name,
-        value: p.value
+        name: p.project_name || p.name,
+        value: p.allocation_percentage || p.value || 0
     }));
     const COLORS = projects.map(p => p.color || '#ccc');
 
@@ -208,8 +156,8 @@ const EmployeeDetails = () => {
                             {userData.id}
                         </div>
                         <EmployeeStatusTag
-                            status={userData.employee_status || userData.status}
-                            billable={userData.billable}
+                            status={userData.status?.allocated}
+                            billable={userData.billable || (userData.status?.allocated === 'Bench' ? 'No' : 'Yes')}
                         />
                     </div>
 
@@ -268,11 +216,11 @@ const EmployeeDetails = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">Total Exp</p>
-                                <p className="font-semibold text-slate-700">{userData.totalExperience}</p>
+                                <p className="font-semibold text-slate-700">{userData.totalExperience} Yrs</p>
                             </div>
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">CD Exp</p>
-                                <p className="font-semibold text-slate-700">{userData.cdExperience}</p>
+                                <p className="font-semibold text-slate-700">{userData.cdExperience} Yrs</p>
                             </div>
                         </div>
                         <div>
@@ -323,9 +271,12 @@ const EmployeeDetails = () => {
                             <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="font-semibold text-sm text-slate-700 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color }}></span>
+                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color || '#3b82f6' }}></span>
                                         {project.name}
                                     </span>
+                                    {/* Tag added here */}
+                                    <EmployeeStatusTag status={project.status} billable={project.billable} size="sm" />
+
                                     <span className="text-xs font-bold text-slate-500">{project.value}%</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1">

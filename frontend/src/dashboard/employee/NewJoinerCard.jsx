@@ -20,9 +20,7 @@ const NewJoinerCard = ({ onClick }) => {
                 ]);
             } catch (error) {
                 console.error('Error fetching new joiners:', error);
-                setJoiners([
-                    { employee_name: 'New Joiner', role_designation: 'Onboarding', photo_url: null }
-                ]);
+                setJoiners([]);
             } finally {
                 setLoading(false);
             }

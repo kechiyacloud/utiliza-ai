@@ -10,7 +10,13 @@ allowed_origins = [
     "http://localhost:5173",   # Frontend 5173 without Docker
     "http://127.0.0.1:5173",
     "http://localhost:3000",   # Frontend 3000 using Docker
-    "http://127.0.0.1:3000",    
+    "http://127.0.0.1:3000",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://65.0.110.174",
+    "http://65.0.110.174:5173",
+    "http://65.0.110.174:5174",
+    "http://65.0.110.174:3000"
 ]
 
 app.add_middleware(
