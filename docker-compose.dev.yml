@@ -16,7 +16,7 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
-    image: node:18-alpine
+    image: node:22-alpine
     container_name: project-frontend-dev
     working_dir: /app
     volumes:
