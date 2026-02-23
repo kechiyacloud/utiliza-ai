@@ -1,60 +1,125 @@
 from fastapi import APIRouter, HTTPException
 from app.database import get_db_connection
+from app.auth_utils import hash_password, verify_password
+from pydantic import BaseModel
 
 router = APIRouter()
 
-@router.get("/dashboard/infocards")
-def dashboard_infocards():
+#-------------------- Register --------------------
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+
+@router.post("/register")
+def register_user(data: RegisterRequest):
+    email = data.email
+    password = data.password
+
+    print("Registration request received:", email)
 
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
-        # ---- Total Employees ----
-        try:
-            cur.execute("SELECT COUNT(*) FROM employee_master")
-            total_employees = cur.fetchone()[0]
-        except:
-            total_employees = 0
+        # Check if user exists
+        cur.execute(
+            "SELECT id FROM users WHERE email = %s",
+            (email,)
+        )
+        if cur.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="User already exists"
+            )
 
-        # ---- Total Clients ----
-        try:
-            cur.execute("SELECT COUNT(*) FROM clients")
-            total_clients = cur.fetchone()[0]
-        except:
-            total_clients = 0
+        # Hash password
+        hashed_password = hash_password(password)
 
-        # ---- Running Projects ----
-        try:
-            cur.execute("""
-                SELECT COUNT(*)
-                FROM projects
-                WHERE LOWER(project_status) = 'running'
-            """)
-            running_projects = cur.fetchone()[0]
-        except:
-            running_projects = 0
+        # Insert user
+        cur.execute(
+            """
+            INSERT INTO users (email, password_hash)
+            VALUES (%s, %s)
+            """,
+            (email, hashed_password)
+        )
 
-        # ---- Bench Employees ----
-        try:
-            cur.execute("""
-                SELECT COUNT(*)
-                FROM employee_master e
-                LEFT JOIN projects_allocation p
-                ON e.employee_id = p.employee_id
-                AND p.allocation_end_date >= CURRENT_DATE
-                WHERE p.employee_id IS NULL
-            """)
-            bench_employees = cur.fetchone()[0]
-        except:
-            bench_employees = 0
+        conn.commit()
+        print("User registered successfully")
 
         return {
-            "total_employees": total_employees,
-            "total_clients": total_clients,
-            "running_projects": running_projects,
-            "bench_employees": bench_employees
+            "message": "User registered successfully"
         }
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        print("Error:", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
+
+    finally:
+        cur.close()
+        conn.close()
+
+#-------------------- Login --------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@router.post("/login")
+def login_user(data: LoginRequest):
+    email = data.email
+    password = data.password
+
+    print("Login request received:", email)
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # Get user
+        cur.execute(
+            "SELECT id, password_hash FROM users WHERE email = %s",
+            (email,)
+        )
+        user = cur.fetchone()
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
+
+        user_id, stored_hash = user
+
+        # Verify password
+        if not verify_password(password, stored_hash):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
+
+        print("Login successful")
+
+        return {
+            "message": "Login successful",
+            "user_id": user_id
+        }
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        print("Error:", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
 
     finally:
         cur.close()

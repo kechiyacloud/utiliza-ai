@@ -15,7 +15,7 @@ function LoginRegister() {
         {/* Logo */}
         <div className="absolute flex justify-center items-center top-4 left-4 text-white font-bold text-sm">
             <CD_Blue className="mr-2 w-5 h-5"/>
-            <p>Dashboard</p>
+            <p>Utiliza-AI</p>
         </div>
 
         {/* Dynamic Form */}
