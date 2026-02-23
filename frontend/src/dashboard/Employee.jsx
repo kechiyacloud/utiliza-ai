@@ -40,13 +40,8 @@ const EmployeeMonthCard = ({ onClick }) => {
         setEmployee(data);
       } catch (error) {
         console.error('Error fetching employee of the month:', error);
-        // Set a fallback employee on error
-        setEmployee({
-          employee_id: 'DEMO003',
-          employee_name: 'Demo Employee',
-          role_designation: 'Role',
-          photo_url: null
-        });
+        setEmployee(null);
+
       } finally {
         setLoading(false);
       }
@@ -67,6 +62,8 @@ const EmployeeMonthCard = ({ onClick }) => {
       </div>
     );
   }
+
+  if (!employee) return null;
 
   return (
     <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition-all hover:shadow-md cursor-pointer group" onClick={() => onClick && onClick(employee)}>
