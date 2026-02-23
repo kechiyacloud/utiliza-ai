@@ -23,7 +23,7 @@ import EmployeeDetails from './dashboard/employee/EmployeeDetails'
 import EmployeeMasterList from './dashboard/employee/EmployeeMasterList'
 import AddEmployee from './dashboard/employee/AddEmployee'
 import Organization from './dashboard/Organization'
-import DataInfrastructureTest from './test/DataInfrastructureTest'
+// import DataInfrastructureTest from './test/DataInfrastructureTest'
 
 function App() {
   return (
@@ -51,7 +51,7 @@ function App() {
             <Route path='allocation' element={<Allocations />} />
             <Route path='organization' element={<Organization />} />
             <Route path='settings' element={<Settings />} />
-            <Route path='test' element={<DataInfrastructureTest />} />
+            {/* <Route path='test' element={<DataInfrastructureTest />} /> */}
           </Route>
 
           {/* PROTECTED ROUTES */}
