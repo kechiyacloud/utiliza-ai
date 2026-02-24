@@ -61,7 +61,7 @@ const AddEmployee = () => {
         'Security Engineering', 'US Staffing', 'Business Development',
         'Training & Development', 'HR', 'Finance', 'PMO', 'Management'
     ];
-    const locations = ['USA', 'India - Coimbatore', 'Canada', 'Malaysia', 'India - Chennai'];
+    const locations = ['USA', 'Coimbatore', 'Canada', 'Malaysia', 'Chennai'];
 
     // Department-based skill suggestions
     const departmentSkills = {

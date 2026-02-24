@@ -63,7 +63,19 @@ const EmployeeMonthCard = ({ onClick }) => {
     );
   }
 
-  if (!employee) return null;
+  if (!employee) {
+    return (
+      <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer" onClick={() => onClick && onClick(null)}>
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Employee of the Month</p>
+          <p className="text-xs text-gray-500 font-medium">No results</p>
+        </div>
+        <div className="p-2 rounded-lg bg-purple-50">
+          <Trophy size={20} className="text-purple-500" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition-all hover:shadow-md cursor-pointer group" onClick={() => onClick && onClick(employee)}>

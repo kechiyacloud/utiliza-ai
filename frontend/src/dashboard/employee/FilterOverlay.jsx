@@ -269,7 +269,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
     const EMPLOYEE_TYPES = ['Full Time', 'Contract', 'Intern', 'Consultant'];
 
     const LOCATIONS = [
-        'USA', 'India - Coimbatore', 'Canada', 'Malaysia', 'India - Chennai'
+        'USA', 'Coimbatore', 'Canada', 'Malaysia', 'Chennai'
     ];
 
     const STATUS_TAGS = [

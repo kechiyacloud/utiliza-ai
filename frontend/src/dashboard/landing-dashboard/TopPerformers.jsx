@@ -1,7 +1,9 @@
 import React from 'react';
 import { Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const TopPerformers = ({ employees }) => {
+    const navigate = useNavigate();
     if (!employees) return null;
 
     return (
@@ -23,7 +25,14 @@ const TopPerformers = ({ employees }) => {
                     </thead>
                     <tbody>
                         {employees.map((emp) => (
-                            <tr key={emp.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                            <tr
+                                key={emp.id}
+                                onClick={() => {
+                                    sessionStorage.setItem('returnToTopPerformers', 'true');
+                                    navigate(`/info/employee/${emp.id}`);
+                                }}
+                                className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                            >
                                 <td className="py-3 flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
                                         {emp.avatar}

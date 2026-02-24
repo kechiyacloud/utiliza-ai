@@ -1,7 +1,9 @@
 import React from 'react';
 import { MoreHorizontal, TrendingUp, TrendingDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const HighAllocationProjects = ({ projects }) => {
+    const navigate = useNavigate();
     if (!projects) return null;
 
     return (
@@ -23,7 +25,14 @@ const HighAllocationProjects = ({ projects }) => {
                     </thead>
                     <tbody>
                         {projects.map((project) => (
-                            <tr key={project.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                            <tr
+                                key={project.id}
+                                onClick={() => {
+                                    sessionStorage.setItem('returnToHighAllocation', 'true');
+                                    navigate('/info/projects');
+                                }}
+                                className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                            >
                                 <td className="py-2">
                                     <div className="font-semibold text-gray-800">{project.name}</div>
                                     <div className="text-xs text-gray-500">{project.resources} Resources</div>

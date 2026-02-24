@@ -1,88 +1,64 @@
 import api from "./axios";
 
-// MOCK DATA matching the "Projects Overview" image
-const MOCK_PROJECTS_DATA = {
-    stats: {
-        totalProjects: 5,
-        internalProjects: 1,
-        clientProjects: 4,
-        ongoing: 2,
-        pocsCount: 1
-    },
-    projects: [
-        {
-            id: 1,
-            name: "Healthcare Portal Remodel",
-            statusText: "Healthy",
-            statusColor: "text-green-500",
-            resources: 4,
-            client: "TechGlobal Inc",
-            endDate: "2026-06-30",
-            type: "Client",
-            status: "In Progress",
-            statusPillColor: "bg-blue-100 text-blue-600",
-            icon: "H"
-        },
-        {
-            id: 2,
-            name: "Beta Platform Launch",
-            statusText: "Critical",
-            statusColor: "text-red-500",
-            resources: 2,
-            client: "FinServe Corp",
-            endDate: "2026-03-15",
-            type: "POC",
-            status: "Delayed",
-            statusPillColor: "bg-red-100 text-red-600",
-            icon: "B"
-        },
-        {
-            id: 3,
-            name: "Internal Tooling",
-            statusText: "Healthy",
-            statusColor: "text-green-500",
-            resources: 1,
-            client: "Internal",
-            endDate: "2026-12-31",
-            type: "Internal",
-            status: "Completed",
-            statusPillColor: "bg-green-100 text-green-600",
-            icon: "I"
-        },
-        {
-            id: 4,
-            name: "Healthcare Portal",
-            statusText: "At Risk",
-            statusColor: "text-orange-500",
-            resources: 2,
-            client: "HealthPlus Med",
-            endDate: "2026-04-20",
-            type: "Client",
-            status: "In Progress",
-            statusPillColor: "bg-blue-100 text-blue-600",
-            icon: "H"
-        },
-        {
-            id: 5,
-            name: "Data Migration",
-            statusText: "On Track",
-            statusColor: "text-green-500",
-            resources: 3,
-            client: "MegaCorp",
-            endDate: "2026-08-15",
-            type: "Client",
-            status: "In Progress",
-            statusPillColor: "bg-blue-100 text-blue-600",
-            icon: "D"
-        }
-    ]
-};
-
 export const fetchProjectsData = async () => {
-    // Simulate API delay
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({ data: MOCK_PROJECTS_DATA });
-        }, 500);
-    });
+    try {
+        const [overviewRes, listRes] = await Promise.all([
+            api.get('/projects/overview').catch(() => ({ data: {} })),
+            api.get('/projects/list').catch(() => ({ data: [] }))
+        ]);
+
+        const o = overviewRes?.data || {};
+        const l = Array.isArray(listRes?.data) ? listRes.data : [];
+
+        // Map Backend structure to Frontend Expected Structure
+        const REAL_PROJECTS_DATA = {
+            stats: {
+                totalProjects: o.total_projects || 0,
+                internalProjects: o.internal_projects || 0,
+                clientProjects: o.client_projects || 0,
+                ongoing: o.ongoing_projects || 0,
+                pocsCount: o.poc_projects || 0
+            },
+            projects: l.map((p) => {
+                // Determine display status pill color based on mapped status string from DB
+                const s = (p.status || '').toLowerCase();
+                let pillColor = "bg-gray-100 text-gray-600";
+
+                if (s === "in progress" || s === "running") pillColor = "bg-blue-100 text-blue-600";
+                else if (s === "completed" || s === "done") pillColor = "bg-green-100 text-green-600";
+                else if (s === "delayed" || s === "on hold") pillColor = "bg-red-100 text-red-600";
+
+                const isClient = p.type === 'Yes' || (p.type && p.type.toLowerCase() === 'billable');
+
+                return {
+                    id: p.project_id,
+                    name: p.project_name,
+                    statusText: "Active", // Default placeholder for secondary health text
+                    statusColor: "text-green-500",
+                    resources: p.resource_count || 0,
+                    client: isClient ? 'Client' : 'Internal', // Basic mapping based on billable flag
+                    endDate: p.end_date || "TBD",
+                    type: isClient ? 'Client' : 'Internal',
+                    status: p.status,
+                    statusPillColor: pillColor,
+                    icon: p.project_name ? p.project_name.charAt(0).toUpperCase() : "P",
+                    resourceNames: p.resource_names || "None"
+                };
+            })
+        };
+
+        return { data: REAL_PROJECTS_DATA };
+
+    } catch (error) {
+        console.error("Projects API Error:", error);
+        // Fallback empty structure
+        return {
+            data: {
+                stats: {
+                    totalProjects: 0, internalProjects: 0, clientProjects: 0, ongoing: 0, pocsCount: 0
+                },
+                projects: []
+            }
+        };
+    }
 };

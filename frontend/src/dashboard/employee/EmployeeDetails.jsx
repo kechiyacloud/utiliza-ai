@@ -95,11 +95,11 @@ const EmployeeDetails = () => {
             <div className="p-6 bg-slate-50 min-h-screen flex flex-col items-center justify-center gap-4">
                 <div className="text-red-500 font-medium">{error || "Employee not found"}</div>
                 <button
-                    onClick={() => navigate('/info/employee')}
+                    onClick={() => navigate(-1)}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Back to Employee List
+                    Go Back
                 </button>
             </div>
         )
@@ -124,11 +124,11 @@ const EmployeeDetails = () => {
             {/* Back Button */}
             <div>
                 <button
-                    onClick={() => navigate('/info/employee')}
+                    onClick={() => navigate(-1)}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Back to Employee List
+                    Go Back
                 </button>
             </div>
 

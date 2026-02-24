@@ -15,25 +15,21 @@ def dashboard_infocards():
         total_employees = cur.fetchone()[0]
 
         # ---- Total Clients ----
-        cur.execute("SELECT COUNT(*) FROM clients")
-        total_clients = cur.fetchone()[0]
+        total_clients = 0
 
         # ---- Running Projects (case safe) ----
         cur.execute("""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(project_status) = 'running'
+            WHERE LOWER(project_status) IN ('running', 'in progress', 'live', 'active')
         """)
         running_projects = cur.fetchone()[0]
 
-        # ---- Bench Employees (SAFE LEFT JOIN method) ----
+        # ---- Bench Employees 
         cur.execute("""
             SELECT COUNT(*)
-            FROM employee_master e
-            LEFT JOIN projects_allocation p
-              ON e.employee_id = p.employee_id
-              AND p.allocation_end_date >= CURRENT_DATE
-            WHERE p.employee_id IS NULL
+            FROM employee_master_pro p
+            WHERE p.employee_status = 'Bench'
         """)
         bench_employees = cur.fetchone()[0]
 
@@ -63,13 +59,22 @@ def allocation_3m():
 
     try:
         cur.execute("""
+            WITH months AS (
+                SELECT generate_series(
+                    DATE_TRUNC('month', CURRENT_DATE),
+                    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '2 months',
+                    INTERVAL '1 month'
+                ) AS month_start
+            )
             SELECT
-                TO_CHAR(allocation_start_date, 'YYYY-MM') AS month,
-                COUNT(*) AS allocations
-            FROM projects_allocation
-            WHERE allocation_start_date >= CURRENT_DATE - INTERVAL '3 months'
-            GROUP BY month
-            ORDER BY month
+                TO_CHAR(m.month_start, 'YYYY-MM') AS month,
+                COUNT(DISTINCT pa.employee_id) AS allocations
+            FROM months m
+            LEFT JOIN projects_allocation pa
+              ON pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+             AND pa.allocation_end_date >= m.month_start
+            GROUP BY m.month_start
+            ORDER BY m.month_start
         """)
 
         rows = cur.fetchall()
@@ -192,18 +197,8 @@ def client_health():
     cur = conn.cursor()
 
     try:
-        cur.execute("SELECT client_name FROM clients")
-        rows = cur.fetchall()
-
-        return [
-            {
-                "client": r[0],
-                "active_projects": 0,
-                "headcount": 0,
-                "health": "red"
-            }
-            for r in rows
-        ]
+        # No clients table available, return empty
+        return []
 
     finally:
         cur.close()

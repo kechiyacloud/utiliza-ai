@@ -1,44 +1,81 @@
 import api from "./axios";
 
-// MOCK DATA matching the requirements/images
-const MOCK_DASHBOARD_DATA = {
-    executiveCards: {
-        totalEmployees: { value: 450, change: "+5 from last week", label: "Total Employees" },
-        activeClients: { value: 12, change: "2 New this month", label: "Active Clients" },
-        runningProjects: { value: 32, change: "", label: "Running Projects", alertCount: 2 },
-        benchStrength: { value: 45, change: "10% of total workforce", label: "Bench Strength" }
-    },
-    resourceForecast: [
-        { month: 'Jan', totalEmployees: 450, allocated: 380 },
-        { month: 'Feb', totalEmployees: 460, allocated: 400 },
-        { month: 'Mar', totalEmployees: 480, allocated: 420 },
-    ],
-    highAllocationProjects: [
-        { id: 1, name: "Internal Tooling", resources: 1, utilization: 100 },
-        { id: 2, name: "Beta Platform Launch", resources: 2, utilization: 90 },
-        { id: 3, name: "Healthcare Portal Remodel", resources: 4, utilization: 81 },
-    ],
-    topPerformers: [
-        { id: 1, name: "Sarah Wilson", role: "Senior DevOps", allocation: 100, avatar: "SW" },
-        { id: 2, name: "James Chen", role: "Tech Lead", allocation: 95, avatar: "JC" },
-        { id: 3, name: "Anita Roy", role: "Product Owner", allocation: 90, avatar: "AR" },
-    ],
-    resourceAvailability: [
-        { id: "C", name: "Charlie Brown", project: "Beta Platform Launch", releaseDate: "2026-03-15", availability: 0 },
-        { id: "A", name: "Alice Johnson", project: "Beta Platform Launch", releaseDate: "2026-03-15", availability: 20 },
-        { id: "D", name: "Diana Prince", project: "Healthcare Portal", releaseDate: "2026-04-20", availability: 25 },
-    ]
-};
-
 export const fetchDashboardData = async () => {
-    // Simulate API delay
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({ data: MOCK_DASHBOARD_DATA });
-        }, 500);
-    });
+    try {
+        const [
+            infoCardsRes,
+            forecastRes,
+            highAllocationRes,
+            performersRes,
+            availabilityRes
+        ] = await Promise.all([
+            api.get('/dashboard/infocards').catch(() => ({ data: {} })),
+            api.get('/dashboard/allocation-3m').catch(() => ({ data: [] })),
+            api.get('/dashboard/high-allocation-projects').catch(() => ({ data: [] })),
+            api.get('/dashboard/top-performers').catch(() => ({ data: [] })),
+            api.get('/dashboard/upcoming-availability').catch(() => ({ data: [] }))
+        ]);
 
-    // In real app, uncomment below:
-    // const response = await api.get("/dashboard/summary");
-    // return response.data;
+        // Safely extract data, fallback to defaults if 500/error occurred
+        const info = infoCardsRes?.data || {};
+        const forecast = Array.isArray(forecastRes?.data) ? forecastRes.data : [];
+        const highAlloc = Array.isArray(highAllocationRes?.data) ? highAllocationRes.data : [];
+        const performers = Array.isArray(performersRes?.data) ? performersRes.data : [];
+        const availability = Array.isArray(availabilityRes?.data) ? availabilityRes.data : [];
+
+        // Map Backend structure to Frontend Expected Structure
+        const REAL_DASHBOARD_DATA = {
+            executiveCards: {
+                totalEmployees: { value: info.total_employees || 0, change: "", label: "Total Employees" },
+                activeClients: { value: info.total_clients || 0, change: "", label: "Active Clients" },
+                runningProjects: { value: info.running_projects || 0, change: "", label: "Running Projects", alertCount: 0 },
+                benchStrength: { value: info.bench_employees || 0, change: "", label: "Bench Strength" }
+            },
+            resourceForecast: forecast.map((f) => ({
+                month: f.month, // ex: "2026-03"
+                totalEmployees: info.total_employees || 0, // Not explicitly tracked historically in this endpoint, so using current
+                allocated: f.allocations
+            })),
+            highAllocationProjects: highAlloc.map((p, idx) => ({
+                id: idx,
+                name: p.project_name,
+                resources: p.resource_count,
+                utilization: 100 // Hardcoded visual for now or derived if needed
+            })),
+            topPerformers: performers.map((p) => ({
+                id: p.employee_id,
+                name: p.employee_name,
+                role: `${p.project_count} Projects`, // Use role mapping if available, currently putting project count
+                allocation: 100, // Top performers are usually 100%
+                avatar: p.employee_name ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('') : "U"
+            })),
+            resourceAvailability: availability.map((a, idx) => ({
+                id: idx.toString(),
+                name: a.employee,
+                project: a.project,
+                releaseDate: a.release_date,
+                availability: a.allocation_percent
+            }))
+        };
+
+        return { data: REAL_DASHBOARD_DATA };
+
+    } catch (error) {
+        console.error("Dashboard API Error:", error);
+        // Fallback empty structure
+        return {
+            data: {
+                executiveCards: {
+                    totalEmployees: { value: 0, change: "", label: "Total Employees" },
+                    activeClients: { value: 0, change: "", label: "Active Clients" },
+                    runningProjects: { value: 0, change: "", label: "Running Projects", alertCount: 0 },
+                    benchStrength: { value: 0, change: "", label: "Bench Strength" }
+                },
+                resourceForecast: [],
+                highAllocationProjects: [],
+                topPerformers: [],
+                resourceAvailability: []
+            }
+        };
+    }
 };

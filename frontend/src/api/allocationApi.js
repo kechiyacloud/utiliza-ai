@@ -1,58 +1,32 @@
-// Mock data for Allocation Page
+// Data for Allocation Page
 
 const allocationData = {
     // Top Metric Cards
     metrics: {
-        totalResources: { value: 420, trend: "+5%", label: "Total Resources" },
-        billable: { value: 310, trend: "+2%", label: "Billable Count" },
-        nonBillable: { value: 90, trend: "-1%", label: "Non-Billable" },
-        benchStrength: { value: 110, trend: "+12%", label: "Bench Strength" },
-        avgUtilization: { value: "74%", trend: "-2%", label: "Avg Utilization" },
-        overallocated: { value: 18, trend: "+3", label: "Overallocated", isAlert: true }
+        totalResources: { value: 0, trend: "0%", label: "Total Resources" },
+        billable: { value: 0, trend: "0%", label: "Billable Count" },
+        nonBillable: { value: 0, trend: "0%", label: "Non-Billable" },
+        benchStrength: { value: 0, trend: "0%", label: "Bench Strength" },
+        avgUtilization: { value: "0%", trend: "0%", label: "Avg Utilization" },
+        overallocated: { value: 0, trend: "0", label: "Overallocated", isAlert: false }
     },
 
     // Organization Utilization Chart Data
     orgUtilization: {
-        used: 74,
-        available: 26,
-        breakdown: [
-            { label: "Billable", value: 65, color: "#3b82f6" }, // Blue
-            { label: "Internal", value: 15, color: "#a855f7" }, // Purple
-            { label: "Bench", value: 20, color: "#64748b" }     // Slate
-        ]
+        used: 0,
+        available: 100,
+        breakdown: []
     },
 
     // Department Utilization List
-    departments: [
-        { name: "Engineering", utilization: 85, bench: 5 },
-        { name: "Design", utilization: 70, bench: 15 },
-        { name: "DevOps", utilization: 90, bench: 2 },
-        { name: "QA", utilization: 65, bench: 25 },
-        { name: "Product", utilization: 80, bench: 10 },
-    ],
+    departments: [],
 
     // Project Utilization Table
-    projects: [
-        { id: 1, name: "Alpha Cloud", billable: 120, nonBillable: 10, utilization: 92 },
-        { id: 2, name: "Beta Launch", billable: 85, nonBillable: 5, utilization: 88 },
-        { id: 3, name: "Internal Tools", billable: 0, nonBillable: 40, utilization: 45 },
-        { id: 4, name: "Healthcare App", billable: 60, nonBillable: 15, utilization: 75 },
-        { id: 5, name: "FinTech Core", billable: 45, nonBillable: 20, utilization: 65 },
-    ],
+    projects: [],
 
     // Detailed Employee List
-    employees: [
-        { id: 1, name: "Sarah Smith", avatar: "SS", project: "Alpha Cloud", allocation: 120, type: "Billable", dept: "Engineering" },
-        { id: 2, name: "John Doe", avatar: "JD", project: "Beta Launch", allocation: 100, type: "Billable", dept: "Engineering" },
-        { id: 3, name: "Emma Wilson", avatar: "EW", project: "Internal Tools", allocation: 50, type: "Internal", dept: "Design" },
-        { id: 4, name: "Mike Brown", avatar: "MB", project: "Bench", allocation: 0, type: "Bench", dept: "QA" },
-        { id: 5, name: "Anna Davis", avatar: "AD", project: "Healthcare App", allocation: 80, type: "Billable", dept: "Product" },
-        { id: 6, name: "Tom Wilson", avatar: "TW", project: "FinTech Core", allocation: 110, type: "Billable", dept: "Engineering" },
-        { id: 7, name: "Lisa Ray", avatar: "LR", project: "Bench", allocation: 0, type: "Bench", dept: "Design" },
-        { id: 8, name: "James Bond", avatar: "JB", project: "Alpha Cloud", allocation: 100, type: "Billable", dept: "DevOps" },
-    ]
+    employees: []
 };
-
 // Simulate API call with filtering
 export const fetchAllocationData = async (filters = {}) => {
     return new Promise((resolve) => {

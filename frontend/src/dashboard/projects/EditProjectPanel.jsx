@@ -169,6 +169,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                     value={formData.resources}
                                     onChange={handleChange}
+                                    disabled
                                 />
                             </div>
                         </form>

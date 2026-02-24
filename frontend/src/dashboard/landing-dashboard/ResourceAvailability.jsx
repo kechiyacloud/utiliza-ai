@@ -1,6 +1,8 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ResourceAvailability = ({ availability }) => {
+    const navigate = useNavigate();
     if (!availability) return null;
 
     return (
@@ -22,7 +24,14 @@ const ResourceAvailability = ({ availability }) => {
                     </thead>
                     <tbody>
                         {availability.map((item) => (
-                            <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                            <tr
+                                key={item.id}
+                                className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                                onClick={() => {
+                                    sessionStorage.setItem('returnToResourceAvailability', 'true');
+                                    navigate(`/info/employee/${item.id}`);
+                                }}
+                            >
                                 <td className="py-3 flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
                                         {item.id}

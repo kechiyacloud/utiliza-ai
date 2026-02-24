@@ -18,10 +18,10 @@ export const DEPARTMENTS = [
 
 export const LOCATIONS = [
     'USA',
-    'India - Coimbatore',
+    'Coimbatore',
     'Canada',
     'Malaysia',
-    'India - Chennai'
+    'Chennai'
 ];
 
 export const STATUS_OPTIONS = [
