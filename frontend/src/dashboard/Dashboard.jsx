@@ -31,6 +31,35 @@ function Dashboard() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    // Restore scroll position when loading is complete
+    if (!loading) {
+      setTimeout(() => {
+        let elId = null;
+        if (sessionStorage.getItem('returnToTopPerformers') === 'true') {
+          elId = 'dashboard-top-performers';
+          sessionStorage.removeItem('returnToTopPerformers');
+        } else if (sessionStorage.getItem('returnToDashboardCards') === 'true') {
+          elId = 'dashboard-cards';
+          sessionStorage.removeItem('returnToDashboardCards');
+        } else if (sessionStorage.getItem('returnToHighAllocation') === 'true') {
+          elId = 'dashboard-high-allocation';
+          sessionStorage.removeItem('returnToHighAllocation');
+        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true') {
+          elId = 'dashboard-resource-availability';
+          sessionStorage.removeItem('returnToResourceAvailability');
+        }
+
+        if (elId) {
+          const el = document.getElementById(elId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'auto', block: 'center' });
+          }
+        }
+      }, 100);
+    }
+  }, [loading]);
+
   const handleAddProject = (project) => {
     console.log("New project from Dashboard:", project);
     // Logic to add project
@@ -74,23 +103,22 @@ function Dashboard() {
       {/* Top Cards Row */}
       <ExecutiveDashboardCards data={data?.executiveCards} />
 
-      {/* Main Content Area: Charts & High Allocation Table */}
       <div className="flex flex-col lg:flex-row gap-6 w-full">
         <div className="w-full lg:w-2/3 h-[350px] min-w-0">
           <ResourceForecastChart data={data?.resourceForecast} />
         </div>
-        <div className="w-full lg:w-1/3">
+        <div className="w-full lg:w-1/3" id="dashboard-high-allocation">
           <HighAllocationProjects projects={data?.highAllocationProjects} />
         </div>
       </div>
 
       {/* Top Performers Row */}
-      <div className="w-full">
+      <div className="w-full" id="dashboard-top-performers">
         <TopPerformers employees={data?.topPerformers} />
       </div>
 
       {/* Availability Row */}
-      <div className="w-full">
+      <div className="w-full" id="dashboard-resource-availability">
         <ResourceAvailability availability={data?.resourceAvailability} />
       </div>
 

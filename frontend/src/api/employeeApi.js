@@ -30,6 +30,7 @@ export const getEmployeeList = async () => {
             ...emp,
             skills: emp.skills || [],
             billable: emp.billable || (emp.employee_status === 'Allocated' ? 'Billable' : 'Non-Billable'),
+            location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
         }));
 
         return enriched;
@@ -68,7 +69,7 @@ export const getEmployeeOfMonth = async () => {
     try {
         const res = await api.get('/employees/employee-of-month');
         if (res?.data) return res.data;
-        return null;
+        throw new Error('Empty response');
     } catch (err) {
         console.error('Error fetching employee of the month:', err);
         return null;

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Search, Filter, Pencil, Smartphone } from 'lucide-react';
+import { Search, Filter, Pencil, Eye } from 'lucide-react';
+import ProjectDetailsPanel from './ProjectDetailsPanel';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 
-const ProjectList = ({ projects }) => {
+const ProjectList = ({ projects, activeCardFilter }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
-    const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
+    const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
+    const [isEditFormOpen, setIsEditFormOpen] = useState(false);
 
     // Filter States
     const [filters, setFilters] = useState({
@@ -40,16 +42,28 @@ const ProjectList = ({ projects }) => {
         // const matchesStartDate = filterStartDate ? projectEndDate >= filterStartDate : true;
         // const matchesEndDate = filterEndDate ? projectEndDate <= filterEndDate : true;
 
-        return matchesSearchTerm && matchesNameFilter && matchesType && matchesStatus && matchesResources;
+        // Quick Card Filter logic
+        let matchesCardFilter = true;
+        if (activeCardFilter === 'Internal') matchesCardFilter = (project.type === 'Internal' || project.client === 'Internal');
+        else if (activeCardFilter === 'Client') matchesCardFilter = project.type === 'Client';
+        else if (activeCardFilter === 'Ongoing') matchesCardFilter = (project.status && (project.status === 'Active' || project.status === 'In Progress' || project.status === 'Running' || project.status === 'Live'));
+        else if (activeCardFilter === 'POC') matchesCardFilter = project.name.toLowerCase().includes('poc');
+
+        return matchesSearchTerm && matchesNameFilter && matchesType && matchesStatus && matchesResources && matchesCardFilter;
     });
 
     const handleApplyFilters = (newFilters) => {
         setFilters(newFilters);
     };
 
+    const handleViewClick = (project) => {
+        setSelectedProject(project);
+        setIsDetailsPanelOpen(true);
+    };
+
     const handleEditClick = (project) => {
         setSelectedProject(project);
-        setIsEditPanelOpen(true);
+        setIsEditFormOpen(true);
     };
 
     const handleSaveProject = (updatedProject) => {
@@ -98,7 +112,7 @@ const ProjectList = ({ projects }) => {
                     </thead>
                     <tbody>
                         {filteredProjects.map((project) => (
-                            <tr key={project.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                            <tr key={project.id} onClick={() => handleViewClick(project)} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer">
                                 <td className="py-4 pl-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
@@ -123,10 +137,24 @@ const ProjectList = ({ projects }) => {
                                         {project.status}
                                     </span>
                                 </td>
-                                <td className="py-4 pr-4 text-right">
+                                <td className="py-4 pr-4 text-right flex justify-end gap-2">
                                     <button
-                                        onClick={() => handleEditClick(project)}
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // prevent row click from firing twice
+                                            handleViewClick(project);
+                                        }}
                                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                        title="View Details"
+                                    >
+                                        <Eye size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditClick(project);
+                                        }}
+                                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                                        title="Edit Project"
                                     >
                                         <Pencil size={16} />
                                     </button>
@@ -137,10 +165,17 @@ const ProjectList = ({ projects }) => {
                 </table>
             </div>
 
+            {/* Details Panel */}
+            <ProjectDetailsPanel
+                isOpen={isDetailsPanelOpen}
+                onClose={() => setIsDetailsPanelOpen(false)}
+                project={selectedProject}
+            />
+
             {/* Edit Panel */}
             <EditProjectPanel
-                isOpen={isEditPanelOpen}
-                onClose={() => setIsEditPanelOpen(false)}
+                isOpen={isEditFormOpen}
+                onClose={() => setIsEditFormOpen(false)}
                 project={selectedProject}
                 onSave={handleSaveProject}
             />

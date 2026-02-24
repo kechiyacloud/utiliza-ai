@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, User, Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag from '../../components/EmployeeStatusTag';
 
@@ -32,9 +32,11 @@ const calculateTenure = (joiningDate) => {
 
 export default function EmployeeMasterList() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [sortOrder, setSortOrder] = useState('desc'); // 'desc' for newest first
+    const [filterLabel, setFilterLabel] = useState("");
 
     useEffect(() => {
         const fetchEmployees = async () => {
@@ -46,7 +48,17 @@ export default function EmployeeMasterList() {
                     const dateB = b.date_of_joining ? new Date(b.date_of_joining) : new Date(0);
                     return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
                 });
-                setEmployees(sorted);
+
+                // Apply cardFilter if present in navigation state
+                const cardFilter = location.state?.cardFilter;
+                if (cardFilter === 'bench') {
+                    const filtered = sorted.filter(emp => emp.employee_status === 'Bench');
+                    setEmployees(filtered);
+                    setFilterLabel(" (Bench Only)");
+                } else {
+                    setEmployees(sorted);
+                    setFilterLabel("");
+                }
             } catch (err) {
                 console.error("Error fetching employees:", err);
             } finally {
@@ -54,7 +66,7 @@ export default function EmployeeMasterList() {
             }
         };
         fetchEmployees();
-    }, [sortOrder]);
+    }, [sortOrder, location.state?.cardFilter]);
 
     const toggleSortOrder = () => {
         setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
@@ -81,7 +93,9 @@ export default function EmployeeMasterList() {
                         <ArrowLeft size={20} className="text-gray-600" />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Employee Master List</h1>
+                        <h1 className="text-2xl font-bold text-gray-800">
+                            Employee Master List{filterLabel}
+                        </h1>
                         <p className="text-gray-500 text-sm">Detailed records including joining dates and tenure.</p>
                     </div>
                 </div>

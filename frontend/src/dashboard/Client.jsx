@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText } from 'lucide-react';
+import { Plus, FileText, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import ClientKPIs from './clients/ClientKPIs';
 import ClientList from './clients/ClientList';
 import ClientDetails from './clients/ClientDetails';
@@ -7,6 +8,7 @@ import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal }
 import { fetchClientData } from '../api/clientApi';
 
 const Client = () => {
+  const navigate = useNavigate();
   const [clientsData, setClientsData] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,9 +122,18 @@ const Client = () => {
     <div className="p-6 space-y-6 animate-in fade-in duration-500 pb-20 relative min-h-screen">
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Client Management</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage client relationships, track budgets, and monitor project health.</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+            title="Go Back"
+          >
+            <ArrowLeft size={20} className="text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Client Management</h1>
+            <p className="text-slate-500 text-sm mt-1">Manage client relationships, track budgets, and monitor project health.</p>
+          </div>
         </div>
 
         {/* Global Actions */}

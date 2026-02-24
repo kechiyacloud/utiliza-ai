@@ -24,7 +24,6 @@ import EmployeeMasterList from './dashboard/employee/EmployeeMasterList'
 import AddEmployee from './dashboard/employee/AddEmployee'
 import Organization from './dashboard/Organization'
 // import DataInfrastructureTest from './test/DataInfrastructureTest'
-
 function App() {
   return (
     <AppDataProvider>

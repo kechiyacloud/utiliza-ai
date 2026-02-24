@@ -23,7 +23,7 @@ def get_bench_employee_count():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM employee_master_pro WHERE status = 'Bench'")
+        cur.execute("SELECT COUNT(*) FROM employee_master_pro WHERE employee_status = 'Bench'")
         count = cur.fetchone()[0]
         return count
     except Exception as e:

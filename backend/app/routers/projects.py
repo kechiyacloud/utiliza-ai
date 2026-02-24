@@ -30,7 +30,7 @@ def projects_overview():
         cur.execute("""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(project_status) IN ('running','in progress')
+            WHERE LOWER(project_status) IN ('running','in progress','live','active')
         """)
         ongoing = cur.fetchone()[0]
 
@@ -46,7 +46,7 @@ def projects_overview():
         cur.execute("""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(billable) = 'no'
+            WHERE LOWER(billable) LIKE '%non%' OR LOWER(billable) = 'no'
         """)
         internal = cur.fetchone()[0]
 
@@ -54,7 +54,7 @@ def projects_overview():
         cur.execute("""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(billable) = 'yes'
+            WHERE LOWER(billable) LIKE '%billable%' AND LOWER(billable) NOT LIKE '%non%' OR LOWER(billable) = 'yes'
         """)
         client = cur.fetchone()[0]
 
@@ -78,14 +78,19 @@ def projects_list():
     try:
         cur.execute("""
             SELECT
-                project_id,
-                project_name,
-                project_status,
-                billable,
-                start_date,
-                end_date
-            FROM projects
-            ORDER BY start_date DESC
+                p.project_id,
+                p.project_name,
+                p.project_status,
+                p.billable,
+                p.start_date,
+                p.end_date,
+                COUNT(pa.employee_id) AS resource_count,
+                STRING_AGG(DISTINCT em.employee_name, ', ') AS resource_names
+            FROM projects p
+            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
+            LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
+            GROUP BY p.project_id
+            ORDER BY p.start_date DESC
         """)
 
         rows = cur.fetchall()
@@ -97,7 +102,9 @@ def projects_list():
                 "status": r[2],
                 "type": r[3],
                 "start_date": r[4],
-                "end_date": r[5]
+                "end_date": r[5],
+                "resource_count": r[6],
+                "resource_names": r[7] if r[7] else ""
             }
             for r in rows
         ]

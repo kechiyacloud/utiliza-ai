@@ -1,10 +1,14 @@
 import React from 'react';
 import { Users, Briefcase, FolderOpen, Armchair } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const Card = ({ icon: Icon, value, label, subtext, alertCount }) => {
+const Card = ({ icon: Icon, value, label, subtext, alertCount, onClick }) => {
     return (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-start relative min-w-[180px] flex-1">
-            {alertCount && (
+        <div
+            onClick={onClick}
+            className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-start relative min-w-[180px] flex-1 cursor-pointer hover:shadow-md transition-shadow"
+        >
+            {alertCount > 0 && (
                 <div className="absolute top-3 right-3 flex items-center gap-1 text-red-500 text-[10px] font-bold bg-red-50 px-2 py-0.5 rounded-full">
                     <span>{alertCount}</span>
                 </div>
@@ -20,21 +24,30 @@ const Card = ({ icon: Icon, value, label, subtext, alertCount }) => {
 };
 
 const ExecutiveDashboardCards = ({ data }) => {
+    const navigate = useNavigate();
     if (!data) return null;
 
     return (
-        <div className="flex gap-6 w-full flex-wrap">
+        <div className="flex gap-6 w-full flex-wrap" id="dashboard-cards">
             <Card
                 icon={Users}
                 value={data.totalEmployees?.value}
                 label={data.totalEmployees?.label}
                 subtext={data.totalEmployees?.change}
+                onClick={() => {
+                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    navigate('/info/employees/list');
+                }}
             />
             <Card
                 icon={Briefcase}
                 value={data.activeClients?.value}
                 label={data.activeClients?.label}
                 subtext={data.activeClients?.change}
+                onClick={() => {
+                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    navigate('/info/client');
+                }}
             />
             <Card
                 icon={FolderOpen}
@@ -42,12 +55,20 @@ const ExecutiveDashboardCards = ({ data }) => {
                 label={data.runningProjects?.label}
                 subtext={data.runningProjects?.change}
                 alertCount={data.runningProjects?.alertCount}
+                onClick={() => {
+                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    navigate('/info/projects');
+                }}
             />
             <Card
                 icon={Armchair}
                 value={data.benchStrength?.value}
                 label={data.benchStrength?.label}
                 subtext={data.benchStrength?.change}
+                onClick={() => {
+                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    navigate('/info/employees/list', { state: { cardFilter: 'bench' } });
+                }}
             />
         </div>
     );

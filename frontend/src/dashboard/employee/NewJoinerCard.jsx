@@ -15,9 +15,7 @@ const NewJoinerCard = ({ onClick }) => {
                 const filtered = (data || []).filter(e =>
                     (e.employee_status || '').toLowerCase() !== 'notice period'
                 );
-                setJoiners(filtered.length > 0 ? filtered : [
-                    { employee_name: 'New Joiner', role_designation: 'Onboarding', photo_url: null }
-                ]);
+                setJoiners(filtered);
             } catch (error) {
                 console.error('Error fetching new joiners:', error);
                 setJoiners([]);
@@ -43,6 +41,17 @@ const NewJoinerCard = ({ onClick }) => {
                 <div className="w-full">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">New Joiner</p>
                     <p className="text-xs text-gray-400">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (joiners.length === 0) {
+        return (
+            <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between h-full">
+                <div className="w-full">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">New Joiner</p>
+                    <p className="text-xs text-gray-500 font-medium">No results</p>
                 </div>
             </div>
         );
