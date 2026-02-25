@@ -1,13 +1,13 @@
-# 🚀 Project Dashboard
+#  Project Dashboard
 
-## 📌 Overview
+##  Overview
 Project Dashboard is a centralized organizational platform designed to manage **employees, projects, and resource allocations** from a single interface.  
 The system provides **role-based access**, ensuring that users view and manage data according to their organizational responsibilities.  
 This dashboard offers a **complete organizational view**, from individual employee details to high-level project and allocation insights for leadership.
 
 ---
 
-## 🎯 Project Aim
+## Project Aim
 
 The primary aim of this project is to:
 - Centralize employee, project, and allocation information
@@ -17,7 +17,7 @@ The primary aim of this project is to:
 
 ---
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 **Frontend**
 - React.js
@@ -35,7 +35,7 @@ The primary aim of this project is to:
 
 ---
 
-## 🏗️ Project Structure
+##  Project Structure
 ```text
 Project-Dashboard/
 │
@@ -48,13 +48,13 @@ Project-Dashboard/
 
 ---
 
-## 🚀 Running the Project
+## Running the Project
 
 The project uses **Docker Compose** to standardize development and production environments.
 
 ---
 
-## 🟢 Development Mode
+## Development Mode
 
 Development mode enables:
 - Hot reload for backend (FastAPI)
@@ -64,7 +64,7 @@ Development mode enables:
 
 ---
 
-## ✅ Prerequisites
+## Prerequisites
 
 Install:
 - Docker Desktop (Windows/Mac)  
@@ -78,7 +78,7 @@ docker compose version
 
 ---
 
-## ▶️ Start Development Environment
+## Start Development Environment
 
 From the project root directory:
 ```bash
@@ -92,7 +92,7 @@ docker compose -f docker-compose.dev.yml up --build
 
 ---
 
-## 🌐 Access the Application
+##  Access the Application
 
 | Service | URL |
 |---|---|
@@ -102,11 +102,12 @@ docker compose -f docker-compose.dev.yml up --build
 
 ---
 
-## 🛑 Stop Development Containers
+##  Stop Development Containers
 
 Press `CTRL + C`
 
 Or run:
 ```bash
 docker compose -f docker-compose.dev.yml down
+
 ```
