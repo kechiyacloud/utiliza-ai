@@ -28,7 +28,7 @@ const ExecutiveDashboardCards = ({ data }) => {
     if (!data) return null;
 
     return (
-        <div className="flex gap-6 w-full flex-wrap" id="dashboard-cards">
+        <>
             <Card
                 icon={Users}
                 value={data.totalEmployees?.value}
@@ -70,7 +70,7 @@ const ExecutiveDashboardCards = ({ data }) => {
                     navigate('/info/employees/list', { state: { cardFilter: 'bench' } });
                 }}
             />
-        </div>
+        </>
     );
 };
 

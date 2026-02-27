@@ -13,13 +13,13 @@ const TopPerformers = ({ employees }) => {
                 <button className="text-blue-500 text-sm font-semibold hover:text-blue-700">View All</button>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead>
+            <div className="overflow-x-auto overflow-y-auto custom-scrollbar max-h-[300px]">
+                <table className="w-full relative">
+                    <thead className="bg-white sticky top-0 z-10 shadow-sm">
                         <tr className="text-xs font-semibold text-gray-400 border-b border-gray-100">
-                            <th className="text-left py-2">EMPLOYEE</th>
-                            <th className="text-center py-2">ROLE</th>
-                            <th className="text-right py-2">ALLOCATION %</th>
+                            <th className="text-left py-2 px-2">EMPLOYEE</th>
+                            <th className="text-center py-2 px-2">ROLE</th>
+                            <th className="text-right py-2 px-2">ALLOCATION %</th>
                             <th className="w-8"></th>
                         </tr>
                     </thead>

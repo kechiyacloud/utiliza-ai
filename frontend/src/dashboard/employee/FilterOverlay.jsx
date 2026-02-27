@@ -263,7 +263,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         'Software Engineering', 'Data Engineering', 'Quality Engineering',
         'Cloud Solutions Engineering', 'System Operations', 'Product Engineering',
         'Security Engineering', 'US Staffing', 'Business Development',
-        'Training & Development', 'HR', 'Finance', 'PMO', 'Management'
+        'Training & Development', 'HR', 'Finance', 'PMO', 'Management', 'SRE'
     ];
 
     const EMPLOYEE_TYPES = ['Full Time', 'Contract', 'Intern', 'Consultant'];

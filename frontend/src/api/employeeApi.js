@@ -76,9 +76,43 @@ export const getEmployeeOfMonth = async () => {
     }
 };
 
+// Fetch top performers
+export const getTopPerformers = async () => {
+    try {
+        const res = await api.get('/dashboard/top-performers');
+        if (res?.data && Array.isArray(res.data)) {
+            return res.data.map((p) => ({
+                id: p.employee_id,
+                name: p.employee_name,
+                role: `${p.project_count} Projects`,
+                allocation: 100,
+                avatar: p.employee_name ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('') : "U"
+            }));
+        }
+        return [];
+    } catch (err) {
+        console.error("Error fetching top performers:", err);
+        return [];
+    }
+};
+
 // Create new employee
 export const createEmployee = async (employeeData) => {
     const res = await api.post('/employees', employeeData);
     return res.data;
+};
+
+// Fetch action inbox
+export const fetchActionInbox = async () => {
+    try {
+        const res = await api.get('/employees/action-inbox');
+        if (res?.data && Array.isArray(res.data)) {
+            return res.data;
+        }
+        return [];
+    } catch (err) {
+        console.error('Error fetching action inbox:', err);
+        return [];
+    }
 };
 
