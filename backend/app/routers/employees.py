@@ -55,6 +55,18 @@ def get_all_employees():
     
     try:
         query = """
+            WITH AllocationPriority AS (
+                SELECT 
+                    employee_id,
+                    MAX(CASE 
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'billable' THEN 3
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'nonbillable' THEN 2
+                        WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) = 'billable' THEN 1
+                        ELSE 0 
+                    END) as priority_rank
+                FROM projects_allocation
+                GROUP BY employee_id
+            )
             SELECT 
                 m.employee_id, 
                 m.employee_name, 
@@ -62,24 +74,184 @@ def get_all_employees():
                 m.department, 
                 m.location, 
                 m.photo_url,
-                p.employee_status, 
-                p.employee_allocations
+                CASE 
+                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                    WHEN ap.priority_rank = 3 THEN 'Allocated'
+                    WHEN ap.priority_rank = 2 THEN 'Allocated'
+                    WHEN ap.priority_rank = 1 THEN 'Bench'
+                    ELSE p.employee_status 
+                END as employee_status, 
+                CASE 
+                    WHEN ap.priority_rank = 3 THEN 'billable'
+                    WHEN ap.priority_rank = 2 THEN 'non-billable'
+                    WHEN ap.priority_rank = 1 THEN 'billable'
+                    ELSE 'non-billable' 
+                END as billable,
+                p.employee_allocations,
+                ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
             FROM employee_master m
-            LEFT JOIN employee_master_pro p 
-            ON m.employee_id = p.employee_id
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
+            LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
+            LEFT JOIN skills s ON es.skill_id = s.skill_id
+            GROUP BY 
+                m.employee_id, 
+                m.employee_name, 
+                m.role_designation, 
+                m.department, 
+                m.location, 
+                m.photo_url, 
+                p.employee_status, 
+                ap.priority_rank,
+                p.employee_allocations
         """
         cur.execute(query)
         columns = [column[0] for column in cur.description]
         results = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        # Ensure 'skills' is an empty list if it's None for frontend that expects an array
+        for row in results:
+             if row.get('skills') is None:
+                  row['skills'] = []
+                  
         return results
 
     except Exception as e:
         print(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
         
     finally:
         cur.close()
         conn.close()
+
+@router.get("/employees/new-joiners")
+def get_new_joiners():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Fetch employees who joined in the last 90 days and are active (not on notice period)
+        query = """
+            SELECT 
+                m.employee_id,
+                m.employee_name,
+                m.role_designation,
+                m.photo_url,
+                p.employee_status
+            FROM employee_master m
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE m.date_of_joining >= NOW() - INTERVAL '90 days'
+            AND m.date_of_resign IS NULL
+            ORDER BY m.date_of_joining DESC
+        """
+        cur.execute(query)
+        columns = [desc[0] for desc in cur.description]
+        results = [dict(zip(columns, row)) for row in cur.fetchall()]
+        return results
+    except Exception as e:
+        print(f"Error fetching new joiners: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+@router.get("/employees/employee-of-month")
+def fetch_employee_of_month():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Find an employee with highest allocation. If no one has allocation > 0, return nothing.
+        query = """
+            SELECT 
+                m.employee_id,
+                m.employee_name,
+                m.role_designation,
+                m.photo_url,
+                p.employee_allocations
+            FROM employee_master m
+            JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE p.employee_allocations IS NOT NULL 
+              AND p.employee_allocations > 0
+              AND m.date_of_resign IS NULL
+            ORDER BY p.employee_allocations DESC, m.date_of_joining ASC
+            LIMIT 1
+        """
+        cur.execute(query)
+        row = cur.fetchone()
+        if not row:
+            return None
+            
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))
+    except Exception as e:
+        print(f"Error fetching employee of month: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+@router.get("/employees/action-inbox")
+def fetch_action_inbox():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    tasks = []
+    task_id_counter = 1
+    
+    try:
+        # Dynamic Task 1: Find employees on notice period (requires exit interview)
+        notice_query = """
+            SELECT employee_name, department
+            FROM employee_master 
+            WHERE date_of_resign IS NOT NULL 
+              AND employee_status != 'Exited'
+        """
+        cur.execute(notice_query)
+        notice_rows = cur.fetchall()
+        
+        for row in notice_rows:
+            tasks.append({
+                "id": task_id_counter,
+                "title": 'Exit Interview Required',
+                "description": f"{row[0]} is serving their notice period. Please schedule an exit sync.",
+                "iconName": 'ShieldAlert',
+                "color": 'text-red-600',
+                "bg": 'bg-red-50',
+                "urgent": True,
+                "time": 'Action Required',
+                "department": row[1]
+            })
+            task_id_counter += 1
+
+        # Dynamic Task 2: Find employees approaching probation end (e.g. joined ~3-6 months ago)
+        probation_query = """
+            SELECT employee_name, department, date_of_joining
+            FROM employee_master
+            WHERE date_of_joining > NOW() - INTERVAL '100 days'
+              AND date_of_joining <= NOW() - INTERVAL '80 days'
+              AND date_of_resign IS NULL
+        """
+        cur.execute(probation_query)
+        prob_rows = cur.fetchall()
+        for row in prob_rows:
+             tasks.append({
+                "id": task_id_counter,
+                "title": 'Probation Confirmation',
+                "description": f"Review performance for {row[0]} who is near their 90-day probation end.",
+                "iconName": 'BadgeCheck',
+                "color": 'text-emerald-600',
+                "bg": 'bg-emerald-50',
+                "urgent": False,
+                "time": 'Action Required',
+                "department": row[1]
+            })
+             task_id_counter += 1
+             
+    except Exception as e:
+        print(f"Error generating action inbox: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        
+    return tasks
 
 
 @router.get("/employees/{employee_id}")
@@ -90,6 +262,18 @@ def get_employee_by_id(employee_id: str):
     try:
         # 1️⃣ Fetch Main Employee Details
         employee_query = """
+        WITH AllocationPriority AS (
+            SELECT 
+                employee_id,
+                MAX(CASE 
+                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'billable' THEN 3
+                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'nonbillable' THEN 2
+                    WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) = 'billable' THEN 1
+                    ELSE 0 
+                END) as priority_rank
+            FROM projects_allocation
+            GROUP BY employee_id
+        )
         SELECT 
             m.employee_id,
             m.employee_name,
@@ -104,12 +288,24 @@ def get_employee_by_id(employee_id: str):
             m.experience_in_cd,
             m.shift,
             m.mode_of_work,
-            p.employee_status,
+            CASE 
+                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                WHEN ap.priority_rank = 3 THEN 'Allocated'
+                WHEN ap.priority_rank = 2 THEN 'Allocated'
+                WHEN ap.priority_rank = 1 THEN 'Bench'
+                ELSE p.employee_status 
+            END as employee_status,
+            CASE 
+                WHEN ap.priority_rank = 3 THEN 'billable'
+                WHEN ap.priority_rank = 2 THEN 'non-billable'
+                WHEN ap.priority_rank = 1 THEN 'billable'
+                ELSE 'non-billable' 
+            END as billable,
             p.employee_allocations,
             p.reporting_manager_id
         FROM employee_master m
-        LEFT JOIN employee_master_pro p
-        ON m.employee_id = p.employee_id
+        LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+        LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
         WHERE m.employee_id = %s
         """
 
@@ -202,6 +398,7 @@ def get_employee_by_id(employee_id: str):
             "shift": employee.get("shift"),
             "mode_of_work": employee.get("mode_of_work"),
             "employee_status": employee.get("employee_status"),
+            "billable": employee.get("billable"),
             "employee_allocations": employee.get("employee_allocations"),
             "skills": skills,
             "certificates": certificates,
@@ -211,7 +408,9 @@ def get_employee_by_id(employee_id: str):
         return response
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
 
     finally:
         cur.close()

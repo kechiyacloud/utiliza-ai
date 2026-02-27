@@ -8,6 +8,7 @@ import TopPerformers from './landing-dashboard/TopPerformers';
 import ResourceAvailability from './landing-dashboard/ResourceAvailability';
 import AddProjectPanel from './projects/AddProjectPanel';
 import AddClientModal from './clients/AddClientModal';
+import EmployeeMonthCard from './landing-dashboard/EmployeeMonthCard';
 
 function Dashboard() {
   const [data, setData] = useState(null);
@@ -101,7 +102,10 @@ function Dashboard() {
       </div>
 
       {/* Top Cards Row */}
-      <ExecutiveDashboardCards data={data?.executiveCards} />
+      <div className="flex gap-6 w-full flex-wrap" id="dashboard-cards">
+        <ExecutiveDashboardCards data={data?.executiveCards} />
+        <EmployeeMonthCard />
+      </div>
 
       <div className="flex flex-col lg:flex-row gap-6 w-full">
         <div className="w-full lg:w-2/3 h-[350px] min-w-0">

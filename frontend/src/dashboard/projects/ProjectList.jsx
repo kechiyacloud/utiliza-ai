@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Filter, Pencil, Eye } from 'lucide-react';
 import ProjectDetailsPanel from './ProjectDetailsPanel';
 import EditProjectPanel from './EditProjectPanel';
@@ -10,6 +11,23 @@ const ProjectList = ({ projects, activeCardFilter }) => {
     const [selectedProject, setSelectedProject] = useState(null);
     const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (location.state?.search && projects && projects.length > 0) {
+            setSearchTerm(location.state.search);
+            // Auto open the details panel if we find a direct match
+            const foundProj = projects.find(p => p.name.toLowerCase() === location.state.search.toLowerCase());
+            if (foundProj) {
+                setSelectedProject(foundProj);
+                setIsDetailsPanelOpen(true);
+            }
+            // Clear location state to prevent reopening on subsequent renders or back navigation
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.state, projects, navigate]);
 
     // Filter States
     const [filters, setFilters] = useState({

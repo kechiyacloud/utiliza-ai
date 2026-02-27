@@ -9,13 +9,68 @@ import {
     Users,
     ArrowLeft,
     ChevronRight,
-    ChevronLeft
+    ChevronLeft,
+    Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { getEmployeeById } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 
+const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    return (
+        <div className="bg-white p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 transition-all hover:shadow-sm mb-2 flex flex-col gap-2">
+            {/* Header / Clickable Area */}
+            <div
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="flex items-center justify-between cursor-pointer"
+            >
+                {/* Left Side: Dot and Title */}
+                <div className="flex items-center gap-2.5 w-[75%]">
+                    <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: project.color }}
+                    ></span>
+                    <span className="font-semibold text-slate-800 truncate text-[13px]">{project.name}</span>
+                </div>
+
+                {/* Right Side: Allocation Pill */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200 shadow-sm">
+                        {project.value}%
+                    </span>
+                    <ChevronRight
+                        size={14}
+                        className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                    />
+                </div>
+            </div>
+
+            {/* Static Tag Placement */}
+            <div className="ml-[22px]">
+                <EmployeeStatusTag status={rawProject.status} billable={rawProject.billable} size="sm" />
+            </div>
+
+            {/* Expanded Content Area */}
+            {isExpanded && (
+                <div className="mt-1 pt-2 border-t border-slate-100/80">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigate('/info/projects', { state: { search: project.name } });
+                        }}
+                        className="w-full text-center bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-100 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 transition-colors shadow-sm flex justify-center items-center gap-1.5 group"
+                    >
+                        <span>View Full Project Details</span>
+                        <span className="opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0">&rarr;</span>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
 
 
 const EmployeeDetails = () => {
@@ -27,6 +82,7 @@ const EmployeeDetails = () => {
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [showDetailedSkills, setShowDetailedSkills] = useState(false);
 
     useEffect(() => {
         const fetchEmployeeDetails = async () => {
@@ -64,8 +120,12 @@ const EmployeeDetails = () => {
                     },
                     projects: enhancedProjects,
                     masterSkills: (sourceData.skills || []).map(s => {
-                        if (typeof s === 'string') return s;
-                        return s.skill_name || s.skill || s.name;
+                        if (typeof s === 'string') return { name: s, proficiency: 'Beginner', experience_years: 0 };
+                        return {
+                            name: s.skill_name || s.skill || s.name,
+                            proficiency: s.proficiency || s.proficiency_level || 'Beginner',
+                            experience_years: s.experience_years || 0
+                        };
                     })
                 });
             } catch (err) {
@@ -108,11 +168,12 @@ const EmployeeDetails = () => {
     // Chart Data Helpers
     // If projects is empty or undefined, handle gracefully
     const projects = userData.projects || [];
-    const chartData = projects.map(p => ({
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const chartData = projects.map((p, index) => ({
         name: p.project_name || p.name,
-        value: p.allocation_percentage || p.value || 0
+        value: p.allocation_percentage || p.value || 0,
+        color: COLORS[index % COLORS.length]
     }));
-    const COLORS = projects.map(p => p.color || '#ccc');
 
     // Timeline Helpers
     const months = ["Feb '26", "Mar '26", "Apr '26"];
@@ -136,7 +197,7 @@ const EmployeeDetails = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
                 {/* Profile Image */}
                 <div className="flex-shrink-0">
-                    <div className="w-24 h-24 rounded-full border-4 border-slate-50 overflow-hidden shadow-sm relative bg-white">
+                    <div className="w-24 h-24 rounded-full border-4 border-slate-50 overflow-hidden shadow-sm relative bg-white group">
                         {userData.profilePic ? (
                             <img src={userData.profilePic} alt={userData.name} className="w-full h-full object-cover" />
                         ) : (
@@ -144,6 +205,10 @@ const EmployeeDetails = () => {
                                 {(userData.name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('')}
                             </div>
                         )}
+                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                            <input type="file" className="hidden" accept="image/*" />
+                            <Camera size={24} />
+                        </label>
                     </div>
                 </div>
 
@@ -163,8 +228,10 @@ const EmployeeDetails = () => {
 
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-slate-500">
                         <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
-                            <Mail size={16} />
-                            <span>{userData.email}</span>
+                            <a href={`https://outlook.office.com/mail/deeplink/compose?to=${userData.email}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                                <Mail size={16} />
+                                <span>{userData.email}</span>
+                            </a>
                         </div>
                         <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                             <Phone size={16} />
@@ -252,7 +319,7 @@ const EmployeeDetails = () => {
                                     dataKey="value"
                                 >
                                     {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
                                 <Tooltip />
@@ -266,27 +333,14 @@ const EmployeeDetails = () => {
                     </div>
 
                     {/* Project Skills Detail */}
-                    <div className="flex flex-col gap-4 overflow-y-auto max-h-[220px] pr-2 custom-scrollbar">
-                        {projects.map((project, idx) => (
-                            <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="font-semibold text-sm text-slate-700 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color || '#3b82f6' }}></span>
-                                        {project.name}
-                                    </span>
-                                    {/* Tag added here */}
-                                    <EmployeeStatusTag status={project.status} billable={project.billable} size="sm" />
-
-                                    <span className="text-xs font-bold text-slate-500">{project.value}%</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                    {project.skills && project.skills.map((skill, sIdx) => (
-                                        <span key={sIdx} className="px-2 py-0.5 bg-white border border-slate-200 text-slate-600 text-[10px] rounded-full">
-                                            {skill}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
+                    <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-[220px] max-h-[400px] pr-2 custom-scrollbar py-1">
+                        {chartData.map((project, idx) => (
+                            <ProjectAllocationDropdown
+                                key={idx}
+                                project={project}
+                                rawProject={projects[idx]}
+                                navigate={navigate}
+                            />
                         ))}
                     </div>
                 </div>
@@ -297,14 +351,81 @@ const EmployeeDetails = () => {
 
                     {/* Master Skills */}
                     <div>
-                        <h2 className="text-lg font-bold text-slate-800 mb-4">Master Skills</h2>
-                        <div className="flex flex-wrap gap-2">
-                            {userData.masterSkills && userData.masterSkills.map((skill, idx) => (
-                                <span key={idx} className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded-full hover:bg-slate-200 transition-colors">
-                                    {skill}
-                                </span>
-                            ))}
+                        <div
+                            className="flex justify-between items-center cursor-pointer mb-4 group"
+                            onClick={() => setShowDetailedSkills(!showDetailedSkills)}
+                        >
+                            <h2 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Master Skills & Concentration</h2>
+                            <div className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 transition-colors">
+                                <ChevronRight size={16} className={`transition-transform duration-200 ${showDetailedSkills ? 'rotate-90' : ''}`} />
+                            </div>
                         </div>
+
+                        {showDetailedSkills ? (
+                            <div className="flex flex-col gap-3">
+                                {userData.masterSkills && userData.masterSkills.map((skillObj, idx) => {
+                                    const skillName = typeof skillObj === 'string' ? skillObj : skillObj.name;
+                                    let rawProficiency = skillObj.proficiency || 'Beginner';
+                                    const exp = skillObj.experience_years || 0;
+
+                                    // Map numerical proficiency levels to words if the database stores 1-5
+                                    if (String(rawProficiency) === '1') rawProficiency = 'Beginner';
+                                    else if (String(rawProficiency) === '2') rawProficiency = 'Novice';
+                                    else if (String(rawProficiency) === '3') rawProficiency = 'Intermediate';
+                                    else if (String(rawProficiency) === '4') rawProficiency = 'Advanced';
+                                    else if (String(rawProficiency) === '5') rawProficiency = 'Expert';
+
+                                    const safeProficiency = String(rawProficiency).toLowerCase();
+
+                                    let width = '25%';
+                                    let color = 'bg-blue-300';
+                                    if (safeProficiency === 'novice') { width = '40%'; color = 'bg-blue-300'; }
+                                    else if (safeProficiency === 'intermediate') { width = '60%'; color = 'bg-blue-400'; }
+                                    else if (safeProficiency === 'advanced') { width = '80%'; color = 'bg-blue-500'; }
+                                    else if (safeProficiency === 'expert') { width = '100%'; color = 'bg-blue-600'; }
+
+                                    const formatExperience = (years) => {
+                                        if (!years) return '';
+                                        const y = Math.floor(years);
+                                        const m = Math.round((years - y) * 12);
+                                        let parts = [];
+                                        if (y > 0) parts.push(`${y} Year${y !== 1 ? 's' : ''}`);
+                                        if (m > 0) parts.push(`${m} Month${m !== 1 ? 's' : ''}`);
+                                        return parts.length > 0 ? `· ${parts.join(' ')}` : '';
+                                    };
+
+                                    return (
+                                        <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-sm font-bold text-slate-700">{skillName}</span>
+                                                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{rawProficiency} {formatExperience(exp)}</span>
+                                            </div>
+                                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                                <div className={`${color} h-full rounded-full transition-all duration-500 ease-out`} style={{ width }}></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap gap-2">
+                                {userData.masterSkills && userData.masterSkills.map((skillObj, idx) => {
+                                    const skillName = typeof skillObj === 'string' ? skillObj : skillObj.name;
+                                    return (
+                                        <span
+                                            key={idx}
+                                            className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded-full cursor-pointer hover:bg-slate-200 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowDetailedSkills(true);
+                                            }}
+                                        >
+                                            {skillName}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     <div className="h-px bg-slate-100 w-full my-2"></div>
@@ -333,87 +454,94 @@ const EmployeeDetails = () => {
                 <h2 className="text-lg font-bold text-slate-800 mb-6">Resource Forecast Timeline (90 Days)</h2>
 
                 {/* Improved Timeline Grid */}
-                <div className="w-full">
-                    {/* Horizontal Scroll Wrapper for entire chart if screen is small */}
-                    <div className="min-w-[800px] overflow-x-auto">
+                <div className="w-full overflow-x-auto custom-scrollbar border border-slate-100 rounded-xl shadow-sm">
+                    <div className="min-w-[900px]">
 
                         {/* 1. Header Section (Fixed at top of chart) */}
-                        <div className="sticky top-0 z-20 bg-white">
-                            {/* Months */}
-                            <div className="grid grid-cols-12 border-b border-slate-300">
-                                {months.map((month, idx) => (
-                                    <div key={idx} className="col-span-4 text-center text-sm font-bold text-slate-700 border-r border-slate-300 last:border-r-0 py-2 bg-slate-50">
-                                        {month}
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="sticky top-0 z-20 bg-white flex border-b border-slate-300">
+                            {/* Empty space for labels */}
+                            <div className="w-[180px] shrink-0 border-r border-slate-200 bg-slate-50/80 backdrop-blur-sm sticky left-0 z-30"></div>
 
-                            {/* Weeks */}
-                            <div className="grid grid-cols-12 border-b border-slate-300 text-[10px] text-slate-500 font-semibold bg-white">
-                                {[...Array(12)].map((_, i) => (
-                                    <div key={i} className="col-span-1 text-center border-r border-slate-200 last:border-r-0 py-1.5">
-                                        W{(i % 4) + 1}
-                                    </div>
-                                ))}
+                            {/* Timeline Headers */}
+                            <div className="flex-1">
+                                {/* Months */}
+                                <div className="grid grid-cols-12 border-b border-slate-200">
+                                    {months.map((month, idx) => (
+                                        <div key={idx} className="col-span-4 text-center text-xs font-bold text-slate-700 border-r border-slate-200 last:border-r-0 py-2 bg-slate-50">
+                                            {month}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Weeks */}
+                                <div className="grid grid-cols-12 text-[10px] text-slate-500 font-bold bg-white">
+                                    {[...Array(12)].map((_, i) => (
+                                        <div key={i} className="col-span-1 text-center border-r border-slate-100 last:border-r-0 py-1.5 uppercase tracking-wider">
+                                            W{(i % 4) + 1}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
-                        {/* 2. Scrollable Rows Container (Vertical Scroll) */}
-                        <div className="relative max-h-[180px] overflow-y-auto custom-scrollbar">
+                        {/* 2. Scrollable Rows Container (Vertical Scroll handles BOTH labels and bars simultaneously) */}
+                        <div className="relative max-h-[240px] overflow-y-auto custom-scrollbar flex">
 
-                            {/* Background Grid Lines - Absolute to cover full scrollable height */}
-                            <div className="absolute inset-0 grid grid-cols-12 pointer-events-none z-0 min-h-full">
-                                {[...Array(12)].map((_, i) => (
-                                    <div key={i} className={`border-r border-slate-100 h-full ${i % 4 === 3 ? 'border-slate-300' : ''}`}></div>
-                                ))}
+                            {/* Left Labels Column (Sticky Horizontal) */}
+                            <div className="w-[180px] shrink-0 bg-white sticky left-0 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                <div className="py-4 space-y-3">
+                                    {chartData.map((project, idx) => (
+                                        <div key={idx} className="h-10 pr-4 flex flex-col justify-center text-right hover:bg-slate-50 pl-3 border-r-2 border-transparent hover:border-blue-400 transition-colors group cursor-default">
+                                            <span className="text-[13px] font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors" title={project.name}>{project.name}</span>
+                                            <span className="text-[10px] text-slate-500 font-semibold capitalize tracking-wide">{projects[idx]?.status || 'Allocated'}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
-                            {/* Project Rows */}
-                            <div className="relative z-10 py-4 space-y-3">
-                                {projects.map((project, idx) => (
-                                    <div key={idx} className="grid grid-cols-12 gap-0 items-center h-10 hover:bg-slate-50/50 transition-colors">
+                            {/* Right Timeline Area */}
+                            <div className="flex-1 relative bg-[#fcfdfd]">
+                                {/* Background Grid Lines */}
+                                <div className="absolute inset-0 grid grid-cols-12 pointer-events-none z-0 min-h-full">
+                                    {[...Array(12)].map((_, i) => (
+                                        <div key={i} className={`border-r border-slate-100/60 h-full ${i % 4 === 3 ? 'border-slate-200' : ''}`}></div>
+                                    ))}
+                                </div>
 
-                                        {/* Row Label (spans across grid visually but is absolutely positioned or managed? 
-                                            Actually, to keep it aligned with the bar, we can't easily put it in the grid cells if the bar spans multiple.
-                                            Let's use a flex overlay or just keep the label on the left but ensure it doesn't overlap weirdly.
-                                            Wait, the user wants the name *in the left side*.
-                                            The previous implementation had a "bubble" outside.
-                                            Let's dedicate the first column (or a separate div side-by-side) to labels? 
-                                            No, grid logic is based on 12 cols = 12 weeks.
-                                            I will stick to the previous "absolute left" approach but ensure padding/margin accommodates it.
-                                         */}
+                                {/* Project Bars Rows */}
+                                <div className="relative z-10 py-4 space-y-3">
+                                    {chartData.map((project, idx) => (
+                                        <div key={idx} className="grid grid-cols-12 gap-0 items-center h-10 hover:bg-slate-100/50 transition-colors group">
+                                            {/* Bar Container */}
+                                            <div
+                                                className="col-span-1 relative h-[26px] rounded-md flex items-center shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-gradient-to-r overflow-hidden ml-1"
+                                                style={{
+                                                    backgroundColor: project.color,
+                                                    gridColumnStart: (project.startWeek || 0) + 1,
+                                                    gridColumnEnd: `span ${project.durationWeeks || 4}`,
+                                                    backgroundImage: `linear-gradient(90deg, ${project.color} 0%, ${project.color}dd 100%)`
+                                                }}
+                                                title={`${project.name} - ${project.value}%`}
+                                            >
+                                                {/* Subtle Background Pattern */}
+                                                <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 50%, #ffffff 50%, #ffffff 75%, transparent 75%, transparent)', backgroundSize: '1rem 1rem' }}></div>
 
-                                        {/* Label */}
-                                        <div className="absolute left-0 w-32 -ml-32 text-right pr-4 flex flex-col justify-center h-full">
-                                            <span className="text-xs font-bold text-slate-700 truncate" title={project.name}>{project.name}</span>
-                                            <span className="text-[10px] text-slate-400">Allocated</span>
+                                                {/* Start Indicator */}
+                                                <div className="absolute -left-1.5 w-3 h-3 bg-white transform rotate-45 border-2 shadow-sm z-20 group-hover:scale-110 transition-transform" style={{ borderColor: project.color }}></div>
+
+                                                {/* Inside Label */}
+                                                <span className="ml-3 text-[11px] text-white font-bold px-2 truncate drop-shadow-sm relative z-10 flex items-center leading-none">
+                                                    <span>{project.value}%</span>
+                                                </span>
+                                            </div>
                                         </div>
-
-                                        {/* Bar */}
-                                        <div
-                                            className="col-span-1 relative h-6 rounded-md flex items-center shadow-sm transition-all hover:shadow-md hover:scale-[1.01] cursor-pointer"
-                                            style={{
-                                                backgroundColor: '#22c55e',
-                                                gridColumnStart: (project.startWeek || 0) + 1,
-                                                gridColumnEnd: `span ${project.durationWeeks || 4}`,
-                                            }}
-                                        >
-                                            {/* Start Indicator (Diamond) */}
-                                            <div className="absolute -left-1.5 w-3 h-3 bg-orange-500 transform rotate-45 border-2 border-white shadow-sm z-20"></div>
-
-                                            {/* Label Inside Bar */}
-                                            <span className="ml-3 text-[10px] text-white font-bold px-2 truncate drop-shadow-sm">
-                                                {project.value}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
 
                                 {/* Padding for bottom scroll */}
-                                <div className="h-2"></div>
+                                <div className="h-3"></div>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
