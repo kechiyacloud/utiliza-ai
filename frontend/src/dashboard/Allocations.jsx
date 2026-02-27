@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import AllocationMetrics from './allocation/AllocationMetrics';
 import ProjectUtilization from './allocation/ProjectUtilization';
-import OrganizationUtilization from './allocation/OrganizationUtilization';
+import ProjectEmployeeAllocation from './allocation/ProjectEmployeeAllocation';
+import DepartmentAllocationChart from './allocation/DepartmentAllocationChart';
 import DepartmentUtilization from './allocation/DepartmentUtilization';
+
 import EmployeeAllocationList from './allocation/EmployeeAllocationList';
 import AllocationFilters from './allocation/AllocationFilters';
 import { fetchAllocationData } from '../api/allocationApi';
@@ -10,6 +12,7 @@ import { fetchAllocationData } from '../api/allocationApi';
 function Allocations() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   // Filter State
   const [filters, setFilters] = useState({
@@ -52,10 +55,21 @@ function Allocations() {
       {/* Metrics Row */}
       <AllocationMetrics metrics={data?.metrics} />
 
-      {/* Utilization Row (Projects & Organization Chart) */}
+      {/* Utilization Row (Projects & Organization Chart / Employee Allocation) */}
       <div className="flex flex-col lg:flex-row gap-6 w-full">
-        <ProjectUtilization projects={data?.projects} />
-        <OrganizationUtilization data={data?.orgUtilization} />
+        <ProjectUtilization
+          projects={data?.projects}
+          onProjectClick={(project) => setSelectedProject(project)}
+        />
+        {selectedProject ? (
+          <ProjectEmployeeAllocation
+            project={selectedProject}
+            onClose={() => setSelectedProject(null)}
+          />
+        ) : (
+          <DepartmentAllocationChart />
+        )}
+
       </div>
 
       {/* Details Row (Department List & Employee Table) */}

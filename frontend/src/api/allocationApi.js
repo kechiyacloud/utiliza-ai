@@ -1,89 +1,109 @@
-// Data for Allocation Page
+import api from './axios';
 
-const allocationData = {
-    // Top Metric Cards
-    metrics: {
-        totalResources: { value: 0, trend: "0%", label: "Total Resources" },
-        billable: { value: 0, trend: "0%", label: "Billable Count" },
-        nonBillable: { value: 0, trend: "0%", label: "Non-Billable" },
-        benchStrength: { value: 0, trend: "0%", label: "Bench Strength" },
-        avgUtilization: { value: "0%", trend: "0%", label: "Avg Utilization" },
-        overallocated: { value: 0, trend: "0", label: "Overallocated", isAlert: false }
-    },
-
-    // Organization Utilization Chart Data
+// ---------- Static data for other sections (unchanged) ----------
+const allocationStaticData = {
     orgUtilization: {
         used: 0,
         available: 100,
         breakdown: []
     },
-
-    // Department Utilization List
     departments: [],
-
-    // Project Utilization Table
-    projects: [],
-
-    // Detailed Employee List
     employees: []
 };
-// Simulate API call with filtering
+
+// ---------- Fetch Allocation Metrics from Backend ----------
+export const fetchAllocationMetrics = async () => {
+    try {
+        const res = await api.get('/allocations/metrics');
+        return res.data;
+    } catch (error) {
+        console.error("Allocation Metrics API Error:", error);
+        return {
+            totalResources: { value: 0, label: "Total Resources" },
+            billable: { value: 0, label: "Billable Count" },
+            nonBillable: { value: 0, label: "Non-Billable" },
+            benchStrength: { value: 0, label: "Bench Strength" },
+            avgUtilization: { value: "0%", label: "Avg Utilization" },
+            overallocated: { value: 0, label: "Overallocated", isAlert: false }
+        };
+    }
+};
+
+// ---------- Fetch Project List with Billable/Non-Billable Counts ----------
+export const fetchAllocationProjects = async () => {
+    try {
+        const res = await api.get('/allocations/projects');
+        return res.data; // [{ project_id, project_name, billable_count, non_billable_count }]
+    } catch (error) {
+        console.error("Allocation Projects API Error:", error);
+        return [];
+    }
+};
+
+// ---------- Fetch Employees for a Specific Project ----------
+export const fetchProjectEmployees = async (projectId) => {
+    try {
+        const res = await api.get(`/allocations/projects/${projectId}/employees`);
+        return res.data; // [{ employee_id, employee_name, allocation_percentage, project_tags }]
+    } catch (error) {
+        console.error("Project Employees API Error:", error);
+        return [];
+    }
+};
+
+// ---------- Fetch Organization Utilization ----------
+export const fetchOrganizationUtilization = async () => {
+    try {
+        const res = await api.get('/allocations/organization');
+        return res.data; // { used: number, breakdown: [{ label, value, color }] }
+    } catch (error) {
+        console.error("Organization Utilization API Error:", error);
+        return { used: 0, breakdown: [] };
+    }
+};
+
+// ---------- Fetch full allocation page data ----------
 export const fetchAllocationData = async (filters = {}) => {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            let filteredData = { ...allocationData };
+    try {
+        const [metrics, projects, orgUtilization] = await Promise.all([
+            fetchAllocationMetrics(),
+            fetchAllocationProjects(),
+            fetchOrganizationUtilization()
+        ]);
 
-            // 1. Filter Metrics (Simulated logic: Adjust values based on filters)
-            if (filters.department && filters.department !== 'All Departments') {
-                // Determine modifier based on dept string length (random-ish but deterministic)
-                const modifier = filters.department.length % 2 === 0 ? 0.8 : 0.6;
-                filteredData.metrics = {
-                    totalResources: { ...filteredData.metrics.totalResources, value: Math.floor(420 * modifier) },
-                    billable: { ...filteredData.metrics.billable, value: Math.floor(310 * modifier) },
-                    nonBillable: { ...filteredData.metrics.nonBillable, value: Math.floor(90 * modifier) },
-                    benchStrength: { ...filteredData.metrics.benchStrength, value: Math.floor(110 * modifier) },
-                    avgUtilization: { ...filteredData.metrics.avgUtilization, value: Math.floor(74 * modifier) + "%" },
-                    overallocated: { ...filteredData.metrics.overallocated, value: Math.floor(18 * modifier) }
-                };
+        return {
+            data: {
+                metrics,
+                projects,
+                orgUtilization,
+                ...allocationStaticData
             }
-
-            if (filters.resourceType && filters.resourceType !== 'All Resources') {
-                // If filtering by Billable, set non-billable to 0, etc.
-                if (filters.resourceType === 'Billable Only') {
-                    filteredData.metrics = {
-                        ...filteredData.metrics,
-                        nonBillable: { ...filteredData.metrics.nonBillable, value: 0 },
-                        benchStrength: { ...filteredData.metrics.benchStrength, value: 0 }
-                    };
-                } else if (filters.resourceType === 'Bench Strength') {
-                    filteredData.metrics = {
-                        ...filteredData.metrics,
-                        billable: { ...filteredData.metrics.billable, value: 0 },
-                        nonBillable: { ...filteredData.metrics.nonBillable, value: 0 }
-                    };
-                }
+        };
+    } catch (error) {
+        console.error("Failed to load allocation data", error);
+        return {
+            data: {
+                metrics: {
+                    totalResources: { value: 0, label: "Total Resources" },
+                    billable: { value: 0, label: "Billable Count" },
+                    nonBillable: { value: 0, label: "Non-Billable" },
+                    benchStrength: { value: 0, label: "Bench Strength" },
+                    avgUtilization: { value: "0%", label: "Avg Utilization" },
+                    overallocated: { value: 0, label: "Overallocated", isAlert: false }
+                },
+                projects: [],
+                ...allocationStaticData
             }
-
-            // 2. Filter Employees
-            let filteredEmployees = allocationData.employees;
-
-            if (filters.department && filters.department !== 'All Departments') {
-                filteredEmployees = filteredEmployees.filter(emp => emp.dept === filters.department);
-            }
-
-            if (filters.resourceType && filters.resourceType !== 'All Resources') {
-                if (filters.resourceType === 'Billable Only') {
-                    filteredEmployees = filteredEmployees.filter(emp => emp.type === 'Billable');
-                } else if (filters.resourceType === 'Internal Only') {
-                    filteredEmployees = filteredEmployees.filter(emp => emp.type === 'Internal');
-                } else if (filters.resourceType === 'Bench Strength') {
-                    filteredEmployees = filteredEmployees.filter(emp => emp.type === 'Bench');
-                }
-            }
-
-            filteredData.employees = filteredEmployees;
-
-            resolve({ data: filteredData });
-        }, 500); // Simulate network latency
-    });
+        };
+    }
+};
+// ---------- Fetch Department Breakdown (Billable vs Non-Billable) ----------
+export const fetchDepartmentBreakdown = async () => {
+    try {
+        const res = await api.get('/allocations/department-breakdown');
+        return res.data; // [{ department, billable, nonBillable }]
+    } catch (error) {
+        console.error("Department Breakdown API Error:", error);
+        return [];
+    }
 };
