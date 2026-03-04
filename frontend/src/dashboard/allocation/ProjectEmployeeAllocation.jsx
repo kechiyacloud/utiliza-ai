@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { fetchProjectEmployees } from '../../api/allocationApi';
 
 const getAllocationColor = (pct) => {
@@ -29,7 +30,15 @@ const ProjectEmployeeAllocation = ({ project, onClose }) => {
             <div className="flex justify-between items-center mb-5 shrink-0">
                 <div>
                     <h3 className="text-lg font-bold text-gray-800 tracking-tight">{project.project_name}</h3>
-                    <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider mt-0.5">Allocation Details</p>
+                    <div className="flex items-center gap-3 mt-0.5">
+                        <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Allocation Details</p>
+                        <Link
+                            to={`/info/projects?id=${project.project_id}`}
+                            className="flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-all duration-200 uppercase tracking-wide"
+                        >
+                            Know more info <ExternalLink size={10} strokeWidth={2.5} />
+                        </Link>
+                    </div>
                 </div>
                 <button
                     onClick={onClose}
