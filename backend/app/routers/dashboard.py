@@ -251,3 +251,112 @@ def skills_gap():
     finally:
         cur.close()
         conn.close()
+
+
+@router.get("/dashboard/executive-metrics")
+def dashboard_executive_metrics():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM employee_master m")
+        total_employees = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NOT NULL")
+        notice_period = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(DISTINCT employee_id) FROM projects_allocation WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE")
+        billable_headcount = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM employee_master_pro WHERE employee_status = 'Bench'")
+        bench_headcount = cur.fetchone()[0]
+
+        internal_headcount = max(0, total_employees - billable_headcount - bench_headcount - notice_period)
+
+        cur.execute("SELECT SUM(allocation_percentage) FROM projects_allocation WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE")
+        total_allocations = cur.fetchone()[0] or 0
+        company_utilization = round((total_allocations / (total_employees * 100)) * 100) if total_employees else 0
+
+        cur.execute("SELECT COUNT(DISTINCT employee_id) FROM projects_allocation WHERE allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')")
+        upcoming_bench = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT s.skill_name, count(es.employee_id) as c
+            FROM employee_skills es
+            JOIN skills s ON s.skill_id = es.skill_id
+            JOIN employee_master_pro emp ON emp.employee_id = es.employee_id
+            WHERE emp.employee_status = 'Bench'
+            GROUP BY s.skill_name ORDER BY c DESC LIMIT 5
+        """)
+        bench_skills = [{"name": r[0], "count": r[1]} for r in cur.fetchall()]
+
+        cur.execute("""
+            WITH months AS (
+                SELECT generate_series(
+                    DATE_TRUNC('month', CURRENT_DATE),
+                    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
+                    INTERVAL '1 month'
+                ) AS month_start
+            )
+            SELECT
+                TO_CHAR(m.month_start, 'Mon') AS month,
+                COUNT(DISTINCT pa.employee_id) AS allocations
+            FROM months m
+            LEFT JOIN projects_allocation pa
+              ON pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+             AND pa.allocation_end_date >= m.month_start
+            GROUP BY m.month_start
+            ORDER BY m.month_start
+        """)
+        forecast_rows = cur.fetchall()
+        forecast = []
+        for r in forecast_rows:
+            forecast.append({
+                "month": r[0],
+                "capacity": r[1] + bench_headcount,
+                "demand": r[1] + int(r[1] * 0.1)
+            })
+
+        cur.execute("""
+            SELECT p.project_name, count(pa.employee_id) as res_count
+            FROM projects p
+            LEFT JOIN projects_allocation pa ON pa.project_id = p.project_id
+            GROUP BY p.project_name
+            ORDER BY res_count ASC
+            LIMIT 3
+        """)
+        risk_rows = cur.fetchall()
+        projects_at_risk = []
+        for r in risk_rows:
+            if r[1] == 0:
+                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "High", "reason": "No resources assigned", "health": 20})
+            elif r[1] < 3:
+                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "Medium", "reason": f"Under-resourced ({r[1]} member(s))", "health": 55})
+
+        alerts = []
+        if upcoming_bench > 0:
+            alerts.append({"id": 1, "type": "warning", "message": f"{upcoming_bench} resources are rolling off within 30 days.", "time": "Just now"})
+        if bench_headcount > 10:
+             alerts.append({"id": 2, "type": "critical", "message": f"High bench count detected ({bench_headcount} employees idle).", "time": "Recently"})
+        
+        if len(alerts) == 0:
+            alerts.append({"id": 3, "type": "info", "message": "All project allocations appear stable.", "time": "Just now"})
+        
+        return {
+            "company_utilization": company_utilization,
+            "billable_headcount": billable_headcount,
+            "bench_headcount": bench_headcount,
+            "notice_period": notice_period,
+            "internal_headcount": internal_headcount,
+            "upcoming_bench": upcoming_bench,
+            "bench_skills": bench_skills,
+            "forecast": forecast,
+            "projects_at_risk": projects_at_risk,
+            "alerts": alerts,
+            "total_employees": total_employees
+        }
+    except Exception as e:
+        print("REAL DB ERROR EXECUTIVE METRICS:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()

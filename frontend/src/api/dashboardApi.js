@@ -7,13 +7,15 @@ export const fetchDashboardData = async () => {
             forecastRes,
             highAllocationRes,
             performersRes,
-            availabilityRes
+            availabilityRes,
+            executiveRes
         ] = await Promise.all([
             api.get('/dashboard/infocards').catch(() => ({ data: {} })),
             api.get('/dashboard/allocation-3m').catch(() => ({ data: [] })),
             api.get('/dashboard/high-allocation-projects').catch(() => ({ data: [] })),
             api.get('/dashboard/top-performers').catch(() => ({ data: [] })),
-            api.get('/dashboard/upcoming-availability').catch(() => ({ data: [] }))
+            api.get('/dashboard/upcoming-availability').catch(() => ({ data: [] })),
+            api.get('/dashboard/executive-metrics').catch(() => ({ data: null }))
         ]);
 
         // Safely extract data, fallback to defaults if 500/error occurred
@@ -22,6 +24,7 @@ export const fetchDashboardData = async () => {
         const highAlloc = Array.isArray(highAllocationRes?.data) ? highAllocationRes.data : [];
         const performers = Array.isArray(performersRes?.data) ? performersRes.data : [];
         const availability = Array.isArray(availabilityRes?.data) ? availabilityRes.data : [];
+        const executive = executiveRes?.data || {};
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
@@ -55,7 +58,8 @@ export const fetchDashboardData = async () => {
                 project: a.project,
                 releaseDate: a.release_date,
                 availability: a.allocation_percent
-            }))
+            })),
+            executiveMetrics: executive
         };
 
         return { data: REAL_DASHBOARD_DATA };
@@ -74,7 +78,8 @@ export const fetchDashboardData = async () => {
                 resourceForecast: [],
                 highAllocationProjects: [],
                 topPerformers: [],
-                resourceAvailability: []
+                resourceAvailability: [],
+                executiveMetrics: {}
             }
         };
     }

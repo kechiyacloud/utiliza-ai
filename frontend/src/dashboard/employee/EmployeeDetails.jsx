@@ -49,8 +49,15 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
             </div>
 
             {/* Static Tag Placement */}
-            <div className="ml-[22px]">
-                <EmployeeStatusTag status={rawProject.status} billable={rawProject.billable} size="sm" />
+            <div className="ml-[22px] flex items-center gap-2">
+                <EmployeeStatusTag status={rawProject.status} size="sm" />
+                {rawProject.billable && (
+                    <span
+                        className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}
+                    >
+                        {String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'Billable' : 'Non-Billable'}
+                    </span>
+                )}
             </div>
 
             {/* Expanded Content Area */}
@@ -96,8 +103,8 @@ const EmployeeDetails = () => {
                 // Inject status/billable into projects for tags
                 const enhancedProjects = (sourceData.projects || []).map(p => ({
                     ...p,
-                    status: sourceData.employee_status || 'Allocated',
-                    billable: sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'), // default fallback
+                    status: p.status || sourceData.employee_status || 'Allocated',
+                    billable: p.billable || sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'), // prioritize project specific billable
                     name: p.project_name || p.name,
                     value: p.allocation_percentage || p.value || 0
                 }));
@@ -169,15 +176,90 @@ const EmployeeDetails = () => {
     // If projects is empty or undefined, handle gracefully
     const projects = userData.projects || [];
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-    const chartData = projects.map((p, index) => ({
-        name: p.project_name || p.name,
-        value: p.allocation_percentage || p.value || 0,
-        color: COLORS[index % COLORS.length]
-    }));
 
     // Timeline Helpers
-    const months = ["Feb '26", "Mar '26", "Apr '26"];
+    const timelineStartDate = new Date();
+    timelineStartDate.setDate(1); // Default to start of current month
+    timelineStartDate.setHours(0, 0, 0, 0);
+
+    // Make timeline align dynamically with earliest project in DB so past projects aren't mismatched
+    if (projects && projects.length > 0) {
+        let earliestDate = new Date();
+        let hasValidStart = false;
+        projects.forEach(p => {
+            const rawStart = p.start_date || p.allocation_start_date;
+            if (rawStart) {
+                const d = new Date(rawStart);
+                if (!hasValidStart || d < earliestDate) {
+                    earliestDate = d;
+                    hasValidStart = true;
+                }
+            }
+        });
+        if (hasValidStart) {
+            timelineStartDate.setFullYear(earliestDate.getFullYear());
+            timelineStartDate.setMonth(earliestDate.getMonth());
+        }
+    }
+
+    const getTimelineMonths = () => {
+        const result = [];
+        for (let i = 0; i < 3; i++) {
+            const date = new Date(timelineStartDate.getFullYear(), timelineStartDate.getMonth() + i, 1);
+            const monthStr = date.toLocaleString('default', { month: 'short' });
+            const yearStr = date.getFullYear().toString().slice(-2);
+            result.push(`${monthStr} '${yearStr}`);
+        }
+        return result;
+    };
+    const months = getTimelineMonths();
     const totalWeeks = 12;
+
+    const chartData = projects.map((p, index) => {
+        let startWeek = 0;
+        let durationWeeks = 4; // default if no dates
+        let isVisibleInTimeline = true;
+
+        // Handle potential different backend key names for dates
+        const rawStartDate = p.start_date || p.allocation_start_date;
+        const rawEndDate = p.end_date || p.allocation_end_date;
+
+        if (rawStartDate || rawStartDate !== undefined) {
+            const pStart = rawStartDate ? new Date(rawStartDate) : new Date(timelineStartDate);
+            const pEnd = rawEndDate ? new Date(rawEndDate) : new Date(timelineStartDate.getFullYear() + 1, timelineStartDate.getMonth(), 1); // far future
+
+            const getWeekOffset = (d) => (d.getTime() - timelineStartDate.getTime()) / (7 * 24 * 60 * 60 * 1000);
+
+            let sWeek = getWeekOffset(pStart);
+            let eWeek = getWeekOffset(pEnd);
+
+            if (eWeek <= 0 || sWeek >= 12) {
+                // Completely outside the 90-day window
+                isVisibleInTimeline = false;
+            } else {
+                // Clamp to window
+                sWeek = Math.max(0, sWeek);
+                eWeek = Math.min(12, eWeek);
+
+                startWeek = Math.floor(sWeek);
+                durationWeeks = Math.ceil(eWeek - startWeek); // Ensure duration counts precisely
+                if (durationWeeks < 1) durationWeeks = 1;
+                if (startWeek + durationWeeks > 12) {
+                    durationWeeks = 12 - startWeek;
+                }
+                if (startWeek >= 12) startWeek = 11;
+            }
+        }
+
+        return {
+            name: p.project_name || p.name,
+            value: p.allocation_percentage || p.value || 0,
+            color: COLORS[index % COLORS.length],
+            startWeek,
+            durationWeeks,
+            isVisibleInTimeline
+        };
+    });
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
@@ -222,7 +304,6 @@ const EmployeeDetails = () => {
                         </div>
                         <EmployeeStatusTag
                             status={userData.status?.allocated}
-                            billable={userData.billable || (userData.status?.allocated === 'Bench' ? 'No' : 'Yes')}
                         />
                     </div>
 
@@ -246,12 +327,12 @@ const EmployeeDetails = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                 {/* Left Column: Profile Info */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
                     <div className="flex justify-between items-start">
                         <h2 className="text-lg font-bold text-slate-800">Profile Details</h2>
                         <div className="flex gap-2">
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-md font-medium">{userData.status?.allocated}</span>
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-md font-medium">{userData.status?.workMode}</span>
+                            <EmployeeStatusTag status={userData.status?.allocated} size="sm" />
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-[10px] rounded-md font-bold uppercase tracking-wider border border-purple-200">{userData.status?.workMode}</span>
                         </div>
                     </div>
 
@@ -302,7 +383,7 @@ const EmployeeDetails = () => {
 
 
                 {/* Middle Column: Projects */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-visible">
                     <h2 className="text-lg font-bold text-slate-800">Projects Allocation</h2>
 
                     {/* Chart - Reduced Size */}
@@ -313,8 +394,8 @@ const EmployeeDetails = () => {
                                     data={chartData}
                                     cx="50%"
                                     cy="50%"
-                                    innerRadius={45} // Reduced
-                                    outerRadius={60} // Reduced
+                                    innerRadius={45}
+                                    outerRadius={60}
                                     paddingAngle={5}
                                     dataKey="value"
                                 >
@@ -328,12 +409,14 @@ const EmployeeDetails = () => {
                         </ResponsiveContainer>
                         {/* Center Text */}
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[60%] text-center">
-                            <span className="text-lg font-bold text-slate-800">100%</span>
+                            <span className="text-lg font-bold text-slate-800">
+                                {chartData.reduce((sum, item) => sum + (Number(item.value) || 0), 0)}%
+                            </span>
                         </div>
                     </div>
 
                     {/* Project Skills Detail */}
-                    <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-[220px] max-h-[400px] pr-2 custom-scrollbar py-1">
+                    <div className="flex flex-col gap-2 overflow-y-auto flex-1 max-h-[140px] pr-2 custom-scrollbar py-1">
                         {chartData.map((project, idx) => (
                             <ProjectAllocationDropdown
                                 key={idx}
@@ -347,7 +430,7 @@ const EmployeeDetails = () => {
 
 
                 {/* Right Column: Skills & Certificates */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
 
                     {/* Master Skills */}
                     <div>
@@ -362,7 +445,7 @@ const EmployeeDetails = () => {
                         </div>
 
                         {showDetailedSkills ? (
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-3 max-h-[190px] overflow-y-auto custom-scrollbar pr-2">
                                 {userData.masterSkills && userData.masterSkills.map((skillObj, idx) => {
                                     const skillName = typeof skillObj === 'string' ? skillObj : skillObj.name;
                                     let rawProficiency = skillObj.proficiency || 'Beginner';
@@ -490,12 +573,14 @@ const EmployeeDetails = () => {
                             {/* Left Labels Column (Sticky Horizontal) */}
                             <div className="w-[180px] shrink-0 bg-white sticky left-0 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                 <div className="py-4 space-y-3">
-                                    {chartData.map((project, idx) => (
+                                    {chartData.filter(p => p.isVisibleInTimeline).length > 0 ? chartData.filter(p => p.isVisibleInTimeline).map((project, idx) => (
                                         <div key={idx} className="h-10 pr-4 flex flex-col justify-center text-right hover:bg-slate-50 pl-3 border-r-2 border-transparent hover:border-blue-400 transition-colors group cursor-default">
                                             <span className="text-[13px] font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors" title={project.name}>{project.name}</span>
                                             <span className="text-[10px] text-slate-500 font-semibold capitalize tracking-wide">{projects[idx]?.status || 'Allocated'}</span>
                                         </div>
-                                    ))}
+                                    )) : (
+                                        <div className="h-10 pr-4 flex flex-col justify-center text-right pl-3 text-xs text-slate-400 italic">No projects in this period</div>
+                                    )}
                                 </div>
                             </div>
 
@@ -510,7 +595,7 @@ const EmployeeDetails = () => {
 
                                 {/* Project Bars Rows */}
                                 <div className="relative z-10 py-4 space-y-3">
-                                    {chartData.map((project, idx) => (
+                                    {chartData.filter(p => p.isVisibleInTimeline).map((project, idx) => (
                                         <div key={idx} className="grid grid-cols-12 gap-0 items-center h-10 hover:bg-slate-100/50 transition-colors group">
                                             {/* Bar Container */}
                                             <div

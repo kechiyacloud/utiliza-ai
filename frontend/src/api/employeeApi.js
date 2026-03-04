@@ -21,23 +21,44 @@ export const getNoticeCount = async () => {
 // Fetch all employees list
 export const getEmployeeList = async () => {
     try {
-        const res = await api.get('/employees/list'); // removed timeout to rely on global or default
+        const res = await api.get('/employees/list');
         const rawData = Array.isArray(res?.data) ? res.data : [];
 
-        // Inject missing fields for real backend data if needed, or just return raw
-        // Keeping the map for safety to ensure arrays are arrays
-        const enriched = rawData.map(emp => ({
-            ...emp,
-            skills: emp.skills || [],
-            billable: emp.billable || (emp.employee_status === 'Allocated' ? 'Billable' : 'Non-Billable'),
-            location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
-        }));
+        const enriched = rawData.map(emp => {
+            const status = (emp.employee_status || '').toLowerCase();
+            const allocation = emp.employee_allocations || 0;
+
+            // Derive billable from raw status + allocation
+            // Allocated + allocation > 0 → billable
+            // Allocated + allocation = 0 → non-billable
+            // Bench + any → non-billable (unless tagged shadow billing)
+            // Notice period → non-billable
+            let derivedBillable = 'non-billable';
+            if (status === 'allocated' && allocation > 0) {
+                derivedBillable = 'billable';
+            }
+
+            let normalizedType = emp.employee_type || 'Full Time';
+            if (normalizedType.toUpperCase() === 'INTEN') {
+                normalizedType = 'Intern';
+            } else if (normalizedType.toUpperCase() === 'FTE') {
+                normalizedType = 'Full Time';
+            }
+
+            return {
+                ...emp,
+                skills: emp.skills || [],
+                billable: emp.billable || derivedBillable,
+                employee_type: normalizedType,
+                location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
+            };
+        });
 
         return enriched;
 
     } catch (err) {
         console.error('Error fetching employee list:', err);
-        throw err; // Propagate error to component
+        throw err;
     }
 };
 
@@ -47,7 +68,18 @@ export const getEmployeeById = async (id) => {
     return res.data;
 };
 
-// Fetch new joiners (last 90 days) — excludes notice period employees
+// Fetch upcoming bench employees
+export const getUpcomingBench = async () => {
+    try {
+        const res = await api.get('/employees/upcoming-bench');
+        return Array.isArray(res?.data) ? res.data : [];
+    } catch (err) {
+        console.error('Error fetching upcoming bench:', err);
+        return [];
+    }
+};
+
+// Fetch new joiners (last 30 days) — excludes notice period employees
 export const getNewJoiners = async () => {
     try {
         const res = await api.get('/employees/new-joiners');
@@ -116,3 +148,25 @@ export const fetchActionInbox = async () => {
     }
 };
 
+export const getFilterOptions = async () => {
+    try {
+        const res = await api.get('/employees/filter-options');
+        if (res?.data) {
+            // Normalize employee types identically to the list payload
+            if (res.data.employee_types && Array.isArray(res.data.employee_types)) {
+                res.data.employee_types = res.data.employee_types.map(t => {
+                    let normalized = t || 'Full Time';
+                    if (normalized.toUpperCase() === 'INTEN') return 'Intern';
+                    if (normalized.toUpperCase() === 'FTE') return 'Full Time';
+                    return normalized;
+                });
+                // Remove duplicates after mapping just in case
+                res.data.employee_types = [...new Set(res.data.employee_types)].sort();
+            }
+        }
+        return res?.data || null;
+    } catch (err) {
+        console.error('Error fetching filter options:', err);
+        return null;
+    }
+};

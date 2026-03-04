@@ -2,38 +2,74 @@ import React, { useMemo, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+const mapSkillToCategory = (skillName) => {
+    const s = skillName.toLowerCase();
+
+    if (s.includes('aws') || s.includes('ec2') || s.includes('ecs') || s.includes('eks') ||
+        s.includes('lambda') || s.includes('s3') || s.includes('rds') || s.includes('dynamodb') ||
+        s.includes('vpc') || s.includes('route53') || s.includes('kms') || s.includes('cloudformation')) return 'AWS';
+
+    if (s.includes('azure') || s.includes('aks')) return 'Azure';
+
+    if (s.includes('gcp') || s.includes('google cloud') || s.includes('bigquery') || s.includes('gke')) return 'GCP';
+
+    if (s.includes('docker') || s.includes('kubernetes') || s.includes('terraform') ||
+        s.includes('jenkins') || s.includes('github') || s.includes('gitlab') || s.includes('ci/cd') ||
+        s.includes('ansible') || s.includes('argocd') || s.includes('grafana') || s.includes('prometheus')) return 'DevOps & DevOps Tools';
+
+    if (s.includes('python') || s.includes('java') || s.includes('node') || s.includes('react') ||
+        s.includes('javascript') || s.includes('go') || s.includes('bash') || s.includes('shell') || s.includes('cpp')) return 'Programming & Scripting';
+
+    if (s.includes('sql') || s.includes('postgres') || s.includes('mongo') || s.includes('oracle') ||
+        s.includes('redis') || s.includes('database')) return 'Databases';
+
+    if (s.includes('linux') || s.includes('windows') || s.includes('ubuntu') || s.includes('centos') ||
+        s.includes('network') || s.includes('security')) return 'OS & Networking';
+
+    return 'Other Technologies';
+};
+
 const SkillsOverview = ({ employees }) => {
     const [expandedSkill, setExpandedSkill] = useState(null);
 
     // 1. Process all employees to find ALL skills for the Matrix
     const matrixData = useMemo(() => {
-        const skillCounts = {};
+        const categoryCounts = {};
 
         employees.forEach(emp => {
             if (emp.skills && Array.isArray(emp.skills)) {
+                // Ensure unique categories per employee so we don't double count 
+                // e.g. an employee with EC2 and S3 shouldn't count twice for AWS.
+                const employeeCategories = new Set();
+
                 emp.skills.forEach(skill => {
-                    if (!skillCounts[skill]) {
-                        skillCounts[skill] = { name: skill, count: 0, benchCount: 0, employees: [] };
+                    const category = mapSkillToCategory(skill);
+                    employeeCategories.add(category);
+                });
+
+                employeeCategories.forEach(cat => {
+                    if (!categoryCounts[cat]) {
+                        categoryCounts[cat] = { name: cat, count: 0, benchCount: 0, employees: [] };
                     }
-                    skillCounts[skill].count += 1;
-                    skillCounts[skill].employees.push({
+                    categoryCounts[cat].count += 1;
+                    categoryCounts[cat].employees.push({
                         id: emp.employee_id,
                         name: emp.employee_name,
                         role: emp.role_designation,
                         photo: emp.photo_url,
                         status: emp.employee_status,
-                        isBench: emp.employee_status === 'Bench' || emp.employee_allocations === 0
+                        isBench: emp.employee_status === 'Bench' || (emp.employee_allocations || 0) === 0
                     });
 
-                    if (emp.employee_status === 'Bench' || emp.employee_allocations === 0) {
-                        skillCounts[skill].benchCount += 1;
+                    if (emp.employee_status === 'Bench' || (emp.employee_allocations || 0) === 0) {
+                        categoryCounts[cat].benchCount += 1;
                     }
                 });
             }
         });
 
         // Convert to array and sort by total count descending
-        return Object.values(skillCounts).sort((a, b) => b.count - a.count);
+        return Object.values(categoryCounts).sort((a, b) => b.count - a.count);
     }, [employees]);
 
     // 2. Process Radar Data (Top 6 Skills)

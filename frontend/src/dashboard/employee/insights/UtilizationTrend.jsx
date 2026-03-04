@@ -4,7 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const UtilizationTrend = ({ employees }) => {
 
     const trendData = useMemo(() => {
-        // We do not have historical data in the mock payload.
+        // We do not have historical data yet.
         // As a visual placeholder for the requested feature, we will derive 
         // a 6-month simulated historical trend ending in the "Current" actual state.
 

@@ -22,38 +22,38 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }) => {
         // Simulate network request (1.5s delay)
         setTimeout(() => {
             const lowerUrl = url.toLowerCase();
-            let mockName, mockIndustry, mockStatus, mockLogo;
+            let fetchedName, fetchedIndustry, fetchedStatus, fetchedLogo;
 
             if (lowerUrl.includes('tesla')) {
-                mockName = 'Tesla';
-                mockIndustry = 'Automotive';
-                mockStatus = 'Stable';
+                fetchedName = 'Tesla';
+                fetchedIndustry = 'Automotive';
+                fetchedStatus = 'Stable';
             } else if (lowerUrl.includes('google')) {
-                mockName = 'Google';
-                mockIndustry = 'Technology';
-                mockStatus = 'Stable';
+                fetchedName = 'Google';
+                fetchedIndustry = 'Technology';
+                fetchedStatus = 'Stable';
             } else if (lowerUrl.includes('amazon')) {
-                mockName = 'Amazon';
-                mockIndustry = 'Retail';
-                mockStatus = 'Stable';
+                fetchedName = 'Amazon';
+                fetchedIndustry = 'Retail';
+                fetchedStatus = 'Stable';
             } else if (lowerUrl.includes('microsoft')) {
-                mockName = 'Microsoft';
-                mockIndustry = 'Technology';
-                mockStatus = 'Stable';
+                fetchedName = 'Microsoft';
+                fetchedIndustry = 'Technology';
+                fetchedStatus = 'Stable';
             } else {
                 // Extract name from URL
-                mockName = lowerUrl.includes('www.')
+                fetchedName = lowerUrl.includes('www.')
                     ? url.split('.')[1].charAt(0).toUpperCase() + url.split('.')[1].slice(1)
                     : 'Acme Corp';
-                mockIndustry = 'Retail';
-                mockStatus = 'Active';
+                fetchedIndustry = 'Retail';
+                fetchedStatus = 'Active';
             }
 
-            mockLogo = 'https://via.placeholder.com/150';
+            fetchedLogo = 'https://via.placeholder.com/150';
 
             setFormData(prev => ({
                 ...prev,
-                name: mockName,
+                name: fetchedName,
 
 
             }));

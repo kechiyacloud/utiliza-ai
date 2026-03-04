@@ -1,72 +1,78 @@
 /**
  * EmployeeStatusTag
  *
- * A single combined tag that merges allocation status + billable status
- * into one of four meaningful labels:
- *
- *  1. Allocated   + Billable     → "Active Billable"     (green)
- *  2. Allocated   + Non-Billable → "Internal"            (blue)
- *  3. Bench       + Non-Billable → "Bench"               (orange)
- *  4. Notice period              → "Serving Notice"      (red)
- *
- * Usage:
- *   <EmployeeStatusTag status={emp.employee_status} billable={emp.billable} />
+ * Displays the raw database employee_status with correct color coding.
  */
 
 import React from 'react';
 
-// Derive one of the 4 tag types from status + billable
-export const getEmployeeTag = (status, billable) => {
-    const s = String(status || "").toLowerCase();
-    const b = String(billable || '').toLowerCase();
+// Derive one of the tag configurations based on the raw status
+export const getEmployeeTag = (status) => {
+    const rawLabel = status || 'Unknown';
+    const s = String(status || "").toLowerCase().trim();
 
-    if (s === 'notice period') {
+    if (s.includes('notice')) {
         return {
-            label: 'Serving Notice',
+            label: 'Notice period',
             color: 'bg-red-50 text-red-600 border-red-200',
             dot: 'bg-red-500',
         };
     }
-    if (s === 'bench' && b === 'billable') {
+    if (s === 'partially allocated') {
         return {
-            label: 'Shadow Billing',
+            label: 'Partially allocated',
             color: 'bg-purple-50 text-purple-600 border-purple-200',
             dot: 'bg-purple-500',
+        };
+    }
+    if (s === 'partially bench') {
+        return {
+            label: 'Partially bench',
+            color: 'bg-blue-50 text-blue-600 border-blue-200',
+            dot: 'bg-blue-500',
         };
     }
     if (s === 'bench') {
         return {
             label: 'Bench',
             color: 'bg-orange-50 text-orange-600 border-orange-200',
-            dot: 'bg-orange-400',
+            dot: 'bg-orange-500',
         };
     }
-    if (s === 'allocated' && b === 'non-billable') {
+    if (s === 'allocated') {
         return {
-            label: 'Non-Billable',
-            color: 'bg-blue-50 text-blue-600 border-blue-200',
-            dot: 'bg-blue-400',
+            label: 'Allocated',
+            color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            dot: 'bg-emerald-500',
         };
     }
-    // Default: Allocated + Billable
+    if (s === 'completed') {
+        return {
+            label: 'Completed',
+            color: 'bg-slate-50 text-slate-500 border-slate-200',
+            dot: 'bg-slate-400',
+        };
+    }
+
+    // Default fallback for any other unexpected statuses
     return {
-        label: 'Active Billable',
-        color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        dot: 'bg-emerald-500',
+        label: rawLabel,
+        color: 'bg-gray-50 text-gray-700 border-gray-200',
+        dot: 'bg-gray-400',
     };
 };
 
-const EmployeeStatusTag = ({ status, billable, size = 'md' }) => {
-    const tag = getEmployeeTag(status, billable);
+const EmployeeStatusTag = ({ status, size = 'md' }) => {
+    const tag = getEmployeeTag(status);
 
     const sizeClass = size === 'sm'
         ? 'px-2 py-0.5 text-[10px]'
         : 'px-2.5 py-1 text-xs';
 
     return (
-        <span className={`inline-flex items-center gap-1.5 rounded-md font-bold border ${tag.color} ${sizeClass}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-md font-bold border ${tag.color} ${sizeClass} break-normal whitespace-nowrap`}>
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tag.dot}`} />
-            {tag.label}
+            <span className="truncate max-w-[120px]" title={tag.label}>{tag.label}</span>
         </span>
     );
 };

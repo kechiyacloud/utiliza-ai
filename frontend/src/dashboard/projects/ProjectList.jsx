@@ -52,13 +52,7 @@ const ProjectList = ({ projects, activeCardFilter }) => {
         const matchesStatus = filters.status ? project.status === filters.status : true;
         const matchesResources = filters.minResources ? project.resources >= parseInt(filters.minResources) : true;
 
-        // Date filtering could be added here if project data had date objects, skipping for string dates in mock
-        // Example:
-        // const projectEndDate = new Date(project.endDate);
-        // const filterStartDate = filters.startDate ? new Date(filters.startDate) : null;
-        // const filterEndDate = filters.endDate ? new Date(filters.endDate) : null;
-        // const matchesStartDate = filterStartDate ? projectEndDate >= filterStartDate : true;
-        // const matchesEndDate = filterEndDate ? projectEndDate <= filterEndDate : true;
+        // Date filtering could be added here if project data had date objects
 
         // Quick Card Filter logic
         let matchesCardFilter = true;
