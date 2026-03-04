@@ -95,7 +95,7 @@ def allocation_projects():
                 pa.project_id,
                 p.project_name,
                 COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'billable' THEN pa.employee_id END) AS billable_count,
-                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'nonbillable' THEN pa.employee_id END) AS non_billable_count
+                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'non-billable' THEN pa.employee_id END) AS non_billable_count
             FROM projects_allocation pa
             JOIN projects p ON pa.project_id = p.project_id
             GROUP BY pa.project_id, p.project_name
@@ -238,14 +238,26 @@ def department_allocation_breakdown():
                     em.employee_id,
                     em.department,
                     CASE 
-                        WHEN (pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 1
-                        WHEN (pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%nonbillable%') THEN 2
-                        WHEN (pa.allocation_percentage = 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 3
+                        WHEN (pa.allocation_percentage > 0 
+                            AND LOWER(pa.project_tags) LIKE '%billable%' 
+                            AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 1
+
+                        WHEN (pa.allocation_percentage > 0 
+                            AND LOWER(pa.project_tags) LIKE '%nonbillable%') THEN 2
+
+                        WHEN (pa.allocation_percentage = 0 
+                            AND LOWER(pa.project_tags) LIKE '%billable%' 
+                            AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 3
+
+                        WHEN pa.employee_id IS NULL THEN 4   -- 👈 handles pure bench
+
                         ELSE 4
                     END as status_rank
                 FROM employee_master em
-                JOIN projects_allocation pa ON em.employee_id = pa.employee_id
+                LEFT JOIN projects_allocation pa 
+                    ON em.employee_id = pa.employee_id
             ),
+
             BestStatus AS (
                 SELECT 
                     employee_id,
@@ -254,11 +266,13 @@ def department_allocation_breakdown():
                 FROM EmpStatus
                 GROUP BY employee_id, department
             )
+
             SELECT 
                 department,
                 COUNT(CASE WHEN top_rank = 1 THEN 1 END) as allocated_billable,
                 COUNT(CASE WHEN top_rank = 2 THEN 1 END) as allocated_non_billable,
-                COUNT(CASE WHEN top_rank = 3 THEN 1 END) as not_allocated_billable
+                COUNT(CASE WHEN top_rank = 3 THEN 1 END) as not_allocated_billable,
+                COUNT(CASE WHEN top_rank = 4 THEN 1 END) as bench   -- 👈 optional but recommended
             FROM BestStatus
             GROUP BY department
             ORDER BY department
@@ -284,3 +298,159 @@ def department_allocation_breakdown():
         conn.close()
 
 
+
+@router.get("/forecast-bench")
+def get_forecast_bench():
+    """
+    Returns employees whose allocation is ending within the next 30 days.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT 
+                em.employee_id,
+                em.employee_name,
+                em.role_designation,
+                em.photo_url,
+                p.project_name,
+                pa.allocation_end_date
+            FROM projects_allocation pa
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            JOIN projects p ON pa.project_id = p.project_id
+            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days'
+            ORDER BY pa.allocation_end_date ASC
+        """)
+        rows = cur.fetchall()
+        return [
+            {
+                "employee_id": r[0],
+                "employee_name": r[1],
+                "role": r[2],
+                "photo_url": r[3],
+                "project_name": r[4],
+                "end_date": r[5]
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print("Forecast bench DB error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/possible-projects/{employee_id}")
+def get_possible_projects(employee_id: str):
+    """
+    Finds projects that match the employee's skills and experience, 
+    including complete skill requirements, history and fit analysis.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        # 1. Get employee skills
+        cur.execute("""
+            SELECT es.skill_id, s.skill_name, es.proficiency_level, es.years_of_experience
+            FROM employee_skills es
+            JOIN skills s ON es.skill_id = s.skill_id
+            WHERE es.employee_id = %s
+        """, (employee_id,))
+        emp_skills_rows = cur.fetchall()
+        emp_skills = {r[0]: {"name": r[1], "proficiency": r[2], "experience": float(r[3])} for r in emp_skills_rows}
+
+        if not emp_skills:
+            return []
+
+        # 2. Get active projects and their required skills
+        cur.execute("""
+            SELECT 
+                p.project_id, 
+                p.project_name, 
+                p.project_status,
+                ps.skill_id,
+                s.skill_name
+            FROM projects p
+            JOIN project_skills ps ON p.project_id = ps.project_id
+            JOIN skills s ON ps.skill_id = s.skill_id
+            WHERE LOWER(p.project_status) IN ('running', 'in progress', 'live', 'active', 'poc')
+        """)
+        
+        project_data = {}
+        for r in cur.fetchall():
+            pid, pname, pstatus, sid, sname = r
+            if pid not in project_data:
+                project_data[pid] = {
+                    "id": pid, 
+                    "name": pname, 
+                    "status": pstatus, 
+                    "required_skills": []
+                }
+            project_data[pid]["required_skills"].append({"id": sid, "name": sname})
+
+        # 3. Get employee project history
+        cur.execute("""
+            SELECT p.project_name, pa.role_in_project, pa.allocation_percentage, pa.allocation_start_date, pa.allocation_end_date
+            FROM projects_allocation pa
+            JOIN projects p ON pa.project_id = p.project_id
+            WHERE pa.employee_id = %s
+            ORDER BY pa.allocation_start_date DESC
+            LIMIT 3
+        """, (employee_id,))
+        history_rows = cur.fetchall()
+        project_history = [
+            {
+                "name": r[0],
+                "role": r[1],
+                "percentage": r[2],
+                "start_date": r[3],
+                "end_date": r[4]
+            } for r in history_rows
+        ]
+
+        # 4. Match and Rank
+        possible_projects = []
+        for pid, data in project_data.items():
+            req_skill_ids = [s["id"] for s in data["required_skills"]]
+            matches = [s for s in data["required_skills"] if s["id"] in emp_skills]
+            
+            if matches:
+                # Calculate match score (percentage of required skills met)
+                score = (len(matches) / len(req_skill_ids)) * 100
+                
+                # Fit Analysis Logic
+                fit_detail = f"Matches {len(matches)} out of {len(req_skill_ids)} required skills. "
+                if score >= 80:
+                    fit_detail += "Excellent candidate with strong technical alignment."
+                elif score >= 50:
+                    fit_detail += "Solid candidate with good core skill overlap."
+                else:
+                    fit_detail += "Potential candidate; some skill gaps identified for target role."
+
+                possible_projects.append({
+                    "project_id": pid,
+                    "project_name": data["name"],
+                    "status": data["status"],
+                    "match_score": round(score, 1),
+                    "matching_skills": [s["name"] for s in matches],
+                    "all_required_skills": [s["name"] for s in data["required_skills"]],
+                    "employee_project_history": project_history,
+                    "fit_analysis": fit_detail
+                })
+
+        # Sort by match score descending
+        possible_projects.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        return possible_projects
+
+    except Exception as e:
+        print("Possible projects matching error:", e)
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()

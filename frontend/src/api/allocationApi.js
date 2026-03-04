@@ -107,3 +107,24 @@ export const fetchDepartmentBreakdown = async () => {
         return [];
     }
 };
+// ---------- Fetch Forecast Bench List ----------
+export const fetchForecastBench = async () => {
+    try {
+        const res = await api.get('/allocations/forecast-bench');
+        return res.data; // [{ employee_id, employee_name, role, project_name, end_date }]
+    } catch (error) {
+        console.error("Forecast Bench API Error:", error);
+        return [];
+    }
+};
+
+// ---------- Fetch Possible Projects for Employee ----------
+export const fetchPossibleProjects = async (employeeId) => {
+    try {
+        const res = await api.get(`/allocations/possible-projects/${employeeId}`);
+        return res.data; // [{ project_id, project_name, status, match_score, matching_skills }]
+    } catch (error) {
+        console.error("Possible Projects API Error:", error);
+        return [];
+    }
+};
