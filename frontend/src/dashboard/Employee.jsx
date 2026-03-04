@@ -1,20 +1,21 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Search, Filter, Trophy } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Search, Filter, Trophy, Award, TrendingUp, X } from 'lucide-react'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
 import FilterOverlay from './employee/FilterOverlay'
-import EmployeeInsights from './employee/insights/EmployeeInsights'
+import SkillsOverview from './employee/insights/SkillsOverview'
+import UtilizationTrend from './employee/insights/UtilizationTrend'
 import { getEmployeeList } from '../api/employeeApi'
 
-const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick }) => (
+const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition-all hover:shadow-md cursor-pointer"
+    className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between transition-all hover:shadow-md cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
     onClick={onClick}
   >
     <div>
       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <h3 className="text-xl font-extrabold text-gray-800">
+      <h3 className={`font-extrabold text-gray-800 ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-xl'}`}>
         {loading ? (
           <span className="text-gray-400">...</span>
         ) : error ? (
@@ -52,6 +53,7 @@ function Employee() {
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [cardFilter, setCardFilter] = useState(null); // For quick filters from cards
+  const [activeDrawer, setActiveDrawer] = useState(null); // 'skills' | 'trend' | null
 
   useEffect(() => {
     let mounted = true
@@ -60,14 +62,14 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        // Single call — counts are derived from the list (works with mock data too)
+        // Single call — counts are derived from the list
         const data = await getEmployeeList()
         if (!mounted) return
 
         setAllEmployees(data)
         setTotalEmployee(data.length)
-        setBenchEmployee(data.filter(e => e.employee_status === 'Bench').length)
-        setNoticeEmployee(data.filter(e => e.employee_status === 'Notice period').length)
+        setBenchEmployee(data.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length)
+        setNoticeEmployee(data.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length)
       } catch (err) {
         if (mounted) setError(err?.message || 'Failed to load')
       } finally {
@@ -109,6 +111,15 @@ function Employee() {
             />
           </div>
 
+          {/* Utilization Trend Icon Button */}
+          <button
+            onClick={() => setActiveDrawer('trend')}
+            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-teal-600 rounded-xl hover:bg-teal-50 hover:border-teal-200 transition-all shadow-sm"
+            title="Utilization Trend"
+          >
+            <TrendingUp size={18} />
+          </button>
+
           {/* Filter Button - Moved & Styled */}
           <button
             onClick={() => setIsFilterOpen(true)}
@@ -131,8 +142,8 @@ function Employee() {
 
 
 
-      {/* Stats Cards - 4 Column Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Stats Cards - 5 Column Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           label="Total Employees"
           value={totalEmployee}
@@ -140,6 +151,7 @@ function Employee() {
           colorClass="bg-blue-500"
           loading={loading}
           error={error}
+          isActive={cardFilter === null}
           onClick={() => setCardFilter(null)} // Reset filters to show all employees
         />
         <StatCard
@@ -149,6 +161,7 @@ function Employee() {
           colorClass="bg-orange-500"
           loading={loading}
           error={error}
+          isActive={cardFilter === 'bench'}
           onClick={() => setCardFilter('bench')}
         />
         <StatCard
@@ -158,31 +171,61 @@ function Employee() {
           colorClass="bg-red-500"
           loading={loading}
           error={error}
+          isActive={cardFilter === 'notice'}
           onClick={() => setCardFilter('notice')}
         />
-        <NewJoinerCard onClick={() => setCardFilter('new-joiner')} />
-      </div>
-
-      {/* Employee Insights Dashboard (Tabs) */}
-      <div className="w-full">
-        <EmployeeInsights employees={allEmployees} filters={{
-          ...filters,
-          search: searchQuery,
-          cardFilter: cardFilter
-        }} />
+        <NewJoinerCard isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
+        <StatCard
+          label="Skills Overview"
+          value="Tap to View"
+          icon={Award}
+          colorClass="bg-purple-500"
+          loading={loading}
+          error={error}
+          onClick={() => setActiveDrawer('skills')}
+        />
       </div>
 
       {/* Employee Table (Full Width) */}
-      <div className='flex-1 w-full'>
+      <div className='flex-1 w-full mt-4'>
         <EmployeeTable
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
           filters={{
             ...filters,
             search: searchQuery,
-            cardFilter: cardFilter // Pass card filter
+            cardFilter: cardFilter
           }}
         />
       </div>
+
+      {/* Sliding Drawer for Insights */}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-full md:w-[600px] lg:w-[800px] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${activeDrawer ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+          <h2 className="text-xl font-bold text-gray-800">
+            {activeDrawer === 'skills' ? 'Skills Overview' : 'Utilization Trend'}
+          </h2>
+          <button
+            onClick={() => setActiveDrawer(null)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+          {activeDrawer === 'skills' && <SkillsOverview employees={allEmployees} />}
+          {activeDrawer === 'trend' && <UtilizationTrend employees={allEmployees} />}
+        </div>
+      </div>
+
+      {/* Backdrop */}
+      {activeDrawer && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40"
+          onClick={() => setActiveDrawer(null)}
+        />
+      )}
     </div>
   )
 }

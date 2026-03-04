@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import AllocationMetrics from './allocation/AllocationMetrics';
 import ProjectUtilization from './allocation/ProjectUtilization';
 import ProjectEmployeeAllocation from './allocation/ProjectEmployeeAllocation';
@@ -12,6 +13,7 @@ import PossibleProjectMatches from './allocation/PossibleProjectMatches';
 import { fetchAllocationData, fetchForecastBench, fetchPossibleProjects } from '../api/allocationApi';
 
 function Allocations() {
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -47,6 +49,18 @@ function Allocations() {
     };
     loadData();
   }, [filters]); // Re-fetch when filters change
+
+  // Handle URL Hash Scrolling
+  useEffect(() => {
+    if (!loading && location.hash === '#forecast-bench') {
+      setTimeout(() => {
+        const el = document.getElementById('forecast-bench');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  }, [loading, location.hash]);
 
   const handleEmployeeClick = async (employee) => {
     setSelectedProject(null); // Clear project selection if any
@@ -102,7 +116,7 @@ function Allocations() {
       </div>
 
       {/* Details Row (Forecast Bench & Project Matches) */}
-      <div className="flex flex-col lg:flex-row gap-6 w-full pb-8">
+      <div id="forecast-bench" className="flex flex-col lg:flex-row gap-6 w-full pb-8">
         <div className={`transition-all duration-300 ${selectedEmpForProjects ? 'w-full lg:w-2/3' : 'w-full'}`}>
           <ForecastBenchList
             employees={forecastBench}

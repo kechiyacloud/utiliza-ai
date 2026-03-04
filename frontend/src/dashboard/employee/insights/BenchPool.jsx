@@ -1,16 +1,38 @@
-import React, { useState } from 'react';
-import { getEmployeeById } from '../../../api/employeeApi';
+import React, { useState, useEffect } from 'react';
+import { getEmployeeById, getUpcomingBench } from '../../../api/employeeApi';
 import { ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
 
-const BenchPool = ({ employees }) => {
+const BenchPool = ({ employees, onCountLoaded }) => {
     const [expandedRow, setExpandedRow] = useState(null);
     const [expandedData, setExpandedData] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
 
-    // Filter to only show people who are "Bench" or have 0 allocation
-    const benchEmployees = employees.filter(emp =>
-        emp.employee_status?.toLowerCase() === 'bench' || emp.employee_allocations === 0
-    );
+    const [benchEmployees, setBenchEmployees] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadBench = async () => {
+            setLoading(true);
+            try {
+                const data = await getUpcomingBench();
+                if (mounted) {
+                    setBenchEmployees(data);
+                    if (onCountLoaded) {
+                        onCountLoaded(data.length);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load upcoming bench:", err);
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        };
+
+        loadBench();
+        return () => { mounted = false; };
+    }, []);
 
     const handleRowClick = async (employeeId) => {
         // Toggle off if already expanded
@@ -34,10 +56,18 @@ const BenchPool = ({ employees }) => {
         }
     };
 
+    if (loading) {
+        return (
+            <div className="text-center p-8 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-medium">Loading upcoming bench...</p>
+            </div>
+        );
+    }
+
     if (benchEmployees.length === 0) {
         return (
             <div className="text-center p-8 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-gray-500 font-medium">No bench employees found for the selected department(s).</p>
+                <p className="text-gray-500 font-medium">No upcoming bench employees found.</p>
             </div>
         );
     }
@@ -51,7 +81,7 @@ const BenchPool = ({ employees }) => {
                         <th className="py-3 px-2 text-left">Employee</th>
                         <th className="py-3 px-2 text-left">Role</th>
                         <th className="py-3 px-2 text-left">Skills</th>
-                        <th className="py-3 px-2 text-left">Bench Age</th>
+                        <th className="py-3 px-2 text-left">Bench Date</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -95,7 +125,7 @@ const BenchPool = ({ employees }) => {
                                 </td>
                                 <td className="py-3 px-2 text-sm">
                                     <span className="text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-md border border-orange-100">
-                                        Available Now
+                                        {emp.bench_date ? new Date(emp.bench_date).toLocaleDateString() : 'TBD'}
                                     </span>
                                 </td>
                             </tr>

@@ -98,7 +98,7 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
                                 </div>
                             </div>
 
-                            {/* Health (Mocked for view) */}
+                            {/* Health Indicator */}
                             <div className="flex flex-col gap-2 p-4 border border-gray-100 rounded-xl">
                                 <div className="flex items-center gap-2 text-emerald-500">
                                     <Activity size={16} />

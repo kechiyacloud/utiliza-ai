@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { X, Filter, ChevronDown, Check } from 'lucide-react';
+import { getEmployeeTag } from '../../components/EmployeeStatusTag';
+import { getFilterOptions } from '../../api/employeeApi';
 
 const Checkbox = ({ checked, onChange, label, count }) => (
     <label className="flex items-center gap-3 cursor-pointer group py-1.5 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition-colors">
@@ -102,62 +104,59 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
     // Dynamic Master Skills Logic
     const [skillSearch, setSkillSearch] = useState("");
 
-    const availableSkills = useMemo(() => {
-        // Debugging logs
-        console.log("FilterOverlay Debug: Departments:", localFilters.departments);
-        console.log("FilterOverlay Debug: Skill Search Term:", skillSearch);
+    // API State for Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        departments: [],
+        locations: [],
+        skills: [],
+        employee_types: [],
+        status_tags: []
+    });
 
-        // 1. Filter employees by selected departments (if any)
-        const relevantEmployees = localFilters.departments.length > 0
-            ? employees.filter(emp => localFilters.departments.includes(emp.department))
-            : employees;
-
-        console.log("FilterOverlay Debug: Relevant Employees Count:", relevantEmployees.length);
-
-        // 2. Extract unique skills from relevant employees
-        const skillsSet = new Set();
-        relevantEmployees.forEach(emp => {
-            if (emp.skills && Array.isArray(emp.skills)) {
-                emp.skills.forEach(skill => skillsSet.add(skill));
+    // Fetch options on mount
+    useEffect(() => {
+        const fetchOptions = async () => {
+            const data = await getFilterOptions();
+            if (data) {
+                setFilterOptions({
+                    departments: data.departments || [],
+                    locations: data.locations || [],
+                    skills: data.skills || [],
+                    employee_types: data.employee_types || [],
+                    status_tags: data.status_tags || []
+                });
             }
-        });
+        };
+        fetchOptions();
+    }, []);
 
-        // 3. Convert to array and sort
-        let skills = Array.from(skillsSet).sort();
-        console.log("FilterOverlay Debug: All Skills Found:", skills);
+    const availableSkills = useMemo(() => {
+        let skills = filterOptions.skills || [];
 
-        // 4. Filter by search query
+        // Filter by search query
         if (skillSearch) {
             skills = skills.filter(skill => skill.toLowerCase().includes(skillSearch.toLowerCase()));
         }
-        console.log("FilterOverlay Debug: Filtered Skills:", skills);
-
         return skills;
-    }, [employees, localFilters.departments, skillSearch]);
+    }, [filterOptions.skills, skillSearch]);
 
     const toggleSection = (section) => {
         setActiveSection(prev => prev === section ? '' : section);
     };
 
     // Helper: derive tag label — must be defined before the useMemos that call it
-    const getTagLabel = (status, billable) => {
-        const s = (status || '').toLowerCase();
-        const b = (billable || '').toLowerCase();
-        if (s === 'notice period') return 'Serving Notice';
-        if (s === 'bench' && b === 'billable') return 'Shadow Billing';
-        if (s === 'bench') return 'Bench';
-        if (s === 'allocated' && b === 'non-billable') return 'Non-Billable';
-        return 'Active Billable';
+    const getTagLabel = (status) => {
+        return getEmployeeTag(status).label;
     };
 
     // Calculate Total Result Count for Apply button — useMemo for instant update
     const headerCount = useMemo(() => {
         return employees.filter(emp => {
             const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
-            const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employeeType);
+            const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
             const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
             const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
-            const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status, emp.billable));
+            const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
             return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag;
         }).length;
     }, [localFilters, employees]);
@@ -167,7 +166,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         const getCountsFor = (field, isArray = false) => {
             return employees.filter(emp => {
                 const matchesDept = field === 'department' || !localFilters.departments.length || localFilters.departments.includes(emp.department);
-                const matchesType = field === 'employeeType' || !localFilters.types.length || localFilters.types.includes(emp.employeeType);
+                const matchesType = field === 'employee_type' || !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = field === 'location' || !localFilters.locations.length || localFilters.locations.includes(emp.location);
                 const matchesSkills = field === 'skills' || !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
 
@@ -185,18 +184,18 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 
         return {
             departments: getCountsFor('department'),
-            types: getCountsFor('employeeType'),
+            types: getCountsFor('employee_type'),
             locations: getCountsFor('location'),
             skills: getCountsFor('skills', true),
             statusTags: employees.filter(emp => {
                 // Cross-filter: respect all OTHER active filters except statusTags itself
                 const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
-                const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employeeType);
+                const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
                 const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
                 return matchesDept && matchesType && matchesLocation && matchesSkills;
             }).reduce((acc, emp) => {
-                const label = getTagLabel(emp.employee_status, emp.billable);
+                const label = getTagLabel(emp.employee_status);
                 acc[label] = (acc[label] || 0) + 1;
                 return acc;
             }, {})
@@ -258,28 +257,11 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         setSkillSearch("");
     };
 
-    // Filter Lists
-    const DEPARTMENT_LIST = [
-        'Software Engineering', 'Data Engineering', 'Quality Engineering',
-        'Cloud Solutions Engineering', 'System Operations', 'Product Engineering',
-        'Security Engineering', 'US Staffing', 'Business Development',
-        'Training & Development', 'HR', 'Finance', 'PMO', 'Management', 'SRE'
-    ];
-
-    const EMPLOYEE_TYPES = ['Full Time', 'Contract', 'Intern', 'Consultant'];
-
-    const LOCATIONS = [
-        'USA', 'Coimbatore', 'Canada', 'Malaysia', 'Chennai'
-    ];
-
-    const STATUS_TAGS = [
-        'Active Billable',
-        'Non-Billable',
-        'Bench',
-        'Shadow Billing',
-        'Serving Notice'
-    ];
-
+    // Filter Lists (from API state)
+    const DEPARTMENT_LIST = filterOptions.departments;
+    const EMPLOYEE_TYPES = filterOptions.employee_types;
+    const LOCATIONS = filterOptions.locations;
+    const STATUS_TAGS = filterOptions.status_tags;
 
     if (!isOpen) return null;
 

@@ -7,10 +7,10 @@ const ResourceForecastChart = ({ data }) => {
     return (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-800">Resource Forecast (Total vs. Allocated)</h3>
-                <div className="flex gap-4 text-xs font-medium text-gray-500">
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-400"></span>Allocated</div>
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-gray-400"></span>Total Employees</div>
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">Resource Forecast</h3>
+                <div className="flex gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>Allocated</div>
+                    <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>Total Employees</div>
                 </div>
             </div>
 
@@ -21,25 +21,25 @@ const ResourceForecastChart = ({ data }) => {
                         margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
                         barGap={8}
                     >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis
                             dataKey="month"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#9CA3AF', fontSize: 12 }}
+                            tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }}
                             dy={10}
                         />
                         <YAxis
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#9CA3AF', fontSize: 12 }}
+                            tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }}
                         />
                         <Tooltip
-                            cursor={{ fill: 'transparent' }}
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            cursor={{ fill: '#f1f5f9', opacity: 0.8 }}
+                            contentStyle={{ borderRadius: '12px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 600, fontSize: '13px' }}
                         />
-                        <Bar dataKey="allocated" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={32} />
-                        <Bar dataKey="totalEmployees" fill="#9CA3AF" radius={[4, 4, 0, 0]} barSize={32} />
+                        <Bar dataKey="allocated" name="Allocated Employees" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={32} />
+                        <Bar dataKey="totalEmployees" name="Total Employees" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={32} />
                     </BarChart>
                 </ResponsiveContainer>
             </div>

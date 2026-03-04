@@ -9,7 +9,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
         </div>
     );
 
-    // Mock Data for Charts (Derived from client props or static for demo)
+    // Data for Charts (Derived from client props or static for demo)
     const resourceDistData = [
         { name: 'Engineering', value: 65, color: '#3BA9FB' },
         { name: 'Product', value: 20, color: '#A855F7' },

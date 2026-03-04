@@ -74,11 +74,13 @@ def get_all_employees():
                 m.department, 
                 m.location, 
                 m.photo_url,
+                COALESCE(m.employee_type, 'Full Time') as employee_type,
                 CASE 
                     WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                    WHEN ap.priority_rank = 3 THEN 'Allocated'
-                    WHEN ap.priority_rank = 2 THEN 'Allocated'
-                    WHEN ap.priority_rank = 1 THEN 'Bench'
+                    WHEN COALESCE(p.employee_allocations, 0) <= 0 THEN 'Bench'
+                    WHEN COALESCE(p.employee_allocations, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+                    WHEN COALESCE(p.employee_allocations, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+                    WHEN COALESCE(p.employee_allocations, 0) >= 81 THEN 'Allocated'
                     ELSE p.employee_status 
                 END as employee_status, 
                 CASE 
@@ -101,6 +103,7 @@ def get_all_employees():
                 m.department, 
                 m.location, 
                 m.photo_url, 
+                m.employee_type,
                 p.employee_status, 
                 ap.priority_rank,
                 p.employee_allocations
@@ -120,6 +123,47 @@ def get_all_employees():
         print(f"Database error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
         
+    finally:
+        cur.close()
+        conn.close()
+
+@router.get("/employees/upcoming-bench")
+def get_upcoming_bench():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        query = """
+            SELECT 
+                m.employee_id, 
+                m.employee_name, 
+                m.role_designation, 
+                m.photo_url,
+                MIN(pa.allocation_end_date) as bench_date,
+                ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
+            FROM employee_master m
+            JOIN projects_allocation pa ON m.employee_id = pa.employee_id
+            LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
+            LEFT JOIN skills s ON es.skill_id = s.skill_id
+            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
+            GROUP BY 
+                m.employee_id, 
+                m.employee_name, 
+                m.role_designation, 
+                m.photo_url
+            ORDER BY bench_date ASC
+        """
+        cur.execute(query)
+        columns = [desc[0] for desc in cur.description]
+        results = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        for row in results:
+             if row.get('skills') is None:
+                  row['skills'] = []
+                  
+        return results
+    except Exception as e:
+        print(f"Error fetching upcoming bench: {e}")
+        return []
     finally:
         cur.close()
         conn.close()
@@ -253,6 +297,43 @@ def fetch_action_inbox():
         
     return tasks
 
+@router.get("/employees/filter-options")
+def get_employee_filter_options():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT DISTINCT department FROM employee_master WHERE department IS NOT NULL AND department != ''")
+        departments = [row[0] for row in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT location FROM employee_master WHERE location IS NOT NULL AND location != ''")
+        locations = [row[0] for row in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT skill_name FROM skills WHERE skill_name IS NOT NULL AND skill_name != ''")
+        skills = [row[0] for row in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT employee_type FROM employee_master WHERE employee_type IS NOT NULL AND employee_type != ''")
+        employee_types = [row[0] for row in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT employee_status FROM employee_master_pro WHERE employee_status IS NOT NULL AND employee_status != ''")
+        status_tags = [row[0] for row in cur.fetchall()]
+
+        # Ensure known statuses like 'Allocated' exist if empty
+        if not status_tags:
+            status_tags = ['Allocated', 'Bench', 'Partially allocated', 'Notice period', 'Partially bench']
+
+        return {
+            "departments": sorted(departments),
+            "locations": sorted(locations),
+            "employee_types": sorted(employee_types),
+            "skills": sorted(skills),
+            "status_tags": sorted(status_tags)
+        }
+    except Exception as e:
+        print(f"Error fetching filter options: {e}")
+        return {"error": str(e), "departments": [], "locations": [], "employee_types": [], "skills": [], "status_tags": []}
+    finally:
+        cur.close()
+        conn.close()
 
 @router.get("/employees/{employee_id}")
 def get_employee_by_id(employee_id: str):
@@ -290,9 +371,10 @@ def get_employee_by_id(employee_id: str):
             m.mode_of_work,
             CASE 
                 WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                WHEN ap.priority_rank = 3 THEN 'Allocated'
-                WHEN ap.priority_rank = 2 THEN 'Allocated'
-                WHEN ap.priority_rank = 1 THEN 'Bench'
+                WHEN COALESCE(p.employee_allocations, 0) <= 0 THEN 'Bench'
+                WHEN COALESCE(p.employee_allocations, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+                WHEN COALESCE(p.employee_allocations, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+                WHEN COALESCE(p.employee_allocations, 0) >= 81 THEN 'Allocated'
                 ELSE p.employee_status 
             END as employee_status,
             CASE 
@@ -360,7 +442,9 @@ def get_employee_by_id(employee_id: str):
             pa.role_in_project,
             pa.allocation_percentage,
             pa.allocation_start_date,
-            pa.allocation_end_date
+            pa.allocation_end_date,
+            p.project_status,
+            pa.project_tags
         FROM projects_allocation pa
         JOIN projects p 
         ON pa.project_id = p.project_id
@@ -375,7 +459,9 @@ def get_employee_by_id(employee_id: str):
                 "role": row[1],
                 "allocation_percentage": row[2],
                 "start_date": row[3],
-                "end_date": row[4]
+                "end_date": row[4],
+                "status": row[5],
+                "billable": row[6]
             }
             for row in project_rows
         ]
