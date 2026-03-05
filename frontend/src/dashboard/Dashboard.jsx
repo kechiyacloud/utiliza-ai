@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Users as UsersIcon, DollarSign, Activity, AlertCircle,
-  ArrowRight, Download, BarChart2, PieChart as PieChartIcon,
-  Briefcase, AlertTriangle, CheckCircle2, ShieldAlert, Plus, UserPlus
+  TrendingUp, Users as UsersIcon, Briefcase, Activity,
+  AlertCircle, ChevronRight, BarChart2, DollarSign,
+  PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -15,7 +16,6 @@ import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 import HighAllocationProjects from './landing-dashboard/HighAllocationProjects';
 import TopPerformers from './landing-dashboard/TopPerformers';
-import ResourceAvailability from './landing-dashboard/ResourceAvailability';
 import AddProjectPanel from './projects/AddProjectPanel';
 import AddClientModal from './clients/AddClientModal';
 import EmployeeMonthCard from './landing-dashboard/EmployeeMonthCard';
@@ -42,6 +42,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Interaction States
   const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
@@ -115,10 +116,10 @@ function Dashboard() {
   const _metrics = data?.executiveMetrics || {};
 
   const dynamicKpiData = [
-    { title: "Company Utilization", value: `${_metrics.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100" },
-    { title: "Billable Headcount", value: _metrics.billable_headcount || 0, subtext: `out of ${_metrics.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100" },
-    { title: "Bench Headcount", value: _metrics.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100" },
-    { title: "Upcoming Bench (30d)", value: _metrics.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100" }
+    { title: "Company Utilization", value: `${_metrics.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
+    { title: "Billable Headcount", value: _metrics.billable_headcount || 0, subtext: `out of ${_metrics.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true } },
+    { title: "Bench Headcount", value: _metrics.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true } },
+    { title: "Upcoming Bench (30d)", value: _metrics.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true } }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -175,30 +176,43 @@ function Dashboard() {
           {/* Executive KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 mt-4">
             {dynamicKpiData.map((kpi, idx) => (
-              <div key={idx} className={`bg-white border text-slate-800 ${kpi.border} p-5 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-sm`}>
+              <div
+                key={idx}
+                onClick={() => {
+                  if (kpi.route) {
+                    navigate(kpi.route, { state: kpi.state, hash: kpi.hash || '' });
+                  }
+                }}
+                className={`bg-white border text-slate-800 ${kpi.border} p-4 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-sm cursor-pointer flex flex-col items-start min-w-[150px] h-full flex-1`}
+              >
                 <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${kpi.bg}`}></div>
-                <div className="flex justify-between items-start mb-4 relative z-10">
-                  <div className={`p-2.5 rounded-xl ${kpi.bg} ${kpi.color}`}>
-                    <kpi.icon size={22} strokeWidth={2.5} />
+                <div className="flex w-full items-start justify-between z-10 mb-3">
+                  <div className={`p-2 rounded-xl transition-colors ${kpi.bg} ${kpi.color}`}>
+                    <kpi.icon size={20} strokeWidth={2.5} />
                   </div>
                 </div>
-                <div className="relative z-10">
-                  <h3 className="text-slate-500 text-sm font-semibold tracking-wide uppercase mb-1">{kpi.title}</h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-slate-900 tracking-tight">{kpi.value}</span>
-                  </div>
-                  <p className={`text-xs mt-2 font-medium text-slate-500`}>
-                    {kpi.subtext}
-                  </p>
+                <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
+                  <h3 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">{kpi.value}</h3>
+                  <p className="text-slate-500 text-[10px] font-bold tracking-wider uppercase mb-1">{kpi.title}</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{kpi.subtext}</p>
                 </div>
               </div>
             ))}
           </div>
 
+          {/* Moved Top Cards Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 w-full" id="dashboard-cards">
+            <ExecutiveDashboardCards data={data?.executiveCards} />
+            <EmployeeMonthCard />
+          </div>
+
           {/* Executive Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Demand vs Capacity (Span 2) */}
-            <div className="lg:col-span-2 bg-white border border-gray-100 p-6 rounded-2xl shadow-sm flex flex-col">
+            <div
+              className="lg:col-span-2 bg-white border border-gray-100 p-6 rounded-2xl shadow-sm flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
+            >
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -265,7 +279,10 @@ function Dashboard() {
           {/* Executive Bottom Section */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* Allocation Distribution */}
-            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm">
+            <div
+              className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-slate-300 transition-colors"
+              onClick={() => navigate('/info/employees/list', { state: { showBack: true } })}
+            >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <PieChartIcon size={18} className="text-indigo-500" />
                 Workforce Allocation
@@ -306,7 +323,10 @@ function Dashboard() {
             </div>
 
             {/* Top Skills on Bench */}
-            <div className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm">
+            <div
+              className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-slate-300 transition-colors"
+              onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true } })}
+            >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   <UsersIcon size={18} className="text-emerald-500" />
@@ -341,12 +361,12 @@ function Dashboard() {
               <div className="space-y-4 flex-1">
                 {dynamicProjectsAtRisk.map((project, idx) => (
                   <div key={idx} className="bg-slate-50 border border-gray-100 p-3.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer group">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
+                    <div className="flex justify-between items-start mb-2 gap-2">
+                      <div className="flex-1 min-w-0">
                         <h4 className="text-slate-800 text-sm font-bold truncate group-hover:text-blue-600 transition-colors">{project.name}</h4>
-                        <p className="text-[11px] text-slate-500 font-medium">{project.client}</p>
+                        <p className="text-[11px] text-slate-500 font-medium truncate">{project.client}</p>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${project.risk === 'High' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                      <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap ${project.risk === 'High' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
                         {project.risk} Risk
                       </span>
                     </div>
@@ -361,7 +381,10 @@ function Dashboard() {
                   </div>
                 ))}
               </div>
-              <button className="w-full mt-4 text-xs font-bold text-blue-600 hover:text-blue-500 flex items-center justify-center gap-1 transition-colors">
+              <button
+                onClick={() => navigate('/info/projects', { state: { showBack: true } })}
+                className="w-full mt-4 text-xs font-bold text-blue-600 hover:text-blue-500 flex items-center justify-center gap-1 transition-colors"
+              >
                 View All Delivery Risks <ArrowRight size={14} />
               </button>
             </div>
@@ -371,29 +394,15 @@ function Dashboard() {
         {/* --- OPERATIONAL SECTION --- */}
         <div className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-bottom-4 duration-500 text-slate-800">
 
-          {/* Top Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 w-full" id="dashboard-cards">
-            <ExecutiveDashboardCards data={data?.executiveCards} />
-            <EmployeeMonthCard />
-          </div>
-
+          {/* Side by side row for High Allocation & Top Performers */}
           <div className="flex flex-col lg:flex-row gap-6 w-full mt-2">
-            <div className="w-full lg:w-2/3 min-w-0">
-              <ResourceForecastChart data={data?.resourceForecast} />
-            </div>
-            <div className="w-full lg:w-1/3" id="dashboard-high-allocation">
+            <div className="w-full lg:w-1/2 min-w-0" id="dashboard-high-allocation">
               <HighAllocationProjects projects={data?.highAllocationProjects} />
             </div>
-          </div>
 
-          {/* Top Performers Row */}
-          <div className="w-full" id="dashboard-top-performers">
-            <TopPerformers employees={data?.topPerformers} />
-          </div>
-
-          {/* Availability Row */}
-          <div className="w-full" id="dashboard-resource-availability">
-            <ResourceAvailability availability={data?.resourceAvailability} />
+            <div className="w-full lg:w-1/2 min-w-0" id="dashboard-top-performers">
+              <TopPerformers employees={data?.topPerformers} />
+            </div>
           </div>
         </div>
 

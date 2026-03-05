@@ -1,11 +1,16 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 
 const ResourceForecastChart = ({ data }) => {
+    const navigate = useNavigate();
     if (!data) return null;
 
     return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full h-full flex flex-col">
+        <div
+            onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
+            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full h-full flex flex-col cursor-pointer hover:border-slate-300 transition-colors group"
+        >
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">Resource Forecast</h3>
                 <div className="flex gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest">

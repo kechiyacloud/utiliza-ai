@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AddProjectPanel from './AddProjectPanel';
 
 const StatCard = ({ label, value, icon: Icon, colorClass, onClick, active }) => {
@@ -22,6 +22,7 @@ const StatCard = ({ label, value, icon: Icon, colorClass, onClick, active }) => 
 
 const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
 
     if (!stats) return null;
@@ -35,13 +36,15 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
         <div className="w-full flex flex-col gap-6 mb-8">
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-                        title="Go Back"
-                    >
-                        <ArrowLeft size={20} className="text-gray-600" />
-                    </button>
+                    {location.state?.showBack && (
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                            title="Go Back"
+                        >
+                            <ArrowLeft size={20} className="text-gray-600" />
+                        </button>
+                    )}
                     <div>
                         <h1 className="text-2xl font-bold text-gray-800">Projects Overview</h1>
                         <p className="text-gray-500">Manage and monitor all active and upcoming projects.</p>

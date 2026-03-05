@@ -48,8 +48,8 @@ export const fetchDashboardData = async () => {
             topPerformers: performers.map((p) => ({
                 id: p.employee_id,
                 name: p.employee_name,
-                role: `${p.project_count} Projects`, // Use role mapping if available, currently putting project count
-                allocation: 100, // Top performers are usually 100%
+                role: p.role || "Employee",
+                allocation: p.allocation || 0,
                 avatar: p.employee_name ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('') : "U"
             })),
             resourceAvailability: availability.map((a, idx) => ({

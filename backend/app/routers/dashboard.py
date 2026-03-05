@@ -14,8 +14,13 @@ def dashboard_infocards():
         cur.execute("SELECT COUNT(*) FROM employee_master")
         total_employees = cur.fetchone()[0]
 
-        # ---- Total Clients ----
-        total_clients = 0
+        # ---- Total Clients (Count of billable projects for now) ----
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM projects
+            WHERE LOWER(billable) LIKE '%billable%' AND LOWER(billable) NOT LIKE '%non%' OR LOWER(billable) = 'yes'
+        """)
+        total_clients = cur.fetchone()[0]
 
         # ---- Running Projects (case safe) ----
         cur.execute("""
@@ -27,9 +32,12 @@ def dashboard_infocards():
 
         # ---- Bench Employees 
         cur.execute("""
-            SELECT COUNT(*)
-            FROM employee_master_pro p
-            WHERE p.employee_status = 'Bench'
+            SELECT COUNT(DISTINCT m.employee_id) 
+            FROM employee_master m
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE (p.employee_status NOT ILIKE '%notice%' OR p.employee_status IS NULL)
+            AND m.date_of_resign IS NULL
+            AND COALESCE(p.employee_allocations, 0) <= 0
         """)
         bench_employees = cur.fetchone()[0]
 
@@ -72,7 +80,9 @@ def allocation_3m():
             FROM months m
             LEFT JOIN projects_allocation pa
               ON pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
-             AND pa.allocation_end_date >= m.month_start
+             AND (pa.allocation_end_date >= m.month_start OR pa.allocation_end_date IS NULL)
+            LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
+            WHERE (e.date_of_resign IS NULL OR e.date_of_resign IS NOT NULL)  -- We want allocations unless they are resigned before month start? Actually, just exclude them.
             GROUP BY m.month_start
             ORDER BY m.month_start
         """)
@@ -101,6 +111,9 @@ def high_allocation_projects():
             FROM projects p
             JOIN projects_allocation pa
               ON p.project_id = pa.project_id
+            JOIN employee_master e ON pa.employee_id = e.employee_id
+            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            AND e.date_of_resign IS NULL
             GROUP BY p.project_name
             ORDER BY resource_count DESC
             LIMIT 5
@@ -127,12 +140,14 @@ def top_performers():
         cur.execute("""
             SELECT e.employee_id,
                    e.employee_name,
-                   COUNT(pa.project_id) AS project_count
+                   e.role_designation AS role,
+                   COALESCE(p.employee_allocations, 0) AS allocation
             FROM employee_master e
-            JOIN projects_allocation pa
-              ON e.employee_id = pa.employee_id
-            GROUP BY e.employee_id, e.employee_name
-            ORDER BY project_count DESC
+            LEFT JOIN employee_master_pro p
+              ON e.employee_id = p.employee_id
+            WHERE e.date_of_resign IS NULL 
+            AND COALESCE(p.employee_allocations, 0) > 0
+            ORDER BY p.employee_allocations DESC NULLS LAST
             LIMIT 5
         """)
 
@@ -142,7 +157,8 @@ def top_performers():
             {
                 "employee_id": r[0],
                 "employee_name": r[1],
-                "project_count": r[2]
+                "role": r[2],
+                "allocation": r[3]
             }
             for r in rows
         ]
@@ -264,27 +280,58 @@ def dashboard_executive_metrics():
         cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NOT NULL")
         notice_period = cur.fetchone()[0]
 
-        cur.execute("SELECT COUNT(DISTINCT employee_id) FROM projects_allocation WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE")
+        cur.execute("""
+            SELECT COUNT(DISTINCT pa.employee_id) 
+            FROM projects_allocation pa
+            JOIN employee_master m ON pa.employee_id = m.employee_id
+            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            AND LOWER(pa.project_tags) = 'billable'
+            AND m.date_of_resign IS NULL
+        """)
         billable_headcount = cur.fetchone()[0]
 
-        cur.execute("SELECT COUNT(*) FROM employee_master_pro WHERE employee_status = 'Bench'")
+        cur.execute("""
+            SELECT COUNT(DISTINCT m.employee_id) 
+            FROM employee_master m
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE (p.employee_status NOT ILIKE '%notice%' OR p.employee_status IS NULL)
+            AND m.date_of_resign IS NULL
+            AND COALESCE(p.employee_allocations, 0) <= 0
+        """)
         bench_headcount = cur.fetchone()[0]
 
         internal_headcount = max(0, total_employees - billable_headcount - bench_headcount - notice_period)
 
-        cur.execute("SELECT SUM(allocation_percentage) FROM projects_allocation WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE")
-        total_allocations = cur.fetchone()[0] or 0
-        company_utilization = round((total_allocations / (total_employees * 100)) * 100) if total_employees else 0
+        cur.execute("""
+            SELECT COALESCE(SUM(pa.allocation_percentage), 0)
+            FROM projects_allocation pa
+            JOIN employee_master m ON pa.employee_id = m.employee_id
+            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            AND m.date_of_resign IS NULL
+        """)
+        total_allocations = cur.fetchone()[0]
+        
+        active_headcount = max(1, total_employees - notice_period) # Avoid division by zero
+        company_utilization = round((total_allocations / (active_headcount * 100)) * 100)
 
-        cur.execute("SELECT COUNT(DISTINCT employee_id) FROM projects_allocation WHERE allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')")
+        cur.execute("""
+            SELECT COUNT(DISTINCT pa.employee_id) 
+            FROM projects_allocation pa
+            JOIN employee_master m ON pa.employee_id = m.employee_id
+            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
+            AND m.date_of_resign IS NULL
+        """)
         upcoming_bench = cur.fetchone()[0]
 
         cur.execute("""
             SELECT s.skill_name, count(es.employee_id) as c
             FROM employee_skills es
             JOIN skills s ON s.skill_id = es.skill_id
-            JOIN employee_master_pro emp ON emp.employee_id = es.employee_id
-            WHERE emp.employee_status = 'Bench'
+            LEFT JOIN employee_master_pro emp ON emp.employee_id = es.employee_id
+            LEFT JOIN employee_master m ON m.employee_id = es.employee_id
+            WHERE (emp.employee_status NOT ILIKE '%notice%' OR emp.employee_status IS NULL)
+            AND m.date_of_resign IS NULL
+            AND COALESCE(emp.employee_allocations, 0) <= 0
             GROUP BY s.skill_name ORDER BY c DESC LIMIT 5
         """)
         bench_skills = [{"name": r[0], "count": r[1]} for r in cur.fetchall()]
@@ -303,7 +350,7 @@ def dashboard_executive_metrics():
             FROM months m
             LEFT JOIN projects_allocation pa
               ON pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
-             AND pa.allocation_end_date >= m.month_start
+             AND (pa.allocation_end_date >= m.month_start OR pa.allocation_end_date IS NULL)
             GROUP BY m.month_start
             ORDER BY m.month_start
         """)

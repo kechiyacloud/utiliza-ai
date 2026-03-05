@@ -10,12 +10,15 @@ const HighAllocationProjects = ({ projects }) => {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-1 min-w-[300px] flex flex-col h-full">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">High Allocation Projects</h3>
-                <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                    <MoreHorizontal size={20} />
+                <button
+                    onClick={() => navigate('/info/projects', { state: { showBack: true } })}
+                    className="text-blue-500 text-xs font-bold hover:text-blue-700 uppercase tracking-widest transition-colors"
+                >
+                    View All
                 </button>
             </div>
 
-            <div className="overflow-x-auto flex-1">
+            <div className="overflow-x-auto overflow-y-auto custom-scrollbar max-h-[300px] flex-1">
                 <table className="w-full">
                     <thead>
                         <tr className="text-[10px] font-bold tracking-widest text-slate-400 border-b border-gray-100 uppercase">
@@ -29,7 +32,7 @@ const HighAllocationProjects = ({ projects }) => {
                                 key={project.id}
                                 onClick={() => {
                                     sessionStorage.setItem('returnToHighAllocation', 'true');
-                                    navigate('/info/projects');
+                                    navigate('/info/projects', { state: { showBack: true } });
                                 }}
                                 className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
                             >

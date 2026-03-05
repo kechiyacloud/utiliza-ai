@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Users, BriefcaseBusiness, Hourglass, UserPlus, Search, Filter, Trophy, Award, TrendingUp, X } from 'lucide-react'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -52,7 +52,8 @@ function Employee() {
     statusTags: []
   });
   const [searchQuery, setSearchQuery] = useState("");
-  const [cardFilter, setCardFilter] = useState(null); // For quick filters from cards
+  const location = useLocation();
+  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null); // For quick filters from cards
   const [activeDrawer, setActiveDrawer] = useState(null); // 'skills' | 'trend' | null
 
   useEffect(() => {
