@@ -52,9 +52,13 @@ export default function EmployeeMasterList() {
                 // Apply cardFilter if present in navigation state
                 const cardFilter = location.state?.cardFilter;
                 if (cardFilter === 'bench') {
-                    const filtered = sorted.filter(emp => emp.employee_status === 'Bench');
+                    const filtered = sorted.filter(emp => emp.employee_status === 'Bench' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
                     setEmployees(filtered);
                     setFilterLabel(" (Bench Only)");
+                } else if (cardFilter === 'billable') {
+                    const filtered = sorted.filter(emp => emp.billable === 'billable' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
+                    setEmployees(filtered);
+                    setFilterLabel(" (Billable Only)");
                 } else {
                     setEmployees(sorted);
                     setFilterLabel("");
@@ -86,12 +90,15 @@ export default function EmployeeMasterList() {
             {/* Header */}
             <div className="flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                        <ArrowLeft size={20} className="text-gray-600" />
-                    </button>
+                    {location.state?.showBack && (
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                            title="Go Back"
+                        >
+                            <ArrowLeft size={20} className="text-gray-600" />
+                        </button>
+                    )}
                     <div>
                         <h1 className="text-2xl font-bold text-gray-800">
                             Employee Master List{filterLabel}

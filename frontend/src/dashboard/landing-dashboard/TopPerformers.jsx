@@ -10,7 +10,12 @@ const TopPerformers = ({ employees }) => {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Top Performers</h3>
-                <button className="text-blue-500 text-xs font-bold hover:text-blue-700 uppercase tracking-widest transition-colors">View All</button>
+                <button
+                    onClick={() => navigate('/info/employees/list', { state: { showBack: true } })}
+                    className="text-blue-500 text-xs font-bold hover:text-blue-700 uppercase tracking-widest transition-colors"
+                >
+                    View All
+                </button>
             </div>
 
             <div className="overflow-x-auto overflow-y-auto custom-scrollbar max-h-[300px] flex-1">

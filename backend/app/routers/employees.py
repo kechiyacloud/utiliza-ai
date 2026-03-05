@@ -145,6 +145,7 @@ def get_upcoming_bench():
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
+            AND m.date_of_resign IS NULL
             GROUP BY 
                 m.employee_id, 
                 m.employee_name, 

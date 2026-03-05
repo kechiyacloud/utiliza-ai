@@ -167,7 +167,7 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
                 <div className="flex items-center gap-4">
                     {filters?.cardFilter === 'bench' && (
                         <button
-                            onClick={() => navigate('/info/allocation#forecast-bench')}
+                            onClick={() => navigate('/info/allocation', { state: { showForecastOnly: true, showBack: true } })}
                             className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center gap-2"
                         >
                             View Upcoming Bench
