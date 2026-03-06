@@ -15,7 +15,7 @@ const PossibleProjectMatches = ({ employee, projects, loading, onClose }) => {
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-1 min-h-[450px] max-h-[600px] flex flex-col">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-1 h-[500px] flex flex-col">
             {/* Header with close button */}
             <div className="flex justify-between items-center mb-5 shrink-0">
                 <div>

@@ -81,7 +81,12 @@ const ProjectEmployeeAllocation = ({ project, onClose }) => {
                                         <td className="py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs uppercase group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                                                    {emp.employee_name.split(' ').map(n => n[0]).join('')}
+                                                    {(() => {
+                                                        const names = emp.employee_name.split(' ').filter(Boolean);
+                                                        if (names.length === 0) return '';
+                                                        if (names.length === 1) return names[0][0];
+                                                        return names[0][0] + names[names.length - 1][0];
+                                                    })()}
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors">{emp.employee_name}</span>
