@@ -27,11 +27,11 @@ def allocation_metrics():
         """)
         billable_count = cur.fetchone()[0]
 
-        # 3. Non-Billable Count — distinct employees tagged 'Allocated - NonBillable'
+        # 3. Non-Billable Count — distinct employees tagged 'Allocated - Non-Billable'
         cur.execute("""
             SELECT COUNT(DISTINCT employee_id)
             FROM projects_allocation
-            WHERE LOWER(project_tags) = 'nonbillable'
+            WHERE LOWER(project_tags) = 'non-billable'
         """)
         non_billable_count = cur.fetchone()[0]
 
@@ -43,9 +43,9 @@ def allocation_metrics():
         """)
         bench_strength = cur.fetchone()[0]
 
-        # 5. Avg Utilization 
+        # 5. Avg Utilization (Total Allocation % / Total Resources)
         cur.execute("""
-            SELECT COALESCE(AVG(allocation_percentage), 0)
+            SELECT COALESCE(SUM(allocation_percentage), 0) / (SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE COUNT(*) END FROM employee_master)
             FROM projects_allocation
         """)
         avg_utilization = round(float(cur.fetchone()[0]), 2)

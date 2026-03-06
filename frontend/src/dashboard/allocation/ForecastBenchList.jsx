@@ -12,7 +12,7 @@ const ForecastBenchList = ({ employees, onEmployeeClick }) => {
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full min-h-[450px] max-h-[450px] flex flex-col">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full h-[500px] flex flex-col">
             <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                     <h3 className="text-lg font-bold text-gray-800">Forecast Bench</h3>
