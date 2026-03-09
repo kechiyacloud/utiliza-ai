@@ -39,15 +39,17 @@ const ProjectList = ({ projects, activeCardFilter }) => {
         endDate: ''
     });
 
-    if (!projects) return null;
+    if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = projects.filter(project => {
+        if (!project || !project.name) return false; // Safety guard
+
         // Search Bar logic (Quick search)
-        const matchesSearchTerm = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            project.client.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         // Panel Filter logic
-        const matchesNameFilter = filters.name ? project.name.toLowerCase().includes(filters.name.toLowerCase()) : true;
+        const matchesNameFilter = filters.name ? (project.name || '').toLowerCase().includes(filters.name.toLowerCase()) : true;
         const matchesType = filters.type ? project.type === filters.type : true;
         const matchesStatus = filters.status ? project.status === filters.status : true;
         const matchesResources = filters.minResources ? project.resources >= parseInt(filters.minResources) : true;
@@ -59,7 +61,11 @@ const ProjectList = ({ projects, activeCardFilter }) => {
         if (activeCardFilter === 'Internal') matchesCardFilter = (project.type === 'Internal' || project.client === 'Internal');
         else if (activeCardFilter === 'Client') matchesCardFilter = project.type === 'Client';
         else if (activeCardFilter === 'Ongoing') matchesCardFilter = (project.status && (project.status === 'Active' || project.status === 'In Progress' || project.status === 'Running' || project.status === 'Live'));
-        else if (activeCardFilter === 'POC') matchesCardFilter = project.name.toLowerCase().includes('poc');
+        else if (activeCardFilter === 'POC') matchesCardFilter = (project.name || '').toLowerCase().includes('poc');
+
+        // Global filter: Remove Ended projects by default
+        const s = (project.status || "").toLowerCase();
+        if (s.includes('end')) return false;
 
         return matchesSearchTerm && matchesNameFilter && matchesType && matchesStatus && matchesResources && matchesCardFilter;
     });
@@ -86,7 +92,7 @@ const ProjectList = ({ projects, activeCardFilter }) => {
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full relative">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-800">All Projects <span className="text-gray-400 font-normal">({projects.length})</span></h3>
+                <h3 className="text-lg font-bold text-gray-800">All Projects <span className="text-gray-400 font-normal">({filteredProjects.length})</span></h3>
 
                 <div className="flex gap-3 relative">
                     <div className="relative">
@@ -115,9 +121,9 @@ const ProjectList = ({ projects, activeCardFilter }) => {
                     <thead>
                         <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                             <th className="text-left py-4 pl-4">Project Name</th>
-                            <th className="text-left py-4">Client Name</th>
+                            <th className="text-left py-4">Project Type</th>
                             <th className="text-left py-4">End Date</th>
-                            <th className="text-left py-4">Type</th>
+                            <th className="text-center py-4">Resources</th>
                             <th className="text-center py-4">Status</th>
                             <th className="w-10"></th>
                         </tr>
@@ -132,17 +138,21 @@ const ProjectList = ({ projects, activeCardFilter }) => {
                                         </div>
                                         <div>
                                             <div className="font-bold text-gray-800">{project.name}</div>
-                                            {/* Removed health check as requested */}
-                                            <div className="text-xs text-gray-500 mt-0.5">{project.resources} resources</div>
+                                            <div className="text-[10px] text-gray-400 font-mono">{project.id}</div>
                                         </div>
                                     </div>
                                 </td>
-                                <td className="py-4 text-gray-600 font-medium">{project.client}</td>
-                                <td className="py-4 text-gray-500 text-sm font-mono">{project.endDate}</td>
-                                <td className="py-4">
-                                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold border border-gray-200">
+                                <td className="py-4 text-gray-600 font-medium">
+                                    <span className={`px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold border border-gray-200`}>
                                         {project.type}
                                     </span>
+                                </td>
+                                <td className="py-4 text-gray-500 text-sm font-mono">{project.endDate}</td>
+                                <td className="py-4 text-center">
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-sm font-extrabold text-blue-600">{project.resources}</span>
+                                        <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
+                                    </div>
                                 </td>
                                 <td className="py-4 text-center">
                                     <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${project.statusPillColor}`}>

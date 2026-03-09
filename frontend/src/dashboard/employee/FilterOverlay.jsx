@@ -1,46 +1,41 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Filter, ChevronDown, Check } from 'lucide-react';
+import { X, Filter, ChevronDown, Check, Users, Briefcase, Hourglass, TrendingUp, AlertCircle, DollarSign } from 'lucide-react';
 import { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { getFilterOptions } from '../../api/employeeApi';
 
 const Checkbox = ({ checked, onChange, label, count }) => (
-    <label className="flex items-center gap-3 cursor-pointer group py-1.5 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition-colors">
-        <div
-            className={`w-4 h-4 rounded border flex items-center justify-center transition-all 
-            ${checked ? 'bg-[#3BA9FB] border-[#3BA9FB]' : 'border-slate-300 group-hover:border-slate-400'}`}
-        >
-            {checked && <Check size={10} className="text-white" />}
+    <label className={`flex items-center gap-3 cursor-pointer group border-b border-slate-50 last:border-0 transition-colors ${checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
+        <div className="pl-3 flex items-center">
+            <div
+                className={`w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0
+                ${checked ? 'bg-[#3BA9FB] border-[#3BA9FB]' : 'border-slate-300 group-hover:border-slate-400'}`}
+            >
+                {checked && <Check size={10} className="text-white" />}
+            </div>
         </div>
-        <span className={`text-sm flex-1 ${checked ? 'text-slate-800 font-semibold' : 'text-slate-600 group-hover:text-slate-800'}`}>
+        <span className={`text-[13px] flex-1 py-2.5 ${checked ? 'text-slate-800 font-semibold' : 'text-slate-600'}`}>
             {label}
         </span>
-        <span className="text-xs text-slate-400">({count || 0})</span>
-        {/* Hidden native checkbox for accessibility */}
+        <span className={`pr-4 text-xs font-bold tabular-nums ${checked ? 'text-blue-500' : 'text-slate-400'}`}>
+            {count || 0}
+        </span>
         <input type="checkbox" className="hidden" checked={checked || false} onChange={onChange} />
     </label>
 );
 
 const AccordionSection = ({
-    title,
-    sectionIds,
-    items,
-    categoryKey,
-    countMap,
-    searchProps,
-    activeSection,
-    toggleSection,
-    localFilters,
-    toggleFilter
+    title, sectionIds, items, categoryKey, countMap, searchProps,
+    activeSection, toggleSection, localFilters, toggleFilter
 }) => {
     const selectedCount = (localFilters[categoryKey] || []).length;
     return (
-        <div className="border-b border-slate-100 last:border-0 last:pb-24">
+        <div className="border-b border-slate-100 last:border-0">
             <button
                 onClick={() => toggleSection(sectionIds)}
-                className="w-full flex items-center justify-between py-4 text-slate-800 hover:text-[#3BA9FB] transition-colors group"
+                className="w-full flex items-center justify-between py-3 px-1 text-slate-800 hover:text-[#3BA9FB] transition-colors group"
             >
                 <span className="flex items-center gap-2">
-                    <span className="font-bold text-sm tracking-wide group-hover:translate-x-1 transition-transform">{title}</span>
+                    <span className="font-bold text-[11px] tracking-widest uppercase text-slate-500 group-hover:text-[#3BA9FB] transition-colors">{title}</span>
                     {selectedCount > 0 && (
                         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#3BA9FB] text-white text-[10px] font-bold">
                             {selectedCount}
@@ -48,15 +43,14 @@ const AccordionSection = ({
                     )}
                 </span>
                 <ChevronDown
-                    size={16}
+                    size={14}
                     className={`text-slate-400 transition-transform duration-200 ${activeSection === sectionIds ? 'rotate-180' : ''}`}
                 />
             </button>
 
-            <div className={`space-y-1 overflow-hidden transition-all duration-300 ${activeSection === sectionIds ? 'max-h-[500px] opacity-100 mb-4' : 'max-h-0 opacity-0'}`}>
-                {/* Search Input for Skills */}
+            <div className={`overflow-hidden transition-all duration-300 ${activeSection === sectionIds ? 'max-h-[500px] opacity-100 mb-3' : 'max-h-0 opacity-0'}`}>
                 {searchProps && (
-                    <div className="mb-3 px-1">
+                    <div className="mb-2 px-1">
                         <input
                             type="text"
                             value={searchProps.value}
@@ -67,8 +61,7 @@ const AccordionSection = ({
                         />
                     </div>
                 )}
-
-                <div className="max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                <div className="rounded-lg border border-slate-100 overflow-hidden max-h-[220px] overflow-y-auto custom-scrollbar">
                     {items.length > 0 ? (
                         items.map(item => (
                             <Checkbox
@@ -80,7 +73,7 @@ const AccordionSection = ({
                             />
                         ))
                     ) : (
-                        <p className="text-xs text-slate-400 italic py-2 text-center">No results found.</p>
+                        <p className="text-xs text-slate-400 italic py-3 text-center">No results found.</p>
                     )}
                 </div>
             </div>
@@ -88,23 +81,67 @@ const AccordionSection = ({
     );
 };
 
+// Stats summary that shows live breakdown of filtered employees
+const FilterStats = ({ employees, localFilters, getTagLabel, designations }) => {
+    const group = useMemo(() => employees.filter(emp => {
+        const matchesDept = !localFilters.departments?.length || localFilters.departments.includes(emp.department);
+        const matchesType = !localFilters.types?.length || localFilters.types.includes(emp.employee_type);
+        const matchesLocation = !localFilters.locations?.length || localFilters.locations.includes(emp.location);
+        const matchesSkills = !localFilters.skills?.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
+        const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
+        const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
+        return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
+    }), [employees, localFilters]);
+
+    const bench = group.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length;
+    const notice = group.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
+    const allocated = group.filter(e => (e.employee_status || '').toLowerCase().includes('allocated')).length;
+    const billable = group.filter(e => e.billable === 'billable').length;
+    const avgAlloc = group.length ? Math.round(group.reduce((s, e) => s + (e.employee_allocations || 0), 0) / group.length) : 0;
+
+    if (group.length === 0) return null;
+
+    const stats = [
+        { label: 'Total', value: group.length, color: 'text-blue-600', bg: 'bg-blue-50', icon: Users },
+        { label: 'Allocated', value: allocated, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: TrendingUp },
+        { label: 'Bench', value: bench, color: 'text-orange-500', bg: 'bg-orange-50', icon: Briefcase },
+        { label: 'Notice', value: notice, color: 'text-red-500', bg: 'bg-red-50', icon: Hourglass },
+        { label: 'Billable', value: billable, color: 'text-violet-600', bg: 'bg-violet-50', icon: DollarSign },
+        { label: 'Avg Alloc', value: `${avgAlloc}%`, color: 'text-teal-600', bg: 'bg-teal-50', icon: AlertCircle },
+    ];
+
+    return (
+        <div className="mx-5 mb-4 p-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 rounded-xl border border-blue-100">
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Preview ({group.length} matching)</p>
+            <div className="grid grid-cols-3 gap-1.5">
+                {stats.map(({ label, value, color, bg, icon: Icon }) => (
+                    <div key={label} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg ${bg}`}>
+                        <Icon size={11} className={color} />
+                        <div>
+                            <p className="text-[9px] text-slate-500">{label}</p>
+                            <p className={`text-xs font-extrabold ${color}`}>{value}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) => {
-    // Local State for the Drawer
     const [localFilters, setLocalFilters] = useState(filters || {
         departments: [],
         types: [],
         skills: [],
         locations: [],
-        statusTags: []
+        statusTags: [],
+        designations: []
     });
 
-    // Accordion State - Mutually Exclusive
-    const [activeSection, setActiveSection] = useState('departments');
-
-    // Dynamic Master Skills Logic
+    const [activeSection, setActiveSection] = useState('designations');
     const [skillSearch, setSkillSearch] = useState("");
+    const [designationSearch, setDesignationSearch] = useState("");
 
-    // API State for Filter Options
     const [filterOptions, setFilterOptions] = useState({
         departments: [],
         locations: [],
@@ -113,7 +150,6 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         status_tags: []
     });
 
-    // Fetch options on mount
     useEffect(() => {
         const fetchOptions = async () => {
             const data = await getFilterOptions();
@@ -130,13 +166,20 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         fetchOptions();
     }, []);
 
+    // Derive unique designations from employees
+    const allDesignations = useMemo(() =>
+        [...new Set(employees.map(e => e.role_designation).filter(Boolean))].sort()
+        , [employees]);
+
+    const availableDesignations = useMemo(() =>
+        designationSearch
+            ? allDesignations.filter(d => d.toLowerCase().includes(designationSearch.toLowerCase()))
+            : allDesignations
+        , [allDesignations, designationSearch]);
+
     const availableSkills = useMemo(() => {
         let skills = filterOptions.skills || [];
-
-        // Filter by search query
-        if (skillSearch) {
-            skills = skills.filter(skill => skill.toLowerCase().includes(skillSearch.toLowerCase()));
-        }
+        if (skillSearch) skills = skills.filter(skill => skill.toLowerCase().includes(skillSearch.toLowerCase()));
         return skills;
     }, [filterOptions.skills, skillSearch]);
 
@@ -144,12 +187,8 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         setActiveSection(prev => prev === section ? '' : section);
     };
 
-    // Helper: derive tag label — must be defined before the useMemos that call it
-    const getTagLabel = (status) => {
-        return getEmployeeTag(status).label;
-    };
+    const getTagLabel = (status) => getEmployeeTag(status).label;
 
-    // Calculate Total Result Count for Apply button — useMemo for instant update
     const headerCount = useMemo(() => {
         return employees.filter(emp => {
             const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
@@ -157,11 +196,11 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
             const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
             const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
             const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
-            return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag;
+            const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
+            return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
         }).length;
     }, [localFilters, employees]);
 
-    // Derived Counts based on LOCAL filters
     const counts = useMemo(() => {
         const getCountsFor = (field, isArray = false) => {
             return employees.filter(emp => {
@@ -169,8 +208,8 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                 const matchesType = field === 'employee_type' || !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = field === 'location' || !localFilters.locations.length || localFilters.locations.includes(emp.location);
                 const matchesSkills = field === 'skills' || !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
-
-                return matchesDept && matchesType && matchesLocation && matchesSkills;
+                const matchesDesig = field === 'role_designation' || !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
+                return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig;
             }).reduce((acc, emp) => {
                 const value = emp[field];
                 if (isArray && Array.isArray(value)) {
@@ -183,17 +222,18 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         };
 
         return {
+            designations: getCountsFor('role_designation'),
             departments: getCountsFor('department'),
             types: getCountsFor('employee_type'),
             locations: getCountsFor('location'),
             skills: getCountsFor('skills', true),
             statusTags: employees.filter(emp => {
-                // Cross-filter: respect all OTHER active filters except statusTags itself
                 const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
                 const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
                 const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
-                return matchesDept && matchesType && matchesLocation && matchesSkills;
+                const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
+                return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig;
             }).reduce((acc, emp) => {
                 const label = getTagLabel(emp.employee_status);
                 acc[label] = (acc[label] || 0) + 1;
@@ -202,31 +242,14 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         };
     }, [localFilters, employees]);
 
-    // ── DEBUG LOGS (console testing) ──────────────────────────────────────────
-    useMemo(() => {
-        console.groupCollapsed('%c FilterOverlay Debug ', 'background:#3BA9FB;color:#fff;font-weight:bold;border-radius:4px;padding:2px 6px');
-        console.log('Active Filters:', localFilters);
-        console.log('Filtered Result Count:', headerCount, '/', employees.length, 'employees');
-        console.log('Departments:', Object.entries(counts.departments).map(([k, v]) => `${k}(${v})`).join(', ') || 'none');
-        console.log('Employee Types:', Object.entries(counts.types).map(([k, v]) => `${k}(${v})`).join(', ') || 'none');
-        console.log('Locations:', Object.entries(counts.locations).map(([k, v]) => `${k}(${v})`).join(', ') || 'none');
-        console.log('Status Tags:', Object.entries(counts.statusTags).map(([k, v]) => `${k}(${v})`).join(', ') || 'none');
-        console.log('Skills:', Object.keys(counts.skills).sort().join(', ') || 'none');
-        console.groupEnd();
-    }, [localFilters, counts, headerCount]);
-    // ─────────────────────────────────────────────────────────────────────────
-
-
-    // Sync localFilters from parent whenever drawer opens (ensures fresh state on open)
     useEffect(() => {
         if (isOpen && filters) {
-            setLocalFilters(filters);
+            setLocalFilters({ designations: [], ...filters });
         }
     }, [isOpen]);
 
     const handleClose = () => {
-        // Discard uncommitted changes — reset to last applied state
-        if (filters) setLocalFilters(filters);
+        if (filters) setLocalFilters({ designations: [], ...filters });
         onClose();
     };
 
@@ -246,19 +269,14 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
     };
 
     const handleClearAll = () => {
-        const empty = {
-            departments: [],
-            types: [],
-            skills: [],
-            locations: [],
-            statusTags: []
-        };
+        const empty = { departments: [], types: [], skills: [], locations: [], statusTags: [], designations: [] };
         setLocalFilters(empty);
         setSkillSearch("");
+        setDesignationSearch("");
     };
 
-    // Filter Lists (from API state)
-    const DEPARTMENT_LIST = filterOptions.departments;
+    const totalActiveFilters = Object.values(localFilters).reduce((sum, arr) => sum + (arr?.length || 0), 0);
+
     const EMPLOYEE_TYPES = filterOptions.employee_types;
     const LOCATIONS = filterOptions.locations;
     const STATUS_TAGS = filterOptions.status_tags;
@@ -267,22 +285,25 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 
     return (
         <>
-            {/* Backdrop */}
             <div onClick={handleClose} className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity" />
 
-            {/* Drawer */}
-            <div className={`fixed top-0 right-0 h-full w-80 bg-white border-l border-slate-200 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`fixed top-0 right-0 h-full w-80 bg-white border-l border-slate-200 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-white/95 backdrop-blur-sm">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-white/95 backdrop-blur-sm flex-shrink-0">
                     <div className="flex items-center gap-2 text-slate-800">
                         <Filter size={18} className="text-[#3BA9FB]" />
                         <h2 className="text-lg font-bold">Filters</h2>
+                        {totalActiveFilters > 0 && (
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#3BA9FB] text-white text-[10px] font-bold">
+                                {totalActiveFilters}
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleClearAll}
-                            className="text-xs font-medium text-slate-500 hover:text-[#3BA9FB] transition-colors"
+                            className="text-xs font-medium text-slate-500 hover:text-red-500 transition-colors"
                         >
                             Clear All
                         </button>
@@ -292,15 +313,43 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                     </div>
                 </div>
 
+                {/* Live Stats Preview */}
+                <div className="flex-shrink-0 pt-3">
+                    <FilterStats
+                        employees={employees}
+                        localFilters={localFilters}
+                        getTagLabel={getTagLabel}
+                    />
+                </div>
+
                 {/* Content */}
-                <div className="flex-1 h-[calc(100%-80px)] overflow-y-auto p-5 custom-scrollbar relative">
+                <div className="flex-1 overflow-y-auto p-5 custom-scrollbar relative">
+
+                    {/* DESIGNATION / ROLE */}
+                    <AccordionSection
+                        title="ROLE / DESIGNATION"
+                        sectionIds="designations"
+                        items={availableDesignations}
+                        categoryKey="designations"
+                        countMap={counts.designations}
+                        activeSection={activeSection}
+                        toggleSection={toggleSection}
+                        localFilters={localFilters}
+                        toggleFilter={toggleFilter}
+                        searchProps={{
+                            value: designationSearch,
+                            onChange: (e) => setDesignationSearch(e.target.value),
+                            placeholder: "Search designation..."
+                        }}
+                    />
+
 
                     <AccordionSection
-                        title="DEPARTMENT"
-                        sectionIds="departments"
-                        items={DEPARTMENT_LIST}
-                        categoryKey="departments"
-                        countMap={counts.departments}
+                        title="STATUS"
+                        sectionIds="statusTags"
+                        items={STATUS_TAGS}
+                        categoryKey="statusTags"
+                        countMap={counts.statusTags}
                         activeSection={activeSection}
                         toggleSection={toggleSection}
                         localFilters={localFilters}
@@ -348,24 +397,19 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                         toggleFilter={toggleFilter}
                     />
 
-                    <AccordionSection
-                        title="STATUS"
-                        sectionIds="statusTags"
-                        items={STATUS_TAGS}
-                        categoryKey="statusTags"
-                        countMap={counts.statusTags}
-                        activeSection={activeSection}
-                        toggleSection={toggleSection}
-                        localFilters={localFilters}
-                        toggleFilter={toggleFilter}
-                    />
-
-                    {/* Padding at bottom to avoid overlap with fixed footer */}
                     <div className="h-24"></div>
                 </div>
 
                 {/* Footer */}
                 <div className="absolute bottom-0 w-full p-4 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                    {totalActiveFilters > 0 && (
+                        <button
+                            onClick={handleClearAll}
+                            className="w-full mb-2 py-2 text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-100 transition-all"
+                        >
+                            Clear All ({totalActiveFilters} filter{totalActiveFilters > 1 ? 's' : ''})
+                        </button>
+                    )}
                     <button
                         onClick={handleApplyFilters}
                         className="w-full py-3 bg-[#3BA9FB] hover:bg-[#2563EB] text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 transition-all transform active:scale-95 flex items-center justify-center gap-2"
@@ -373,7 +417,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                         Apply Filters
                         {headerCount > 0 && (
                             <span className="bg-white/20 text-white text-[10px] px-2 py-0.5 rounded-full font-mono">
-                                {headerCount}
+                                {headerCount} employees
                             </span>
                         )}
                     </button>

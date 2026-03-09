@@ -49,14 +49,23 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
             </div>
 
             {/* Static Tag Placement */}
-            <div className="ml-[22px] flex items-center gap-2">
-                <EmployeeStatusTag status={rawProject.status} size="sm" />
-                {rawProject.billable && (
-                    <span
-                        className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}
-                    >
-                        {String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'Billable' : 'Non-Billable'}
-                    </span>
+            <div className="ml-[22px] flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                    <EmployeeStatusTag status={rawProject.status} size="sm" />
+                    {rawProject.billable && (
+                        <span
+                            className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}
+                        >
+                            {String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'Billable' : 'Non-Billable'}
+                        </span>
+                    )}
+                </div>
+                {rawProject.project_manager && (
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                        <Users size={10} className="text-slate-400 flex-shrink-0" />
+                        <span className="font-semibold text-slate-600">{rawProject.project_manager}</span>
+                        <span className="text-slate-400">· PM</span>
+                    </div>
                 )}
             </div>
 
@@ -90,6 +99,8 @@ const EmployeeDetails = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showDetailedSkills, setShowDetailedSkills] = useState(false);
+    const [showAllSkills, setShowAllSkills] = useState(false);
+    const SKILLS_PREVIEW_COUNT = 7;
 
     useEffect(() => {
         const fetchEmployeeDetails = async () => {
@@ -100,8 +111,14 @@ const EmployeeDetails = () => {
                 // Extract inner data if nested
                 const sourceData = res.data || res;
 
+                // Filter out projects with status "End" or "Ended"
+                const filteredProjects = (sourceData.projects || []).filter(p => {
+                    const s = (p.status || "").toLowerCase();
+                    return !s.includes('end');
+                });
+
                 // Inject status/billable into projects for tags
-                const enhancedProjects = (sourceData.projects || []).map(p => ({
+                const enhancedProjects = filteredProjects.map(p => ({
                     ...p,
                     status: p.status || sourceData.employee_status || 'Allocated',
                     billable: p.billable || sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'), // prioritize project specific billable
@@ -115,7 +132,12 @@ const EmployeeDetails = () => {
                     name: sourceData.employee_name || sourceData.name || sourceData.employee_id,
                     designation: sourceData.role_designation || sourceData.designation,
                     id: sourceData.employee_id || sourceData.id,
-                    reportingManager: sourceData.reporting_manager || sourceData.reporting_manager_id || sourceData.reportingManager,
+                    reportingManager: (() => {
+                        const mgr = sourceData.reporting_manager || sourceData.reportingManager;
+                        // If it looks like an employee ID (e.g. starts with CD-), don't show it
+                        if (!mgr || /^CD-/i.test(String(mgr))) return 'N/A';
+                        return mgr;
+                    })(),
                     joiningDate: sourceData.date_of_joining || sourceData.joiningDate,
                     totalExperience: sourceData.total_experience !== undefined ? sourceData.total_experience : sourceData.totalExperience,
                     cdExperience: sourceData.experience_in_cd !== undefined ? sourceData.experience_in_cd : (sourceData.cd_experience !== undefined ? sourceData.cd_experience : sourceData.cdExperience),
@@ -177,77 +199,72 @@ const EmployeeDetails = () => {
     const projects = userData.projects || [];
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-    // Timeline Helpers
-    const timelineStartDate = new Date();
-    timelineStartDate.setDate(1); // Default to start of current month
-    timelineStartDate.setHours(0, 0, 0, 0);
+    // Timeline always starts from RIGHT NOW (live date). The 12-week (90-day) window
+    // is anchored to today so the forecast is always current when the page opens.
+    const TODAY = new Date();
+    TODAY.setHours(0, 0, 0, 0);
+    const TOTAL_WEEKS = 12; // 90-day window
 
-    // Make timeline align dynamically with earliest project in DB so past projects aren't mismatched
-    if (projects && projects.length > 0) {
-        let earliestDate = new Date();
-        let hasValidStart = false;
-        projects.forEach(p => {
-            const rawStart = p.start_date || p.allocation_start_date;
-            if (rawStart) {
-                const d = new Date(rawStart);
-                if (!hasValidStart || d < earliestDate) {
-                    earliestDate = d;
-                    hasValidStart = true;
-                }
-            }
-        });
-        if (hasValidStart) {
-            timelineStartDate.setFullYear(earliestDate.getFullYear());
-            timelineStartDate.setMonth(earliestDate.getMonth());
-        }
-    }
-
+    // Build 3 rolling month labels based on today
     const getTimelineMonths = () => {
         const result = [];
         for (let i = 0; i < 3; i++) {
-            const date = new Date(timelineStartDate.getFullYear(), timelineStartDate.getMonth() + i, 1);
-            const monthStr = date.toLocaleString('default', { month: 'short' });
-            const yearStr = date.getFullYear().toString().slice(-2);
+            const d = new Date(TODAY.getFullYear(), TODAY.getMonth() + i, 1);
+            const monthStr = d.toLocaleString('default', { month: 'short' });
+            const yearStr = d.getFullYear().toString().slice(-2);
             result.push(`${monthStr} '${yearStr}`);
         }
         return result;
     };
     const months = getTimelineMonths();
-    const totalWeeks = 12;
 
+    // Map raw project date strings to week-offsets relative to TODAY.
+    // - Projects that started before today but haven't ended yet are clamped to start at week 0.
+    // - Projects that ended before today are excluded (isVisibleInTimeline = false).
+    // - Projects with no dates are shown spanning the full window.
     const chartData = projects.map((p, index) => {
         let startWeek = 0;
-        let durationWeeks = 4; // default if no dates
+        let durationWeeks = TOTAL_WEEKS; // default: show full window if no dates given
         let isVisibleInTimeline = true;
 
-        // Handle potential different backend key names for dates
         const rawStartDate = p.start_date || p.allocation_start_date;
         const rawEndDate = p.end_date || p.allocation_end_date;
 
-        if (rawStartDate || rawStartDate !== undefined) {
-            const pStart = rawStartDate ? new Date(rawStartDate) : new Date(timelineStartDate);
-            const pEnd = rawEndDate ? new Date(rawEndDate) : new Date(timelineStartDate.getFullYear() + 1, timelineStartDate.getMonth(), 1); // far future
+        if (rawStartDate || rawEndDate) {
+            const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-            const getWeekOffset = (d) => (d.getTime() - timelineStartDate.getTime()) / (7 * 24 * 60 * 60 * 1000);
+            // If no start date assume project began today (week 0)
+            const pStart = rawStartDate ? new Date(rawStartDate) : new Date(TODAY);
 
-            let sWeek = getWeekOffset(pStart);
-            let eWeek = getWeekOffset(pEnd);
+            // If no end date assume project extends 1 year from today (well outside window)
+            const pEnd = rawEndDate
+                ? new Date(rawEndDate)
+                : new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
 
-            if (eWeek <= 0 || sWeek >= 12) {
-                // Completely outside the 90-day window
+            // Week offsets relative to TODAY
+            const sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
+            const eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
+
+            // If the project ends before today — exclude from timeline
+            if (eWeekRaw <= 0) {
+                isVisibleInTimeline = false;
+            }
+            // If the project starts after the 90-day window — exclude
+            else if (sWeekRaw >= TOTAL_WEEKS) {
                 isVisibleInTimeline = false;
             } else {
-                // Clamp to window
-                sWeek = Math.max(0, sWeek);
-                eWeek = Math.min(12, eWeek);
+                // Clamp both ends to the visible [0, TOTAL_WEEKS] window
+                const sWeekClamped = Math.max(0, sWeekRaw);
+                const eWeekClamped = Math.min(TOTAL_WEEKS, eWeekRaw);
 
-                startWeek = Math.floor(sWeek);
-                durationWeeks = Math.ceil(eWeek - startWeek); // Ensure duration counts precisely
-                if (durationWeeks < 1) durationWeeks = 1;
-                if (startWeek + durationWeeks > 12) {
-                    durationWeeks = 12 - startWeek;
+                startWeek = Math.floor(sWeekClamped);
+                durationWeeks = Math.max(1, Math.ceil(eWeekClamped - sWeekClamped));
+
+                // Safety: don't overflow past end of grid
+                if (startWeek + durationWeeks > TOTAL_WEEKS) {
+                    durationWeeks = TOTAL_WEEKS - startWeek;
                 }
-                if (startWeek >= 12) startWeek = 11;
+                if (startWeek >= TOTAL_WEEKS) startWeek = TOTAL_WEEKS - 1;
             }
         }
 
@@ -260,6 +277,7 @@ const EmployeeDetails = () => {
             isVisibleInTimeline
         };
     });
+
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
@@ -305,6 +323,14 @@ const EmployeeDetails = () => {
                         <EmployeeStatusTag
                             status={userData.status?.allocated}
                         />
+                        {userData.billable && (
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${userData.billable === 'billable'
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                : 'bg-slate-100 text-slate-400 border-slate-200'
+                                }`}>
+                                {userData.billable === 'billable' ? 'Billable' : 'Non-Billable'}
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-slate-500">
@@ -446,12 +472,11 @@ const EmployeeDetails = () => {
 
                         {showDetailedSkills ? (
                             <div className="flex flex-col gap-3 max-h-[190px] overflow-y-auto custom-scrollbar pr-2">
-                                {userData.masterSkills && userData.masterSkills.map((skillObj, idx) => {
+                                {userData.masterSkills && (showAllSkills ? userData.masterSkills : userData.masterSkills.slice(0, SKILLS_PREVIEW_COUNT)).map((skillObj, idx) => {
                                     const skillName = typeof skillObj === 'string' ? skillObj : skillObj.name;
                                     let rawProficiency = skillObj.proficiency || 'Beginner';
                                     const exp = skillObj.experience_years || 0;
 
-                                    // Map numerical proficiency levels to words if the database stores 1-5
                                     if (String(rawProficiency) === '1') rawProficiency = 'Beginner';
                                     else if (String(rawProficiency) === '2') rawProficiency = 'Novice';
                                     else if (String(rawProficiency) === '3') rawProficiency = 'Intermediate';
@@ -489,10 +514,21 @@ const EmployeeDetails = () => {
                                         </div>
                                     );
                                 })}
+                                {userData.masterSkills && userData.masterSkills.length > SKILLS_PREVIEW_COUNT && (
+                                    <button
+                                        onClick={() => setShowAllSkills(s => !s)}
+                                        className="mt-1 w-full py-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-100 transition-all"
+                                    >
+                                        {showAllSkills
+                                            ? `View Less ↑`
+                                            : `View More · ${userData.masterSkills.length - SKILLS_PREVIEW_COUNT} more skill${userData.masterSkills.length - SKILLS_PREVIEW_COUNT !== 1 ? 's' : ''} ↓`
+                                        }
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <div className="flex flex-wrap gap-2">
-                                {userData.masterSkills && userData.masterSkills.map((skillObj, idx) => {
+                                {userData.masterSkills && userData.masterSkills.slice(0, 6).map((skillObj, idx) => {
                                     const skillName = typeof skillObj === 'string' ? skillObj : skillObj.name;
                                     return (
                                         <span
@@ -507,6 +543,14 @@ const EmployeeDetails = () => {
                                         </span>
                                     );
                                 })}
+                                {userData.masterSkills && userData.masterSkills.length > 6 && (
+                                    <span
+                                        className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full cursor-pointer hover:bg-blue-100 transition-colors border border-blue-100"
+                                        onClick={(e) => { e.stopPropagation(); setShowDetailedSkills(true); }}
+                                    >
+                                        +{userData.masterSkills.length - 6} more
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>

@@ -4,35 +4,23 @@ import { useNavigate } from 'react-router-dom';
 import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 
-// StatusBadge - matching ClientTable status pill style
-const StatusBadge = ({ status }) => {
-    const styles = {
-        'Allocated': 'bg-emerald-50 text-emerald-600 border-emerald-100',
-        'Bench': 'bg-orange-50 text-orange-600 border-orange-100',
-        'Notice period': 'bg-red-50 text-red-600 border-red-100',
-    };
+// AllocationBar — color matches EmployeeStatusTag palette
+const AllocationBar = ({ percentage, status }) => {
+    const s = (status || '').toLowerCase().trim();
+    let color = 'bg-emerald-500'; // default: Allocated
+    if (s.includes('notice')) color = 'bg-red-400';
+    else if (s === 'bench') color = 'bg-orange-400';
+    else if (s === 'partially bench') color = 'bg-blue-400';
+    else if (s === 'partially allocated') color = 'bg-purple-400';
+    else if (s === 'allocated') color = 'bg-emerald-500';
+    else if (percentage > 100) color = 'bg-red-500';
+    else if (percentage === 0) color = 'bg-orange-400';
 
-    return (
-        <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${styles[status] || 'bg-gray-50 text-gray-600 border-gray-100'}`}>
-            {status}
-        </span>
-    );
-};
-
-
-// AllocationBar
-const AllocationBar = ({ percentage }) => {
-    let color = 'bg-emerald-500';
-    if (percentage > 100) color = 'bg-red-500';
-    if (percentage === 0) color = 'bg-orange-500';
-
-    // Cap the displayed percentage at 100%
-    const displayPercentage = percentage > 100 ? 100 : percentage;
-
+    const displayPercentage = Math.min(percentage, 100);
     return (
         <div className="w-full max-w-[110px]">
             <div className="flex justify-end mb-1">
-                <span className="text-[10px] font-bold text-gray-600">{displayPercentage}%</span>
+                <span className="text-[10px] font-bold text-gray-600">{percentage}%</span>
             </div>
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -44,8 +32,21 @@ const AllocationBar = ({ percentage }) => {
     );
 };
 
-// Main EmployeeTable - matching ClientTable theme
-const EmployeeTable = ({ onEmployeeClick, filters }) => {
+// BillableStatusTag — text-only, no dollar icon
+const BillableStatusTag = ({ billable }) => {
+    const isBillable = billable === 'billable';
+    return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${isBillable
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-slate-50 text-slate-400 border-slate-100'
+            }`}>
+            {isBillable ? 'Billable' : 'Non-Billable'}
+        </span>
+    );
+};
+
+// Main EmployeeTable
+const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -70,89 +71,77 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
         fetchEmployees();
     }, []);
 
+    // Count active filters for badge
+    const activeFilterCount = [
+        ...(filters?.departments || []),
+        ...(filters?.types || []),
+        ...(filters?.skills || []),
+        ...(filters?.locations || []),
+        ...(filters?.statusTags || []),
+        ...(filters?.designations || [])
+    ].length;
+
     const filteredEmployees = employees.filter(emp => {
-        // 1. Search Filter — tag-priority: if search matches a tag prefix, only filter by tag
-        const searchValue = filters.search?.toLowerCase().trim();
+        const sv = filters.search?.toLowerCase().trim();
         const tagLabel = getEmployeeTag(emp.employee_status)?.label?.toLowerCase();
-
         const ALL_TAG_LABELS = ['allocated', 'bench', 'partially allocated', 'partially bench', 'notice period'];
-        const isTagSearch = searchValue && ALL_TAG_LABELS.some(t => t.startsWith(searchValue));
-
-        const matchesSearch = !searchValue || (
+        const isTagSearch = sv && ALL_TAG_LABELS.some(t => t.startsWith(sv));
+        const matchesSearch = !sv || (
             isTagSearch
-                ? tagLabel?.startsWith(searchValue)  // tag-only match (prefix)
+                ? tagLabel?.startsWith(sv)
                 : (
-                    emp.employee_name?.toLowerCase().includes(searchValue) ||
-                    emp.employee_id?.toLowerCase().includes(searchValue) ||
-                    emp.role_designation?.toLowerCase().includes(searchValue) ||
-                    emp.location?.toLowerCase().includes(searchValue) ||
-                    emp.department?.toLowerCase().includes(searchValue) ||
-                    tagLabel?.includes(searchValue) ||
-                    (emp.employee_allocations && emp.employee_allocations.toString().includes(searchValue)) ||
-                    (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(searchValue)))
+                    emp.employee_name?.toLowerCase().includes(sv) ||
+                    emp.employee_id?.toLowerCase().includes(sv) ||
+                    emp.role_designation?.toLowerCase().includes(sv) ||
+                    emp.location?.toLowerCase().includes(sv) ||
+                    emp.department?.toLowerCase().includes(sv) ||
+                    tagLabel?.includes(sv) ||
+                    (emp.employee_allocations && emp.employee_allocations.toString().includes(sv)) ||
+                    (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
                 )
         );
-
-        // 2. Department Filter (Array) - Updated key to 'departments'
-        const matchesDept = !filters?.departments || filters.departments.length === 0 || filters.departments.includes(emp.department);
-
-        // 3. Location Filter (Array)
-        const matchesLocation = !filters?.locations || filters.locations.length === 0 || filters.locations.includes(emp.location);
-
-        // 4. Employee Type (Array)
-        const matchesType = !filters?.types || filters.types.length === 0 || filters.types.includes(emp.employee_type);
-
-        // 5. Skills (Array - check if employee has ANY of the selected skills)
-        const matchesSkills = !filters?.skills || filters.skills.length === 0 ||
+        const matchesDept = !filters?.departments?.length || filters.departments.includes(emp.department);
+        const matchesLocation = !filters?.locations?.length || filters.locations.includes(emp.location);
+        const matchesType = !filters?.types?.length || filters.types.includes(emp.employee_type);
+        const matchesSkills = !filters?.skills?.length ||
             (emp.skills && filters.skills.some(skill => emp.skills.includes(skill)));
-
-        // 6. Status Tag Filter (the 5 combined tags)
-        const matchesStatusTag = !filters?.statusTags || filters.statusTags.length === 0 ||
+        const matchesStatusTag = !filters?.statusTags?.length ||
             filters.statusTags.includes(getEmployeeTag(emp.employee_status)?.label);
+        const matchesDesignation = !filters?.designations?.length ||
+            filters.designations.includes(emp.role_designation);
 
-        // 6. Card Filter (Quick filters from stat cards)
         let matchesCardFilter = true;
         if (filters?.cardFilter) {
-            // Handle object-based filters (e.g., employee-of-month with specific ID)
             if (typeof filters.cardFilter === 'object' && filters.cardFilter.type === 'employee-of-month') {
                 matchesCardFilter = emp.employee_id === filters.cardFilter.employeeId;
             } else if (typeof filters.cardFilter === 'string') {
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-
                 switch (filters.cardFilter) {
                     case 'bench':
-                        matchesCardFilter = emp.employee_status?.toLowerCase() === 'bench';
-                        break;
+                        matchesCardFilter = emp.employee_status?.toLowerCase() === 'bench'; break;
                     case 'notice':
-                        // Assuming we need to check for notice period status
-                        matchesCardFilter = emp.employee_status?.toLowerCase().includes('notice');
-                        break;
+                        matchesCardFilter = emp.employee_status?.toLowerCase().includes('notice'); break;
                     case 'new-joiner':
-                        // Filter employees who joined in last 30 days
                         const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo;
-                        break;
+                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo; break;
                     case 'top-performer':
-                        // Filter employees with 100% allocation
-                        matchesCardFilter = emp.employee_allocations >= 100;
-                        break;
-                    default:
-                        matchesCardFilter = true;
+                        matchesCardFilter = emp.employee_allocations >= 100; break;
+                    default: matchesCardFilter = true;
                 }
             }
         }
 
-        return matchesSearch && matchesDept && matchesLocation && matchesType && matchesSkills && matchesCardFilter && matchesStatusTag;
+        return matchesSearch && matchesDept && matchesLocation && matchesType &&
+            matchesSkills && matchesCardFilter && matchesStatusTag && matchesDesignation;
     });
 
-    // Pagination Logic
     const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const currentEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
 
     useEffect(() => {
-        setCurrentPage(1); // Reset to page 1 when filters or itemsPerPage change
+        setCurrentPage(1);
     }, [filters, itemsPerPage]);
 
     if (loading) return <div className="p-10 text-center font-medium text-gray-400">Loading Employees...</div>;
@@ -160,11 +149,43 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold text-gray-800">Employee Directory</h3>
+                    <span className="text-xs text-gray-400 font-medium">
+                        {filteredEmployees.length} {filters?.cardFilter === 'bench' ? 'bench ' : ''}employees
+                    </span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                    {/* Search */}
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                            type="text"
+                            placeholder="Search name, skill, status..."
+                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all"
+                            value={searchValue || ''}
+                            onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Filter Button with badge */}
+                    <button
+                        onClick={onFilterClick}
+                        className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-semibold transition-all shadow-sm relative ${activeFilterCount > 0
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-blue-200'
+                            }`}
+                    >
+                        <Filter size={18} />
+                        Filter
+                        {activeFilterCount > 0 && (
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-blue-600 text-[10px] font-bold ml-0.5">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
+
                     {filters?.cardFilter === 'bench' && (
                         <button
                             onClick={() => navigate('/info/allocation', { state: { showForecastOnly: true, showBack: true } })}
@@ -173,9 +194,6 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
                             View Upcoming Bench
                         </button>
                     )}
-                    <div className="text-xs font-medium text-gray-400">
-                        Showing {filteredEmployees.length} {filters?.cardFilter === 'bench' ? 'bench ' : ''}employees
-                    </div>
                 </div>
             </div>
 
@@ -224,21 +242,13 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
                                         <div className="text-xs text-gray-400">{emp.department}</div>
                                     </td>
                                     <td className="px-6 py-2">
-                                        <div className="flex items-center gap-2">
-                                            {emp.billable === 'billable' ? (
-                                                <div className="bg-emerald-100 text-emerald-600 rounded-full p-0.5 shadow-sm min-w-[20px] flex justify-center" title="Billable Resource">
-                                                    <DollarSign size={12} strokeWidth={3} />
-                                                </div>
-                                            ) : (
-                                                <div className="bg-slate-100 text-slate-400 rounded-full p-0.5 shadow-sm min-w-[20px] flex justify-center" title="Non-Billable Resource">
-                                                    <DollarSign size={12} strokeWidth={3} />
-                                                </div>
-                                            )}
+                                        <div className="flex flex-col gap-1">
                                             <EmployeeStatusTag status={emp.employee_status} />
+                                            <BillableStatusTag billable={emp.billable} />
                                         </div>
                                     </td>
                                     <td className="px-6 py-2">
-                                        <AllocationBar percentage={emp.employee_allocations || 0} />
+                                        <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
                                     </td>
                                     <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
                                     <td className="px-6 py-2 text-right">
@@ -268,10 +278,10 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
                 <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <div className="text-xs text-gray-500">
-                            Showing <span className="font-bold text-gray-700">{startIndex + 1}</span> to <span className="font-bold text-gray-700">{Math.min(startIndex + itemsPerPage, filteredEmployees.length)}</span> of <span className="font-bold text-gray-700">{filteredEmployees.length}</span> entries
+                            Showing <span className="font-bold text-gray-700">{startIndex + 1}</span> to <span className="font-bold text-gray-700">{Math.min(startIndex + itemsPerPage, filteredEmployees.length)}</span> of <span className="font-bold text-gray-700">{filteredEmployees.length}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Rows per page:</label>
+                            <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Rows:</label>
                             <select
                                 value={itemsPerPage}
                                 onChange={(e) => {
@@ -298,7 +308,7 @@ const EmployeeTable = ({ onEmployeeClick, filters }) => {
                             Previous
                         </button>
                         <span className="text-xs text-gray-500 font-medium px-2">
-                            Page {currentPage} of {totalPages}
+                            {currentPage} / {totalPages}
                         </span>
                         <button
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}

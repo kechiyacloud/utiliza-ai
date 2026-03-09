@@ -22,39 +22,42 @@ def projects_overview():
     cur = conn.cursor()
 
     try:
+        # Helper for common filter
+        status_filter = "WHERE LOWER(project_status) NOT LIKE '%end%'"
+        
         # total projects
-        cur.execute("SELECT COUNT(*) FROM projects")
+        cur.execute(f"SELECT COUNT(*) FROM projects {status_filter}")
         total = cur.fetchone()[0]
 
         # ongoing
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(project_status) IN ('running','in progress','live','active')
+            {status_filter} AND LOWER(project_status) IN ('running','in progress','live','active')
         """)
         ongoing = cur.fetchone()[0]
 
         # poc
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(project_name) LIKE '%poc%'
+            {status_filter} AND LOWER(project_name) LIKE '%poc%'
         """)
         poc = cur.fetchone()[0]
 
         # internal
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(billable) LIKE '%non%' OR LOWER(billable) = 'no'
+            {status_filter} AND (LOWER(billable) LIKE '%non%' OR LOWER(billable) = 'no')
         """)
         internal = cur.fetchone()[0]
 
         # client
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*)
             FROM projects
-            WHERE LOWER(billable) LIKE '%billable%' AND LOWER(billable) NOT LIKE '%non%' OR LOWER(billable) = 'yes'
+            {status_filter} AND (LOWER(billable) LIKE '%billable%' AND LOWER(billable) NOT LIKE '%non%' OR LOWER(billable) = 'yes')
         """)
         client = cur.fetchone()[0]
 

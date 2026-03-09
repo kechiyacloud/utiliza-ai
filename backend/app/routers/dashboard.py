@@ -70,7 +70,7 @@ def allocation_3m():
             WITH months AS (
                 SELECT generate_series(
                     DATE_TRUNC('month', CURRENT_DATE),
-                    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '2 months',
+                    DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
                     INTERVAL '1 month'
                 ) AS month_start
             )
@@ -82,7 +82,7 @@ def allocation_3m():
               ON pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
              AND (pa.allocation_end_date >= m.month_start OR pa.allocation_end_date IS NULL)
             LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
-            WHERE (e.date_of_resign IS NULL OR e.date_of_resign IS NOT NULL)  -- We want allocations unless they are resigned before month start? Actually, just exclude them.
+            WHERE e.date_of_resign IS NULL OR pa.employee_id IS NULL
             GROUP BY m.month_start
             ORDER BY m.month_start
         """)
@@ -114,6 +114,7 @@ def high_allocation_projects():
             JOIN employee_master e ON pa.employee_id = e.employee_id
             WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
             AND e.date_of_resign IS NULL
+            AND LOWER(p.project_status) NOT LIKE '%end%'
             GROUP BY p.project_name
             ORDER BY resource_count DESC
             LIMIT 5

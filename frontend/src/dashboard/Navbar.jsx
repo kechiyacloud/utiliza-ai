@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
-import { LayoutDashboard, FolderKanban, Users, PieChart, Briefcase, Settings, ChevronLeft, ChevronRight, Network } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, PieChart, Briefcase, Settings, ChevronLeft, ChevronRight, Network, LogOut } from 'lucide-react';
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -17,6 +17,13 @@ const Navbar = () => {
         { icon: Network, label: 'Organization', path: 'organization' },
         { icon: Settings, label: 'Settings', path: 'settings' },
     ];
+
+    const handleLogout = () => {
+        // Clear any auth tokens/session data
+        localStorage.removeItem('token');
+        sessionStorage.clear();
+        navigate('/login');
+    };
 
     return (
         <div className={`h-screen pr-1 transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-44'}`}>
@@ -61,9 +68,26 @@ const Navbar = () => {
                         );
                     })}
                 </nav>
+
+                {/* Logout Button */}
+                <div className="px-2 pt-2 border-t border-white/10 mt-2">
+                    <button
+                        onClick={handleLogout}
+                        className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 group relative text-red-400 hover:bg-red-500/10 hover:text-red-300 ${isCollapsed ? 'justify-center' : ''}`}
+                    >
+                        <LogOut className="w-5 h-5 flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm font-medium">Logout</span>}
+                        {isCollapsed && (
+                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                                Logout
+                            </div>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );
 };
 
 export default Navbar;
+

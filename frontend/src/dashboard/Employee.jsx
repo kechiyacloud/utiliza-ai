@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Search, Filter, Trophy, Award, TrendingUp, X } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2 } from 'lucide-react'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
 import FilterOverlay from './employee/FilterOverlay'
@@ -31,8 +31,6 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
   </div>
 )
 
-
-
 function Employee() {
   const navigate = useNavigate()
   const [totalEmployee, setTotalEmployee] = useState(null)
@@ -40,7 +38,7 @@ function Employee() {
   const [noticeEmployee, setNoticeEmployee] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [allEmployees, setAllEmployees] = useState([]); // Need all employees for filter counts
+  const [allEmployees, setAllEmployees] = useState([]);
 
   // Filter States
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -49,12 +47,25 @@ function Employee() {
     types: [],
     skills: [],
     locations: [],
-    statusTags: []
+    statusTags: [],
+    designations: []
   });
   const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
-  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null); // For quick filters from cards
-  const [activeDrawer, setActiveDrawer] = useState(null); // 'skills' | 'trend' | null
+  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
+  const [activeDrawer, setActiveDrawer] = useState(null);
+
+  // Department chip selector — default shows all unique depts; user can narrow down
+  const [selectedDepts, setSelectedDepts] = useState([]);
+  const allDepts = useMemo(() =>
+    [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()
+    , [allEmployees]);
+
+  const toggleDept = (dept) => {
+    setSelectedDepts(prev =>
+      prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
+    );
+  };
 
   useEffect(() => {
     let mounted = true
@@ -63,7 +74,6 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        // Single call — counts are derived from the list
         const data = await getEmployeeList()
         if (!mounted) return
 
@@ -82,6 +92,14 @@ function Employee() {
     return () => { mounted = false }
   }, [])
 
+  // Combined filters passed to EmployeeTable — dept chips override the filter drawer's dept selection
+  const combinedFilters = {
+    ...filters,
+    departments: selectedDepts.length > 0 ? selectedDepts : filters.departments,
+    search: searchQuery,
+    cardFilter: cardFilter
+  };
+
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
       <FilterOverlay
@@ -92,7 +110,7 @@ function Employee() {
         employees={allEmployees}
       />
 
-      {/* Header & Secondary Filters */}
+      {/* Header & Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Employee Management</h1>
@@ -100,18 +118,6 @@ function Employee() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search skills, name, status, etc..."
-              className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-64 transition-all"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
           {/* Utilization Trend Icon Button */}
           <button
             onClick={() => setActiveDrawer('trend')}
@@ -119,15 +125,6 @@ function Employee() {
             title="Utilization Trend"
           >
             <TrendingUp size={18} />
-          </button>
-
-          {/* Filter Button - Moved & Styled */}
-          <button
-            onClick={() => setIsFilterOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 hover:border-blue-200 transition-all shadow-sm"
-          >
-            <Filter size={18} />
-            Filter
           </button>
 
           {/* Add Employee Button */}
@@ -141,9 +138,52 @@ function Employee() {
         </div>
       </div>
 
+      {/* Department Filter — table-row style */}
+      {allDepts.length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden flex-shrink-0">
+          <div className="flex items-center border-b border-gray-100 px-4 py-2 bg-gray-50">
+            <Building2 size={13} className="text-gray-400 mr-2" />
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex-1">Department</span>
+            <span className="text-[11px] text-gray-400 font-medium">
+              {selectedDepts.length > 0 ? `${selectedDepts.length} selected` : 'All'}
+            </span>
+          </div>
+          <div className="flex overflow-x-auto custom-scrollbar divide-x divide-gray-100">
+            {/* All button */}
+            <button
+              onClick={() => setSelectedDepts([])}
+              className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-2.5 min-w-[80px] transition-all border-b-2 text-center ${selectedDepts.length === 0
+                  ? 'border-blue-500 bg-blue-50/60 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                }`}
+            >
+              <span className={`text-xs font-bold ${selectedDepts.length === 0 ? 'text-blue-700' : 'text-gray-700'}`}>All</span>
+              <span className={`text-[10px] font-medium mt-0.5 ${selectedDepts.length === 0 ? 'text-blue-500' : 'text-gray-400'}`}>
+                {allEmployees.length}
+              </span>
+            </button>
+            {allDepts.map(dept => {
+              const count = allEmployees.filter(e => e.department === dept).length;
+              const isActive = selectedDepts.includes(dept);
+              return (
+                <button
+                  key={dept}
+                  onClick={() => toggleDept(dept)}
+                  className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-2.5 min-w-[100px] transition-all border-b-2 text-center ${isActive
+                      ? 'border-blue-500 bg-blue-50/60 text-blue-700'
+                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    }`}
+                >
+                  <span className={`text-xs font-bold truncate max-w-[90px] ${isActive ? 'text-blue-700' : 'text-gray-700'}`} title={dept}>{dept}</span>
+                  <span className={`text-[10px] font-medium mt-0.5 ${isActive ? 'text-blue-500' : 'text-gray-400'}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-
-      {/* Stats Cards - 5 Column Grid */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           label="Total Employees"
@@ -153,7 +193,7 @@ function Employee() {
           loading={loading}
           error={error}
           isActive={cardFilter === null}
-          onClick={() => setCardFilter(null)} // Reset filters to show all employees
+          onClick={() => setCardFilter(null)}
         />
         <StatCard
           label="Bench Employees"
@@ -187,15 +227,14 @@ function Employee() {
         />
       </div>
 
-      {/* Employee Table (Full Width) */}
+      {/* Employee Table */}
       <div className='flex-1 w-full mt-4'>
         <EmployeeTable
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
-          filters={{
-            ...filters,
-            search: searchQuery,
-            cardFilter: cardFilter
-          }}
+          filters={combinedFilters}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onFilterClick={() => setIsFilterOpen(true)}
         />
       </div>
 

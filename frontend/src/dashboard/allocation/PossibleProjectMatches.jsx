@@ -46,7 +46,7 @@ const PossibleProjectMatches = ({ employee, projects, loading, onClose }) => {
             ) : (
                 <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
                     <div className="space-y-3">
-                        {projects.map((proj) => {
+                        {projects.filter(p => !(p.status || "").toLowerCase().includes('end')).map((proj) => {
                             const isExpanded = expandedProjectId === proj.project_id;
                             const color = getMatchColor(proj.match_score);
 

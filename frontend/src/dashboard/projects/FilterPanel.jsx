@@ -102,6 +102,8 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     onChange={handleChange}
                                 >
                                     <option value="">All Statuses</option>
+                                    <option value="Live">Live</option>
+                                    <option value="Active">Active</option>
                                     <option value="In Progress">In Progress</option>
                                     <option value="Delayed">Delayed</option>
                                     <option value="Completed">Completed</option>
