@@ -244,10 +244,11 @@ def fetch_action_inbox():
     try:
         # Dynamic Task 1: Find employees on notice period (requires exit interview)
         notice_query = """
-            SELECT employee_name, department
-            FROM employee_master 
-            WHERE date_of_resign IS NOT NULL 
-              AND employee_status != 'Exited'
+            SELECT m.employee_name, m.department
+            FROM employee_master m
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE m.date_of_resign IS NOT NULL 
+              AND (p.employee_status IS NULL OR p.employee_status != 'Exited')
         """
         cur.execute(notice_query)
         notice_rows = cur.fetchall()
@@ -385,10 +386,12 @@ def get_employee_by_id(employee_id: str):
                 ELSE 'non-billable' 
             END as billable,
             p.employee_allocations,
-            p.reporting_manager_id
+            p.reporting_manager_id,
+            mgr.employee_name as reporting_manager_name
         FROM employee_master m
         LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
         LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
+        LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id
         WHERE m.employee_id = %s
         """
 
@@ -436,7 +439,7 @@ def get_employee_by_id(employee_id: str):
         certificates = [row[0] for row in cert_rows]
 
 
-        # 4️⃣ Fetch Projects & Allocations
+        # 4️⃣ Fetch Projects & Allocations (with project manager name)
         projects_query = """
         SELECT 
             p.project_name,
@@ -445,7 +448,21 @@ def get_employee_by_id(employee_id: str):
             pa.allocation_start_date,
             pa.allocation_end_date,
             p.project_status,
-            pa.project_tags
+            pa.project_tags,
+            (
+                SELECT em2.employee_name
+                FROM projects_allocation pa2
+                JOIN employee_master em2 ON pa2.employee_id = em2.employee_id
+                WHERE pa2.project_id = p.project_id
+                  AND (
+                        LOWER(pa2.role_in_project) LIKE '%%manager%%'
+                     OR LOWER(pa2.role_in_project) LIKE '%%lead%%'
+                     OR LOWER(pa2.role_in_project) LIKE '%%pm%%'
+                     OR LOWER(em2.role_designation) LIKE '%%manager%%'
+                     OR LOWER(em2.role_designation) LIKE '%%lead%%'
+                   )
+                LIMIT 1
+            ) AS project_manager_name
         FROM projects_allocation pa
         JOIN projects p 
         ON pa.project_id = p.project_id
@@ -462,7 +479,8 @@ def get_employee_by_id(employee_id: str):
                 "start_date": row[3],
                 "end_date": row[4],
                 "status": row[5],
-                "billable": row[6]
+                "billable": row[6],
+                "project_manager": row[7]
             }
             for row in project_rows
         ]
@@ -478,7 +496,7 @@ def get_employee_by_id(employee_id: str):
             "email": employee.get("email_id"),
             "phone": employee.get("phone_number"),
             "photo_url": employee.get("photo_url"),
-            "reporting_manager": employee.get("reporting_manager_id"),
+            "reporting_manager": employee.get("reporting_manager_name") or employee.get("reporting_manager_id"),
             "date_of_joining": employee.get("date_of_joining"),
             "total_experience": float(employee.get("total_experience") or 0),
             "cd_experience": float(employee.get("experience_in_cd") or 0),

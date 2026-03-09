@@ -18,7 +18,7 @@ const ProjectUtilization = ({ projects, onProjectClick }) => {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {projects && projects.length > 0 ? (
-                            projects.map((project) => (
+                            projects.filter(p => !(p.status || p.project_status || "").toLowerCase().includes('end')).map((project) => (
                                 <tr
                                     key={project.project_id}
                                     className="border-b border-gray-50 last:border-0 hover:bg-blue-50/50 group cursor-pointer transition-colors"
