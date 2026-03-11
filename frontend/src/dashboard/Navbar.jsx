@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, FolderKanban, Users, PieChart, Briefcase, Settings, ChevronLeft, ChevronRight, Network, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, PieChart, CalendarClock, Briefcase, Settings, ChevronLeft, ChevronRight, Network, LogOut } from 'lucide-react';
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -18,6 +18,7 @@ const Navbar = () => {
         { icon: FolderKanban, label: 'Projects', path: 'projects' },
         { icon: Users, label: 'Employee', path: 'employee' },
         { icon: PieChart, label: 'Allocation', path: 'allocation' },
+        { icon: CalendarClock, label: 'Availability', path: 'availability' },
         { icon: Briefcase, label: 'Client', path: 'client' },
         { icon: Network, label: 'Organization', path: 'organization' },
         { icon: Settings, label: 'Settings', path: 'settings' },
@@ -59,17 +60,17 @@ const Navbar = () => {
                             <button
                                 key={index}
                                 onClick={() => navigate(item.path)}
-                                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 group relative
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 group relative
                                     ${isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}
                                     ${isCollapsed ? 'justify-center' : ''}
                                 `}
                             >
-                                <item.icon className={`${isActive ? 'text-white' : 'text-gray-400 group-hover:text-white transition-colors'} w-5 h-5 flex-shrink-0`} />
+                                <item.icon className={`${isActive ? 'text-white' : 'text-gray-400 group-hover:text-white transition-colors'} w-4 h-4 flex-shrink-0`} />
                                 {!isCollapsed && <span className="text-sm font-medium whitespace-nowrap overflow-hidden">{item.label}</span>}
 
                                 {/* Tooltip for collapsed mode */}
                                 {isCollapsed && (
-                                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-2 py-0 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
                                         {item.label}
                                     </div>
                                 )}
