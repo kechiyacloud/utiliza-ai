@@ -8,14 +8,20 @@ export const fetchDashboardData = async () => {
             highAllocationRes,
             performersRes,
             availabilityRes,
-            executiveRes
+            executiveRes,
+            skillsGapRes,
+            transitionsRes,
+            certsRes
         ] = await Promise.all([
             api.get('/dashboard/infocards').catch(e => { console.warn('infocards failed:', e.message); return { data: {} }; }),
             api.get('/dashboard/allocation-3m').catch(e => { console.warn('allocation-3m failed:', e.message); return { data: [] }; }),
             api.get('/dashboard/high-allocation-projects').catch(e => { console.warn('high-allocation-projects failed:', e.message); return { data: [] }; }),
             api.get('/dashboard/top-performers').catch(e => { console.warn('top-performers failed:', e.message); return { data: [] }; }),
             api.get('/dashboard/upcoming-availability').catch(e => { console.warn('upcoming-availability failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/executive-metrics').catch(e => { console.warn('executive-metrics failed:', e.message); return { data: null }; })
+            api.get('/dashboard/executive-metrics').catch(e => { console.warn('executive-metrics failed:', e.message); return { data: null }; }),
+            api.get('/dashboard/skills-gap').catch(e => { console.warn('skills-gap failed:', e.message); return { data: [] }; }),
+            api.get('/dashboard/recent-transitions').catch(e => { console.warn('recent-transitions failed:', e.message); return { data: [] }; }),
+            api.get('/dashboard/certification-expiry').catch(e => { console.warn('certification-expiry failed:', e.message); return { data: [] }; })
         ]);
 
         // Safely extract data, fallback to defaults if 500/error occurred
@@ -25,6 +31,9 @@ export const fetchDashboardData = async () => {
         const performers = Array.isArray(performersRes?.data) ? performersRes.data : [];
         const availability = Array.isArray(availabilityRes?.data) ? availabilityRes.data : [];
         const executive = executiveRes?.data || {};
+        const skillsGap = Array.isArray(skillsGapRes?.data) ? skillsGapRes.data : [];
+        const transitions = Array.isArray(transitionsRes?.data) ? transitionsRes.data : [];
+        const certs = Array.isArray(certsRes?.data) ? certsRes.data : [];
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
@@ -65,6 +74,27 @@ export const fetchDashboardData = async () => {
                 releaseDate: a.release_date,
                 availability: a.allocation_percent ?? 0
             })),
+            skillsGap: skillsGap.map((s, idx) => ({
+                id: idx,
+                skill: s.skill,
+                certified: s.certified ?? 0,
+                demand: s.demand ?? 0,
+                gap: s.gap || "low"
+            })),
+            recentTransitions: transitions.map((t, idx) => ({
+                id: idx,
+                employee: t.employee,
+                project: t.project,
+                date: t.date,
+                role: t.role || "Resource"
+            })),
+            certificationExpiry: certs.map((c, idx) => ({
+                id: idx,
+                employee: c.employee,
+                certName: c.certName,
+                expiryDate: c.expiryDate,
+                status: c.status || "Upcoming"
+            })),
             executiveMetrics: executive || {}
         };
 
@@ -84,8 +114,63 @@ export const fetchDashboardData = async () => {
                 highAllocationProjects: [],
                 topPerformers: [],
                 resourceAvailability: [],
+                skillsGap: [],
+                recentTransitions: [],
+                certificationExpiry: [],
                 executiveMetrics: {}
             }
         };
+    }
+};
+
+export const fetchTodos = async () => {
+    try {
+        const response = await api.get('/dashboard/todos');
+        return response.data;
+    } catch (error) {
+        console.error("Fetch Todos Error:", error);
+        return [];
+    }
+};
+
+export const addTodo = async (message, type = 'info') => {
+    try {
+        const response = await api.post('/dashboard/todos', { message, type });
+        return response.data;
+    } catch (error) {
+        console.error("Add Todo Error:", error);
+        throw error;
+    }
+};
+
+export const toggleTodo = async (todoId) => {
+    try {
+        const response = await api.put(`/dashboard/todos/${todoId}/toggle`);
+        return response.data;
+    } catch (error) {
+        console.error("Toggle Todo Error:", error);
+        throw error;
+    }
+};
+
+export const clearTodo = async (todoId) => {
+    try {
+        const response = await api.delete(`/dashboard/todos/${todoId}`);
+        return response.data;
+    } catch (error) {
+        console.error("Clear Todo Error:", error);
+        throw error;
+    }
+};
+
+export const exportRiskBoard = async () => {
+    try {
+        const response = await api.get('/dashboard/export-risk-board', {
+            responseType: 'blob',
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Export Risk Board Error:", error);
+        throw error;
     }
 };

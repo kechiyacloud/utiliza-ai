@@ -1,5 +1,14 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from app.database import get_db_connection
+from pydantic import BaseModel
+import io
+import csv
+
+class TodoItem(BaseModel):
+    message: str
+    type: str = "info"
+
 
 router = APIRouter()
 
@@ -207,20 +216,44 @@ def upcoming_availability():
         cur.close()
         conn.close()
 
-@router.get("/dashboard/client-health")
-def client_health():
-
+@router.get("/dashboard/recent-transitions")
+def recent_transitions():
     conn = get_db_connection()
     cur = conn.cursor()
-
     try:
-        # No clients table available, return empty
-        return []
-
+        cur.execute("""
+            SELECT e.employee_name, p.project_name, pa.allocation_start_date, pa.role_in_project
+            FROM projects_allocation pa
+            JOIN employee_master e ON e.employee_id = pa.employee_id
+            JOIN projects p ON p.project_id = pa.project_id
+            ORDER BY pa.allocation_start_date DESC
+            LIMIT 5
+        """)
+        rows = cur.fetchall()
+        return [
+            {
+                "employee": r[0],
+                "project": r[1],
+                "date": r[2],
+                "role": r[3]
+            }
+            for r in rows
+        ]
     finally:
         cur.close()
         conn.close()
 
+@router.get("/dashboard/certification-expiry")
+def certification_expiry():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Since DB lacks expiry_date, we return an empty list for now
+        # but with the intended structure for the frontend to handle.
+        return []
+    finally:
+        cur.close()
+        conn.close()
 
 @router.get("/dashboard/skills-gap")
 def skills_gap():
@@ -376,9 +409,11 @@ def dashboard_executive_metrics():
         projects_at_risk = []
         for r in risk_rows:
             if r[1] == 0:
-                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "High", "reason": "No resources assigned", "health": 20})
+                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "High", "reason": f"No resources ({r[1]} members)", "health": 20})
             elif r[1] < 3:
-                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "Medium", "reason": f"Under-resourced ({r[1]} member(s))", "health": 55})
+                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "Medium", "reason": f"Under-resourced ({r[1]} members)", "health": 55})
+            else:
+                projects_at_risk.append({"name": r[0], "client": "Internal", "risk": "Low", "reason": f"Sufficient ({r[1]} members)", "health": 100})
 
         alerts = []
         if upcoming_bench > 0:
@@ -389,6 +424,59 @@ def dashboard_executive_metrics():
         if len(alerts) == 0:
             alerts.append({"id": 3, "type": "info", "message": "All project allocations appear stable.", "time": "Just now"})
         
+        cur.execute("""
+            SELECT e.employee_name, CURRENT_DATE - COALESCE(MAX(pa.allocation_end_date), e.date_of_joining) as days_on_bench
+            FROM employee_master e
+            LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
+            LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
+            WHERE (p.employee_status NOT ILIKE '%notice%' OR p.employee_status IS NULL)
+            AND e.date_of_resign IS NULL
+            AND COALESCE(p.employee_allocations, 0) <= 0
+            GROUP BY e.employee_name, e.date_of_joining
+            ORDER BY days_on_bench DESC
+            LIMIT 5
+        """)
+        bench_aging_rows = cur.fetchall()
+        bench_aging = [{"name": r[0], "days": r[1]} for r in bench_aging_rows]
+
+        # Strategic What-If Predictor
+        target_util = 85
+        if company_utilization < target_util:
+            # How many more resources needed to be billable to hit target
+            gap = round(((target_util/100) * active_headcount) - (total_allocations/100))
+            util_prediction = {
+                "tip": f"Deploy {max(1, gap)} more resources to hit your {target_util}% target.",
+                "target": target_util,
+                "gap": max(1, gap)
+            }
+        else:
+            util_prediction = {
+                "tip": "Utilization target achieved. Focus on project health.",
+                "target": target_util,
+                "gap": 0
+            }
+
+        cur.execute("""
+            WITH months AS (
+                SELECT generate_series(
+                    DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months',
+                    DATE_TRUNC('month', CURRENT_DATE),
+                    INTERVAL '1 month'
+                ) AS month_start
+            )
+            SELECT 
+                TO_CHAR(m.month_start, 'Mon') as month,
+                (SELECT COUNT(DISTINCT pa.employee_id) 
+                 FROM projects_allocation pa 
+                 WHERE pa.allocation_start_date <= (m.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+                 AND (pa.allocation_end_date >= m.month_start OR pa.allocation_end_date IS NULL)
+                ) as billable_count
+            FROM months m
+            ORDER BY m.month_start
+        """)
+        trend_rows = cur.fetchall()
+        utilization_trends = [{"month": r[0], "value": r[1]} for r in trend_rows]
+
         return {
             "company_utilization": company_utilization,
             "billable_headcount": billable_headcount,
@@ -400,10 +488,166 @@ def dashboard_executive_metrics():
             "forecast": forecast,
             "projects_at_risk": projects_at_risk,
             "alerts": alerts,
-            "total_employees": total_employees
+            "total_employees": total_employees,
+            "bench_aging": bench_aging,
+            "utilization_prediction": util_prediction,
+            "utilization_trends": utilization_trends
         }
     except Exception as e:
         print("REAL DB ERROR EXECUTIVE METRICS:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ----------------- ACTIONABLE TODOS -----------------
+
+def create_todos_table_if_not_exists():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS actionable_todos (
+                id SERIAL PRIMARY KEY,
+                message TEXT NOT NULL,
+                type VARCHAR(50) DEFAULT 'info',
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+    except Exception as e:
+        print("Error creating actionable_todos table:", e)
+    finally:
+        cur.close()
+        conn.close()
+
+@router.get("/dashboard/todos")
+def get_todos():
+    create_todos_table_if_not_exists()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, message, type, status, created_at FROM actionable_todos ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "message": r[1],
+                "type": r[2],
+                "status": r[3],
+                "time": r[4].strftime("%I:%M %p") if r[4] else "Just now"
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        print("GET TODOS ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.post("/dashboard/todos")
+def add_todo(todo: TodoItem):
+    create_todos_table_if_not_exists()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO actionable_todos (message, type, status) VALUES (%s, %s, 'pending') RETURNING id, message, type, status, created_at",
+            (todo.message, todo.type)
+        )
+        conn.commit()
+        r = cur.fetchone()
+        return {
+            "id": r[0],
+            "message": r[1],
+            "type": r[2],
+            "status": r[3],
+            "time": r[4].strftime("%I:%M %p") if r[4] else "Just now"
+        }
+    except Exception as e:
+        print("POST TODOS ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.put("/dashboard/todos/{todo_id}/toggle")
+def toggle_todo(todo_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT status FROM actionable_todos WHERE id = %s", (todo_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Todo not found")
+        
+        new_status = 'completed' if row[0] == 'pending' else 'pending'
+
+        cur.execute("UPDATE actionable_todos SET status = %s WHERE id = %s RETURNING status", (new_status, todo_id))
+        conn.commit()
+        return {"id": todo_id, "status": cur.fetchone()[0]}
+    except Exception as e:
+        print("PUT TODOS ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.delete("/dashboard/todos/{todo_id}")
+def delete_todo(todo_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM actionable_todos WHERE id = %s", (todo_id,))
+        conn.commit()
+        return {"detail": "Todo deleted successfully"}
+    except Exception as e:
+        print("DELETE TODOS ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ----------------- CSV EXPORT RISK BOARD -----------------
+
+@router.get("/dashboard/export-risk-board")
+def export_risk_board():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT p.project_name, count(pa.employee_id) as res_count
+            FROM projects p
+            LEFT JOIN projects_allocation pa ON pa.project_id = p.project_id
+            GROUP BY p.project_name
+            ORDER BY res_count ASC
+        """)
+        risk_rows = cur.fetchall()
+        projects_at_risk = []
+        for r in risk_rows:
+            if r[1] == 0:
+                projects_at_risk.append([r[0], "Internal", "High", "No resources assigned", r[1], 20])
+            elif r[1] < 3:
+                projects_at_risk.append([r[0], "Internal", "Medium", f"Under-resourced ({r[1]} member(s))", r[1], 55])
+            else:
+                projects_at_risk.append([r[0], "Internal", "Low", "Sufficient resources", r[1], 100])
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Project Name", "Client", "Delivery Risk", "Risk Reason", "Resource Count", "Health %"])
+        writer.writerows(projects_at_risk)
+        
+        output.seek(0)
+        return StreamingResponse(
+            output, 
+            media_type="text/csv", 
+            headers={"Content-Disposition": "attachment; filename=delivery_risk_board.csv"}
+        )
+
+    except Exception as e:
+        print("CSV EXPORT ERROR:", e)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()

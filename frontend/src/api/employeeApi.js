@@ -134,6 +134,18 @@ export const createEmployee = async (employeeData) => {
     return res.data;
 };
 
+// Update employee
+export const updateEmployee = async (id, employeeData) => {
+    const res = await api.put(`/employees/${id}`, employeeData);
+    return res.data;
+};
+
+// Delete employee
+export const deleteEmployee = async (id) => {
+    const res = await api.delete(`/employees/${id}`);
+    return res.data;
+};
+
 // Fetch action inbox
 export const fetchActionInbox = async () => {
     try {

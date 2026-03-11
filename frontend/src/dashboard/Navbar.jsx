@@ -39,7 +39,7 @@ const Navbar = () => {
 
                 <div className={`px-3 mb-10 flex items-center gap-3 ${isCollapsed ? 'justify-center' : ''}`}>
                     <CD_Blue className="w-6 h-6 flex-shrink-0" />
-                    {!isCollapsed && <span className="text-sm font-bold tracking-wide whitespace-nowrap overflow-hidden">Dashboard</span>}
+                    {!isCollapsed && <span className="text-sm font-bold tracking-wide whitespace-nowrap overflow-hidden">Utiliza-AI</span>}
                 </div>
 
                 <nav className="flex-1 px-2 space-y-2">

@@ -117,3 +117,74 @@ def projects_list():
         conn.close()
 
 
+@router.post("")
+def create_project(proj: ProjectCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (proj.project_id,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Project ID already exists")
+
+        cur.execute("""
+            INSERT INTO projects (project_id, project_name, project_status, billable, start_date, end_date)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (proj.project_id, proj.project_name, proj.project_status, proj.billable, proj.start_date, proj.end_date))
+        
+        conn.commit()
+        return {"detail": "Project created successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.put("/{project_id}")
+def update_project(project_id: str, proj: ProjectCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (project_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        cur.execute("""
+            UPDATE projects SET
+                project_id = %s, project_name = %s, project_status = %s,
+                billable = %s, start_date = %s, end_date = %s
+            WHERE project_id = %s
+        """, (proj.project_id, proj.project_name, proj.project_status, proj.billable, proj.start_date, proj.end_date, project_id))
+        
+        conn.commit()
+        return {"detail": "Project updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.delete("/{project_id}")
+def delete_project(project_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (project_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Due to foreign keys, delete dependent records
+        cur.execute("DELETE FROM projects_allocation WHERE project_id = %s", (project_id,))
+        
+        # Finally delete project
+        cur.execute("DELETE FROM projects WHERE project_id = %s", (project_id,))
+
+        conn.commit()
+        return {"detail": "Project deleted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()

@@ -14,8 +14,9 @@ import {
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { getEmployeeById } from '../../api/employeeApi'
+import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
+import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 
 const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -100,6 +101,8 @@ const EmployeeDetails = () => {
     const [error, setError] = useState(null);
     const [showDetailedSkills, setShowDetailedSkills] = useState(false);
     const [showAllSkills, setShowAllSkills] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const SKILLS_PREVIEW_COUNT = 7;
 
     useEffect(() => {
@@ -281,6 +284,25 @@ const EmployeeDetails = () => {
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
+            <ConfirmDeleteModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={async () => {
+                    setIsDeleting(true);
+                    try {
+                        await deleteEmployee(id);
+                        navigate('/info/list');
+                    } catch (err) {
+                        console.error('Delete failed', err);
+                        alert('Delete failed');
+                    } finally {
+                        setIsDeleting(false);
+                        setIsDeleteModalOpen(false);
+                    }
+                }}
+                itemName={userData.name}
+                isDeleting={isDeleting}
+            />
 
             {/* Back Button */}
             <div>
@@ -295,6 +317,12 @@ const EmployeeDetails = () => {
 
             {/* 1. Top Profile Header */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
+                {/* Actions */}
+                <div className="absolute top-4 right-4 flex items-center gap-2">
+                    <button onClick={() => navigate('/info/add-employee', { state: { editData: userData, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
+                    <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors">Delete</button>
+                </div>
+
                 {/* Profile Image */}
                 <div className="flex-shrink-0">
                     <div className="w-24 h-24 rounded-full border-4 border-slate-50 overflow-hidden shadow-sm relative bg-white group">
