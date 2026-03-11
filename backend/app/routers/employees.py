@@ -1,5 +1,39 @@
 from fastapi import APIRouter, HTTPException
 from app.database import get_db_connection
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import date
+import uuid
+
+class ProjectAllocationInput(BaseModel):
+    project_id: str
+    project_role: str
+    project_allocation: int
+    project_start_date: date
+    project_end_date: Optional[date] = None
+
+class CertificateInput(BaseModel):
+    name: str
+
+class EmployeeCreateUpdate(BaseModel):
+    employee_id: str
+    employee_name: str
+    email: str
+    phone: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    address: Optional[str] = None
+    photo_url: Optional[str] = None
+    date_of_joining: date
+    role_designation: str
+    department: str
+    employment_type: str
+    location: str
+    work_mode: str
+    employee_status: str
+    employee_allocations: int
+    skills: List[str] = []
+    projects: List[ProjectAllocationInput] = []
+    certificates: List[CertificateInput] = []
 
 router = APIRouter()
 
@@ -520,4 +554,207 @@ def get_employee_by_id(employee_id: str):
     finally:
         cur.close()
         conn.close()
- 
+
+@router.post("/employees")
+def create_employee(emp: EmployeeCreateUpdate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Check if exists
+        cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (emp.employee_id,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Employee ID already exists")
+
+        # 1. Insert into employee_master
+        phone_numeric = int(''.join(filter(str.isdigit, str(emp.phone)))) if emp.phone else None
+        cur.execute("""
+            INSERT INTO employee_master (
+                employee_id, employee_name, email_id, phone_number, location,
+                mode_of_work, date_of_joining, role_designation, department,
+                employee_type, photo_url
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            emp.employee_id, emp.employee_name, emp.email, phone_numeric, emp.location,
+            emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
+            emp.employment_type, emp.photo_url
+        ))
+
+        # 2. Insert into employee_master_pro
+        cur.execute("""
+            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations)
+            VALUES (%s, %s, %s)
+        """, (emp.employee_id, emp.employee_status, emp.employee_allocations))
+
+        # 3. Handle skills
+        for skill_name in emp.skills:
+            cur.execute("SELECT skill_id FROM skills WHERE skill_name = %s", (skill_name,))
+            skill_row = cur.fetchone()
+            if skill_row:
+                skill_id = skill_row[0]
+            else:
+                cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id", (skill_name,))
+                skill_id = cur.fetchone()[0]
+            
+            cur.execute("""
+                INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience)
+                VALUES (%s, %s, 1, 0)
+            """, (emp.employee_id, skill_id))
+
+        # 4. Handle projects allocation
+        for proj in emp.projects:
+            allocation_id = str(uuid.uuid4())
+            cur.execute("""
+                INSERT INTO projects_allocation (
+                    allocation_id, employee_id, project_id, role_in_project,
+                    allocation_percentage, allocation_start_date, allocation_end_date, project_tags
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
+            """, (
+                allocation_id, emp.employee_id, proj.project_id, proj.project_role,
+                proj.project_allocation, proj.project_start_date, proj.project_end_date
+            ))
+
+        # 5. Handle certificates
+        for cert in emp.certificates:
+            cur.execute("""
+                INSERT INTO certificates (certificate_name) VALUES (%s)
+                ON CONFLICT DO NOTHING RETURNING certificate_id
+            """, (cert.name,))
+            cert_id_row = cur.fetchone()
+            if not cert_id_row:
+                cur.execute("SELECT certificate_id FROM certificates WHERE certificate_name = %s", (cert.name,))
+                cert_id_row = cur.fetchone()
+            
+            if cert_id_row:
+                cert_id = cert_id_row[0]
+                cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s)", (emp.employee_id, cert_id))
+
+        conn.commit()
+        return {"detail": "Employee created successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.put("/employees/{employee_id}")
+def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        # 1. Update employee_master
+        phone_numeric = int(''.join(filter(str.isdigit, str(emp.phone)))) if emp.phone else None
+        
+        # Don't update photo if it wasn't provided (e.g., partial update or huge base64 wasn't sent)
+        photo_update_sql = "photo_url = %s," if emp.photo_url else ""
+        photo_param = [emp.photo_url] if emp.photo_url else []
+
+        cur.execute(f"""
+            UPDATE employee_master SET
+                employee_name = %s, email_id = %s, phone_number = %s, location = %s,
+                mode_of_work = %s, date_of_joining = %s, role_designation = %s, department = %s,
+                employee_type = %s, {photo_update_sql} employee_id = %s
+            WHERE employee_id = %s
+        """, [
+            emp.employee_name, emp.email, phone_numeric, emp.location,
+            emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
+            emp.employment_type
+        ] + photo_param + [emp.employee_id, employee_id])
+
+        # 2. Update employee_master_pro
+        # First check if exists in pro, if not insert
+        cur.execute("SELECT employee_id FROM employee_master_pro WHERE employee_id = %s", (employee_id,))
+        if cur.fetchone():
+            cur.execute("""
+                UPDATE employee_master_pro SET
+                    employee_status = %s, employee_allocations = %s, employee_id = %s
+                WHERE employee_id = %s
+            """, (emp.employee_status, emp.employee_allocations, emp.employee_id, employee_id))
+        else:
+            cur.execute("""
+                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations)
+                VALUES (%s, %s, %s)
+            """, (emp.employee_id, emp.employee_status, emp.employee_allocations))
+
+        # 3. Update skills (delete old, insert new)
+        cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
+        for skill_name in emp.skills:
+            cur.execute("SELECT skill_id FROM skills WHERE skill_name = %s", (skill_name,))
+            skill_row = cur.fetchone()
+            if skill_row:
+                skill_id = skill_row[0]
+            else:
+                cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id", (skill_name,))
+                skill_id = cur.fetchone()[0]
+            cur.execute("INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience) VALUES (%s, %s, 1, 0)", (emp.employee_id, skill_id))
+
+        # 4. Update projects (delete old, insert new)
+        cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (employee_id,))
+        for proj in emp.projects:
+            allocation_id = str(uuid.uuid4())
+            cur.execute("""
+                INSERT INTO projects_allocation (
+                    allocation_id, employee_id, project_id, role_in_project,
+                    allocation_percentage, allocation_start_date, allocation_end_date, project_tags
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
+            """, (
+                allocation_id, emp.employee_id, proj.project_id, proj.project_role,
+                proj.project_allocation, proj.project_start_date, proj.project_end_date
+            ))
+
+        # 5. Update certificates
+        cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (employee_id,))
+        for cert in emp.certificates:
+            cur.execute("""
+                INSERT INTO certificates (certificate_name) VALUES (%s)
+                ON CONFLICT DO NOTHING RETURNING certificate_id
+            """, (cert.name,))
+            cert_id_row = cur.fetchone()
+            if not cert_id_row:
+                cur.execute("SELECT certificate_id FROM certificates WHERE certificate_name = %s", (cert.name,))
+                cert_id_row = cur.fetchone()
+            
+            if cert_id_row:
+                cert_id = cert_id_row[0]
+                cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s)", (emp.employee_id, cert_id))
+
+
+        conn.commit()
+        return {"detail": "Employee updated successfully", "new_id": emp.employee_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@router.delete("/employees/{employee_id}")
+def delete_employee(employee_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        # Due to foreign keys, delete dependent records first
+        cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
+        cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (employee_id,))
+        cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (employee_id,))
+        cur.execute("DELETE FROM employee_master_pro WHERE employee_id = %s", (employee_id,))
+        
+        # Finally delete employee
+        cur.execute("DELETE FROM employee_master WHERE employee_id = %s", (employee_id,))
+
+        conn.commit()
+        return {"detail": "Employee deleted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()

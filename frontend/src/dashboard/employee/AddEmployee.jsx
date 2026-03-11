@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
-import { createEmployee } from '../../api/employeeApi';
+import { createEmployee, updateEmployee } from '../../api/employeeApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
 
 const AddEmployee = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const isEditMode = location.state?.isEditMode || false;
+    const editData = location.state?.editData || null;
+
     const [currentSection, setCurrentSection] = useState('personal'); // personal, professional, project, preview
     const [loading, setLoading] = useState(false);
     const [skillSearch, setSkillSearch] = useState('');
@@ -47,6 +51,39 @@ const AddEmployee = () => {
         // Projects - now array for multiple projects
         projects: []
     });
+
+    useEffect(() => {
+        if (isEditMode && editData) {
+            setFormData({
+                employee_id: editData.id || editData.employee_id || '',
+                employee_name: editData.name || editData.employee_name || '',
+                email: editData.email || '',
+                phone: editData.phone || '',
+                date_of_birth: editData.date_of_birth || '',
+                address: editData.address || '',
+                photo_url: editData.photo_url || editData.profilePic || '',
+                date_of_joining: editData.joiningDate || editData.date_of_joining || '',
+                role_designation: editData.designation || editData.role_designation || '',
+                department: editData.department || '',
+                employment_type: editData.employment_type || 'Full-time',
+                location: editData.status?.location || editData.location || '',
+                work_mode: editData.status?.workMode || editData.work_mode || 'Hybrid',
+                employee_status: editData.status?.allocated || editData.employee_status || 'Bench',
+                employee_allocations: typeof editData.employee_allocations === 'number' ? editData.employee_allocations : 0,
+                skills: (editData.masterSkills || []).map(s => typeof s === 'string' ? s : s.name),
+                certificates: (editData.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
+                projects: (editData.projects || []).map(p => ({
+                    project_id: p.project_id || p.name || '',
+                    project_role: p.project_role || '',
+                    project_allocation: typeof p.value === 'number' ? p.value : (p.project_allocation || 0),
+                    project_start_date: p.start_date || p.project_start_date || '',
+                    project_end_date: p.end_date || p.project_end_date || ''
+                }))
+            });
+            setShowPreview(true);
+            setCompletedSections(['personal', 'professional', 'project', 'preview']);
+        }
+    }, [isEditMode, editData]);
 
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
@@ -268,17 +305,37 @@ const AddEmployee = () => {
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            // TODO: Call API to create employee
-            console.log('Submitting:', formData);
+            const payload = {
+                employee_id: formData.employee_id,
+                employee_name: formData.employee_name,
+                email: formData.email,
+                phone: formData.phone || '',
+                date_of_birth: formData.date_of_birth || null,
+                address: formData.address || null,
+                photo_url: formData.photo_url || null,
+                date_of_joining: formData.date_of_joining,
+                role_designation: formData.role_designation,
+                department: formData.department,
+                employment_type: formData.employment_type,
+                location: formData.location,
+                work_mode: formData.work_mode,
+                employee_status: formData.employee_status,
+                employee_allocations: formData.employee_allocations,
+                skills: formData.skills,
+                certificates: formData.certificates.map(c => typeof c === 'string' ? { certificate_name: c } : { certificate_name: c.name }),
+                projects: formData.projects
+            };
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (isEditMode) {
+                await updateEmployee(formData.employee_id, payload);
+            } else {
+                await createEmployee(payload);
+            }
 
-            // Navigate back to employee list
-            navigate('/info/employee');
+            navigate('/info/list');
         } catch (error) {
-            console.error('Error creating employee:', error);
-            alert('Failed to create employee');
+            console.error('Error saving employee:', error);
+            alert('Failed to save employee. ' + (error.response?.data?.detail || error.message));
         } finally {
             setLoading(false);
         }
@@ -297,6 +354,7 @@ const AddEmployee = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="EMP001"
                         required
+                        disabled={isEditMode}
                     />
                 </div>
                 <div>
@@ -899,8 +957,8 @@ const AddEmployee = () => {
                         <ArrowLeft size={20} className="text-gray-600" />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Add New Employee</h1>
-                        <p className="text-gray-500 text-sm">Fill in the details to onboard a new team member</p>
+                        <h1 className="text-2xl font-bold text-gray-800">{isEditMode ? 'Edit Employee' : 'Add New Employee'}</h1>
+                        <p className="text-gray-500 text-sm">{isEditMode ? 'Update employee details' : 'Fill in the details to onboard a new team member'}</p>
                     </div>
                 </div>
             </div>
@@ -1014,7 +1072,7 @@ const AddEmployee = () => {
                             className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
                         >
                             <Check size={16} />
-                            {loading ? 'Creating...' : 'Create Employee'}
+                            {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Employee' : 'Create Employee')}
                         </button>
                     )}
                 </div>

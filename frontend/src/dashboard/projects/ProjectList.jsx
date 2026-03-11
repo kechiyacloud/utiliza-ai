@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Pencil, Eye } from 'lucide-react';
+import { Search, Filter, Pencil, Eye, Trash2 } from 'lucide-react';
 import ProjectDetailsPanel from './ProjectDetailsPanel';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
+import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import { deleteProject, updateProject } from '../../api/projectsApi';
 
 const ProjectList = ({ projects, activeCardFilter }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -11,6 +13,10 @@ const ProjectList = ({ projects, activeCardFilter }) => {
     const [selectedProject, setSelectedProject] = useState(null);
     const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+
+    // Delete state
+    const [projectToDelete, setProjectToDelete] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -84,13 +90,55 @@ const ProjectList = ({ projects, activeCardFilter }) => {
         setIsEditFormOpen(true);
     };
 
-    const handleSaveProject = (updatedProject) => {
-        console.log("Project Updated:", updatedProject);
-        // Update logic would go here
+    const handleDeleteClick = (project) => {
+        setProjectToDelete(project);
+    };
+
+    const confirmDelete = async () => {
+        if (!projectToDelete) return;
+        setIsDeleting(true);
+        try {
+            await deleteProject(projectToDelete.id);
+            // In a real app we'd refresh the list, but since projects is passed as a prop,
+            // we'd probably need a parent callback or context.
+            // For now, we'll just reload the page as a quick refresh mechanism:
+            window.location.reload();
+        } catch (e) {
+            console.error("Failed to delete project", e);
+            alert("Failed to delete project");
+        } finally {
+            setIsDeleting(false);
+            setProjectToDelete(null);
+        }
+    };
+
+    const handleSaveProject = async (updatedProject) => {
+        try {
+            const payload = {
+                project_id: updatedProject.id,
+                project_name: updatedProject.name,
+                project_status: updatedProject.status,
+                billable: updatedProject.type === 'Client' ? 'Yes' : 'No',
+                start_date: updatedProject.startDate || null,
+                end_date: updatedProject.endDate || null
+            };
+            await updateProject(updatedProject.id, payload);
+            window.location.reload(); // Simple refresh to show new data
+        } catch (e) {
+            console.error("Failed to update project", e);
+            alert("Failed to update. " + (e.response?.data?.detail || e.message));
+        }
     };
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full relative">
+            <ConfirmDeleteModal
+                isOpen={!!projectToDelete}
+                onClose={() => setProjectToDelete(null)}
+                onConfirm={confirmDelete}
+                itemName={projectToDelete?.name || "Project"}
+                isDeleting={isDeleting}
+            />
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-gray-800">All Projects <span className="text-gray-400 font-normal">({filteredProjects.length})</span></h3>
 
@@ -179,6 +227,16 @@ const ProjectList = ({ projects, activeCardFilter }) => {
                                         title="Edit Project"
                                     >
                                         <Pencil size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteClick(project);
+                                        }}
+                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                        title="Delete Project"
+                                    >
+                                        <Trash2 size={16} />
                                     </button>
                                 </td>
                             </tr>
