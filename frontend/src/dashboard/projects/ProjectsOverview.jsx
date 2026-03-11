@@ -1,21 +1,40 @@
 import React, { useState } from 'react';
-import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft } from 'lucide-react';
+import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, TrendingUp, TrendingDown, CalendarClock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AddProjectPanel from './AddProjectPanel';
 
-const StatCard = ({ label, value, icon: Icon, colorClass, onClick, active }) => {
+const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, trendUp, onClick, active }) => {
     return (
         <div
             onClick={onClick}
-            className={`bg-white p-4 rounded-xl shadow-sm border ${active ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-100'} flex justify-between items-center min-w-[140px] flex-1 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all`}
+            className={`bg-white p-4 rounded-xl shadow-sm border ${active ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-100'} flex flex-col justify-between min-w-[140px] flex-1 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all relative overflow-hidden group`}
         >
-            <div className="flex flex-col">
-                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-1">{label}</span>
-                <span className="text-2xl font-extrabold text-gray-800">{value}</span>
+            {/* Background gradient effect */}
+            <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${colorClass.split(' ')[0]}`}></div>
+
+            <div className="flex justify-between items-start mb-3 relative z-10">
+                <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10 text-opacity-100`}>
+                    <Icon size={18} className={colorClass.replace('bg-', 'text-').replace('100', '500')} />
+                </div>
+
+                {trend && (
+                    <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                        {trendUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {trend}%
+                    </div>
+                )}
             </div>
-            <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10 text-opacity-100`}>
-                <Icon size={20} className={colorClass.replace('bg-', 'text-').replace('10', '500')} />
+
+            <div className="flex flex-col relative z-10">
+                <span className="text-3xl font-bold text-slate-900 tracking-tight mb-1">{value}</span>
+                <span className="text-slate-500 text-[10px] font-bold tracking-wider uppercase mb-1">{label}</span>
+                {description && (
+                    <span className="text-slate-400 text-[10px] font-medium">{description}</span>
+                )}
             </div>
+
+            {/* Colored Status indicator line at the bottom */}
+            <div className={`absolute bottom-0 left-0 w-full h-1 opacity-50 ${colorClass.split(' ')[0]}`}></div>
         </div>
     );
 };
@@ -33,7 +52,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
     };
 
     return (
-        <div className="w-full flex flex-col gap-6 mb-8">
+        <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-4">
                     {location.state?.showBack && (
@@ -46,58 +65,85 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
                         </button>
                     )}
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Projects Overview</h1>
-                        <p className="text-gray-500">Manage and monitor all active and upcoming projects.</p>
+                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Projects Overview</h1>
+                        <p className="text-gray-500 text-sm mt-1 font-medium">Manage and monitor all active and upcoming projects.</p>
                     </div>
                 </div>
                 <button
                     onClick={() => setIsAddPanelOpen(true)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-lg shadow-blue-200"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
                 >
                     + Add New Project
                 </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {/* 6 Metric Cards Layout */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
                 <StatCard
                     label="Total Projects"
                     value={stats.totalProjects}
+                    description="All-time tracked projects"
                     icon={Briefcase}
-                    colorClass="bg-blue-100 text-blue-500"
+                    colorClass="bg-indigo-100 text-indigo-500"
+                    trend="12"
+                    trendUp={true}
                     active={activeFilter === null}
                     onClick={() => onFilterChange(null)}
                 />
                 <StatCard
-                    label="Internal Projects"
-                    value={stats.internalProjects}
-                    icon={Radio}
-                    colorClass="bg-indigo-100 text-indigo-500"
-                    active={activeFilter === 'Internal'}
-                    onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
-                />
-                <StatCard
                     label="Client Projects"
                     value={stats.clientProjects}
+                    description="Billable external work"
                     icon={Globe}
                     colorClass="bg-sky-100 text-sky-500"
+                    trend="5"
+                    trendUp={true}
                     active={activeFilter === 'Client'}
                     onClick={() => onFilterChange(activeFilter === 'Client' ? null : 'Client')}
                 />
                 <StatCard
-                    label="Ongoing"
-                    value={stats.ongoing}
-                    icon={Activity}
-                    colorClass="bg-blue-100 text-blue-500"
-                    active={activeFilter === 'Ongoing'}
-                    onClick={() => onFilterChange(activeFilter === 'Ongoing' ? null : 'Ongoing')}
+                    label="Internal Projects"
+                    value={stats.internalProjects}
+                    description="Non-billable initiatives"
+                    icon={Radio}
+                    colorClass="bg-purple-100 text-purple-500"
+                    trend="2"
+                    trendUp={false}
+                    active={activeFilter === 'Internal'}
+                    onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
                 />
                 <StatCard
-                    label="POCs Count"
-                    value={stats.pocsCount}
+                    label="Partner Projects"
+                    value={stats.partnerCount || stats.partner_projects}
+                    description="External partner engagements"
                     icon={FileText}
-                    colorClass="bg-blue-100 text-blue-500"
-                    active={activeFilter === 'POC'}
-                    onClick={() => onFilterChange(activeFilter === 'POC' ? null : 'POC')}
+                    colorClass="bg-amber-100 text-amber-500"
+                    trend="15"
+                    trendUp={true}
+                    active={activeFilter === 'Partner'}
+                    onClick={() => onFilterChange(activeFilter === 'Partner' ? null : 'Partner')}
+                />
+                <StatCard
+                    label="Upcoming Projects"
+                    value={stats.upcoming_projects}
+                    description="Not yet started"
+                    icon={CalendarClock}
+                    colorClass="bg-violet-100 text-violet-500"
+                    trend="4"
+                    trendUp={true}
+                    active={activeFilter === 'Upcoming'}
+                    onClick={() => onFilterChange(activeFilter === 'Upcoming' ? null : 'Upcoming')}
+                />
+                <StatCard
+                    label="Completed Projects"
+                    value={stats.completedProjects}
+                    description="Successfully delivered"
+                    icon={CheckCircle}
+                    colorClass="bg-emerald-100 text-emerald-500"
+                    trend="24"
+                    trendUp={true}
+                    active={activeFilter === 'Completed'}
+                    onClick={() => onFilterChange(activeFilter === 'Completed' ? null : 'Completed')}
                 />
             </div>
 

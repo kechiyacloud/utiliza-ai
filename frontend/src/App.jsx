@@ -22,6 +22,7 @@ import Employee from './dashboard/Employee'
 import EmployeeDetails from './dashboard/employee/EmployeeDetails'
 import EmployeeMasterList from './dashboard/employee/EmployeeMasterList'
 import AddEmployee from './dashboard/employee/AddEmployee'
+import ProjectDetailsPage from './dashboard/projects/ProjectDetailsPage';
 import Organization from './dashboard/Organization'
 // import DataInfrastructureTest from './test/DataInfrastructureTest'
 function App() {
@@ -42,6 +43,8 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path='dashboard' element={<Dashboard />} />
             <Route path='projects' element={<Projects />} />
+            <Route path='projects/:id' element={<ProjectDetailsPage />} />
+            <Route path='projects/:id/allocation' element={<ProjectDetailsPage />} />
             <Route path='employee' element={<Employee />} />
             <Route path='employee/add' element={<AddEmployee />} />
             <Route path='employee/:id' element={<EmployeeDetails />} />
@@ -59,6 +62,8 @@ function App() {
             <Route index element={<Dashboard />} />       
             <Route path='dashboard' element={<Dashboard />} />
             <Route path='projects' element={<Projects />} />
+            <Route path='projects/:id' element={<ProjectDetailsPage />} />
+            <Route path='projects/:id/allocation' element={<ProjectDetailsPage />} />
             <Route path='employee' element={<Employee />} />
             <Route path='client' element={<Client />} />
             <Route path='allocation' element={<Allocations />} />

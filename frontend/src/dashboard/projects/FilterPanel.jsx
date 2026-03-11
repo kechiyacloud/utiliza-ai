@@ -88,7 +88,7 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     <option value="">All Types</option>
                                     <option value="Client">Client</option>
                                     <option value="Internal">Internal</option>
-                                    <option value="POC">POC</option>
+                                    <option value="Partner">Partner</option>
                                 </select>
                             </div>
 

@@ -114,7 +114,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 >
                                     <option value="Client">Client</option>
                                     <option value="Internal">Internal</option>
-                                    <option value="POC">POC</option>
+                                    <option value="Partner">Partner</option>
                                 </select>
                             </div>
 

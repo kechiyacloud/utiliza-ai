@@ -90,7 +90,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                             >
                                 <option value="Client">Client</option>
                                 <option value="Internal">Internal</option>
-                                <option value="POC">POC</option>
+                                <option value="Partner">Partner</option>
                             </select>
                         </div>
                         <div className="flex-1 flex flex-col gap-1">
