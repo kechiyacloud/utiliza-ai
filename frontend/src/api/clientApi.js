@@ -1,14 +1,23 @@
-// Data for Client Page
+import api from './axios';
+
+export const createClient = async (clientData) => {
+    try {
+        const response = await api.post('/clients', clientData);
+        return response.data;
+    } catch (error) {
+        console.error("Error creating client", error);
+        throw error;
+    }
+};
+
+// Existing data mocked out
 const clientData = {
-    // Top Stats
     stats: {
         totalClients: { value: 0, label: "Total Clients", trend: "+0 this mo" },
         activeProjects: { value: 0, label: "Active Engagement", trend: "Normal" },
         totalRevenue: { value: "$0", label: "Total Revenue", trend: "0%" },
         clientSatisfaction: { value: "0", label: "Avg Satisfaction", trend: "Normal" }
     },
-
-    // Client Directory
     clients: []
 };
 

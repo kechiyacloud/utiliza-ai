@@ -5,7 +5,7 @@ import ClientKPIs from './clients/ClientKPIs';
 import ClientList from './clients/ClientList';
 import ClientDetails from './clients/ClientDetails';
 import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal } from './clients/ClientModals';
-import { fetchClientData } from '../api/clientApi';
+import { fetchClientData, createClient } from '../api/clientApi';
 
 const Client = () => {
   const navigate = useNavigate();
@@ -38,18 +38,24 @@ const Client = () => {
     loadData();
   }, []);
 
-  const handleAddClient = (newClientData) => {
-    const newClient = {
-      id: clientsData.length + 1,
-      ...newClientData,
-      logo: newClientData.name.substring(0, 2).toUpperCase(),
-      activeProjects: 0,
-      projects: [], // Initialize with empty projects array
-      contact: "+1 (555) 000-0000" // Default
-    };
-    const updatedList = [...clientsData, newClient];
-    setClientsData(updatedList);
-    setSelectedClient(newClient); // Auto-select new client
+  const handleAddClient = async (newClientData) => {
+    try {
+      await createClient(newClientData);
+      // Optimistic UI update for mocked Client view
+      const newClient = {
+        ...newClientData,
+        logo: newClientData.name.substring(0, 2).toUpperCase(),
+        activeProjects: 0,
+        projects: [],
+        contact: "+1 (555) 000-0000"
+      };
+      const updatedList = [...clientsData, newClient];
+      setClientsData(updatedList);
+      setSelectedClient(newClient);
+    } catch (error) {
+      console.error("Failed to insert client into database", error);
+      alert("Failed to create client in DB");
+    }
   };
 
   const handleEditClient = (updatedClient) => {
