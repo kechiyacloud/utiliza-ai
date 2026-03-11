@@ -376,7 +376,7 @@ def get_possible_projects(employee_id: str):
             FROM projects p
             JOIN project_skills ps ON p.project_id = ps.project_id
             JOIN skills s ON ps.skill_id = s.skill_id
-            WHERE LOWER(p.project_status) IN ('running', 'in progress', 'live', 'active', 'poc')
+            WHERE LOWER(p.project_status) IN ('running', 'in progress', 'live', 'active')
         """)
         
         project_data = {}

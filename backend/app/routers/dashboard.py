@@ -23,11 +23,11 @@ def dashboard_infocards():
         cur.execute("SELECT COUNT(*) FROM employee_master")
         total_employees = cur.fetchone()[0]
 
-        # ---- Total Clients (Count of billable projects for now) ----
+        # ---- Total Clients (count of client-type projects) ----
         cur.execute("""
-            SELECT COUNT(*)
+            SELECT COUNT(DISTINCT client_id)
             FROM projects
-            WHERE LOWER(billable) LIKE '%billable%' AND LOWER(billable) NOT LIKE '%non%' OR LOWER(billable) = 'yes'
+            WHERE client_id IS NOT NULL
         """)
         total_clients = cur.fetchone()[0]
 

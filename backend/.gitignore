@@ -2,4 +2,9 @@ venv/
 __pycache__/
 *.pyc
 .env
- 
+
+# Diagnostic and temp scripts
+test_db.py
+dump_json.py
+schema_dump.json
+schema_dump.txt

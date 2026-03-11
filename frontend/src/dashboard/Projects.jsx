@@ -55,6 +55,7 @@ function Projects() {
       <ProjectList
         projects={data?.projects || []}
         activeCardFilter={activeCardFilter}
+        onRefresh={loadData}
       />
     </div>
   );

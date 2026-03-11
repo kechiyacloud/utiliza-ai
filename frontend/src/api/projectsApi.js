@@ -17,7 +17,9 @@ export const fetchProjectsData = async () => {
                 internalProjects: o.internal_projects || 0,
                 clientProjects: o.client_projects || 0,
                 ongoing: o.ongoing_projects || 0,
-                pocsCount: o.poc_projects || 0
+                partnerCount: o.partner_projects || 0,
+                completedProjects: o.completed_projects || 0,
+                upcoming_projects: o.upcoming_projects || 0,
             },
             projects: l.map((p) => {
                 // Determine display status pill color based on mapped status string from DB
@@ -25,10 +27,13 @@ export const fetchProjectsData = async () => {
                 let pillColor = "bg-gray-100 text-gray-600";
 
                 if (s === "in progress" || s === "running") pillColor = "bg-blue-100 text-blue-600";
-                else if (s === "completed" || s === "done" || s === "live" || s === "active") pillColor = "bg-green-100 text-green-600";
+                else if (s === "live" || s === "active") pillColor = "bg-green-100 text-green-600";
+                else if (s === "completed" || s === "done" || s === "ended" || s === "end") pillColor = "bg-emerald-100 text-emerald-600";
                 else if (s === "delayed" || s === "on hold") pillColor = "bg-red-100 text-red-600";
+                else if (s === "planned") pillColor = "bg-yellow-100 text-yellow-600";
 
-                const isClient = p.type && (p.type.toLowerCase() === 'billable' || p.type.toLowerCase() === 'yes' || p.type.toLowerCase().includes('billable'));
+                // Backend already maps billable to 'Client' or 'Internal' in the list endpoint
+                const type = p.type || 'Internal';
 
                 return {
                     id: p.project_id,
@@ -36,10 +41,10 @@ export const fetchProjectsData = async () => {
                     statusText: "Active", // Default placeholder for secondary health text
                     statusColor: "text-green-500",
                     resources: p.resource_count || 0,
-                    client: isClient ? 'Client' : 'Internal', // Basic mapping based on billable flag
+                    client: type,
                     startDate: p.start_date || "Not Set",
                     endDate: p.end_date || "TBD",
-                    type: isClient ? 'Client' : 'Internal',
+                    type: type,
                     status: p.status,
                     statusPillColor: pillColor,
                     icon: p.project_name ? p.project_name.charAt(0).toUpperCase() : "P",
@@ -56,7 +61,7 @@ export const fetchProjectsData = async () => {
         return {
             data: {
                 stats: {
-                    totalProjects: 0, internalProjects: 0, clientProjects: 0, ongoing: 0, pocsCount: 0
+                    totalProjects: 0, internalProjects: 0, clientProjects: 0, ongoing: 0, partnerCount: 0, completedProjects: 0
                 },
                 projects: []
             }
