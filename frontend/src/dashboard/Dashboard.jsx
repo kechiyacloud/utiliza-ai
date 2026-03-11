@@ -14,6 +14,7 @@ import {
 
 import { fetchDashboardData, fetchTodos, addTodo, toggleTodo, clearTodo, exportRiskBoard } from '../api/dashboardApi';
 import { createProject } from '../api/projectsApi';
+import { createClient } from '../api/clientApi';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
@@ -187,9 +188,16 @@ function Dashboard() {
     }
   };
 
-  const handleAddClient = (client) => {
-    console.log("New client from Dashboard:", client);
-    // Logic to add client
+  const handleAddClient = async (clientData) => {
+    try {
+      await createClient(clientData);
+      setIsClientModalOpen(false);
+      const res = await fetchDashboardData();
+      setData(res.data);
+    } catch (e) {
+      console.error("Failed to add client", e);
+      alert("Failed to create client");
+    }
   };
 
   if (loading) {

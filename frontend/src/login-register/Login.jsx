@@ -33,6 +33,7 @@ function Login() {
         password: formData.password
       })
 
+      localStorage.setItem("userEmail", formData.email);
       navigate("/info")
 
     } catch (err) {
@@ -44,7 +45,7 @@ function Login() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full">
-      <CD_Blue className="flex justify-center w-16 h-16 mb-2 mx-auto"/>
+      <CD_Blue className="flex justify-center w-16 h-16 mb-2 mx-auto" />
       <h2 className="text-white text-2xl font-bold text-center">
         Sign In
       </h2>
@@ -53,14 +54,14 @@ function Login() {
         One view <span className="mx-1">·</span> Every insight <span className="mx-1">·</span> Complete control
       </p>
 
-      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" required/>
+      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" required />
 
       <div className="relative input-field">
 
         <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="input-password" required />
 
         <button type="button" onClick={() => setShowPassword(!showPassword)} className="input-password-icon" >
-          {showPassword ? ( <EyeOff size={16} strokeWidth={1.6} /> ) : ( <Eye size={16} strokeWidth={1.6} /> )}
+          {showPassword ? (<EyeOff size={16} strokeWidth={1.6} />) : (<Eye size={16} strokeWidth={1.6} />)}
         </button>
 
       </div>

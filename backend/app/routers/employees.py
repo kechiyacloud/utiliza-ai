@@ -371,6 +371,25 @@ def get_employee_filter_options():
         cur.close()
         conn.close()
 
+@router.get("/employee/by-email/{email_id}")
+def get_employee_id_by_email(email_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s)", (email_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found with this email")
+        return {"employee_id": row[0]}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error looking up employee by email: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        cur.close()
+        conn.close()
+
 @router.get("/employees/{employee_id}")
 def get_employee_by_id(employee_id: str):
     conn = get_db_connection()
