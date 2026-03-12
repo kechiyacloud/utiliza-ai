@@ -1,0 +1,5 @@
+# Root ignores
+docker_build_output*.txt
+status*.txt
+*.log
+.env
