@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from typing import Optional, List
 
 router = APIRouter(prefix="/availability", tags=["Availability"])
@@ -72,7 +72,7 @@ def get_all_availability(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/filters")
 def get_availability_filters():
@@ -101,4 +101,4 @@ def get_availability_filters():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

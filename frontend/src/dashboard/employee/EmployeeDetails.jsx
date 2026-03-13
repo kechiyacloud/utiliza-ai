@@ -291,7 +291,7 @@ const EmployeeDetails = () => {
                     setIsDeleting(true);
                     try {
                         await deleteEmployee(id);
-                        navigate('/info/list');
+                        navigate('/info/employee');
                     } catch (err) {
                         console.error('Delete failed', err);
                         alert('Delete failed');
@@ -319,7 +319,7 @@ const EmployeeDetails = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
                 {/* Actions */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <button onClick={() => navigate('/info/add-employee', { state: { editData: userData, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
+                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
                     <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors">Delete</button>
                 </div>
 

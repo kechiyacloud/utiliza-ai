@@ -33,9 +33,6 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
 
 function Employee() {
   const navigate = useNavigate()
-  const [totalEmployee, setTotalEmployee] = useState(null)
-  const [benchEmployee, setBenchEmployee] = useState(null)
-  const [noticeEmployee, setNoticeEmployee] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
@@ -78,9 +75,6 @@ function Employee() {
         if (!mounted) return
 
         setAllEmployees(data)
-        setTotalEmployee(data.length)
-        setBenchEmployee(data.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length)
-        setNoticeEmployee(data.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length)
       } catch (err) {
         if (mounted) setError(err?.message || 'Failed to load')
       } finally {
@@ -99,6 +93,34 @@ function Employee() {
     search: searchQuery,
     cardFilter: cardFilter
   };
+
+  const baseGroup = useMemo(() => {
+    return allEmployees.filter(emp => {
+      // Apply filters but NOT the cardFilter so the cards themselves reflect the global pool correctly
+      const matchesDept = !combinedFilters.departments?.length || combinedFilters.departments.includes(emp.department);
+      const matchesType = !combinedFilters.types?.length || combinedFilters.types.includes(emp.employee_type);
+      const matchesLocation = !combinedFilters.locations?.length || combinedFilters.locations.includes(emp.location);
+      const matchesSkills = !combinedFilters.skills?.length || (emp.skills && combinedFilters.skills.some(s => emp.skills.includes(s)));
+      const matchesDesig = !combinedFilters.designations?.length || combinedFilters.designations.includes(emp.role_designation);
+
+      const sv = combinedFilters.search?.toLowerCase().trim();
+      const matchesSearch = !sv || (
+          emp.employee_name?.toLowerCase().includes(sv) ||
+          emp.employee_id?.toLowerCase().includes(sv) ||
+          emp.role_designation?.toLowerCase().includes(sv) ||
+          emp.location?.toLowerCase().includes(sv) ||
+          emp.department?.toLowerCase().includes(sv) ||
+          (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
+      );
+
+      return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
+    });
+  }, [allEmployees, combinedFilters]);
+
+  // Derived stats from the filtered group
+  const totalEmployeesCount = baseGroup.length;
+  const benchEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length;
+  const noticeEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
 
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
@@ -158,9 +180,6 @@ function Employee() {
                 }`}
             >
               <span className={`text-xs font-bold ${selectedDepts.length === 0 ? 'text-blue-700' : 'text-gray-700'}`}>All</span>
-              <span className={`text-[10px] font-medium mt-0.5 ${selectedDepts.length === 0 ? 'text-blue-500' : 'text-gray-400'}`}>
-                {allEmployees.length}
-              </span>
             </button>
             {allDepts.map(dept => {
               const count = allEmployees.filter(e => e.department === dept).length;
@@ -175,7 +194,6 @@ function Employee() {
                     }`}
                 >
                   <span className={`text-xs font-bold truncate max-w-[90px] ${isActive ? 'text-blue-700' : 'text-gray-700'}`} title={dept}>{dept}</span>
-                  <span className={`text-[10px] font-medium mt-0.5 ${isActive ? 'text-blue-500' : 'text-gray-400'}`}>{count}</span>
                 </button>
               );
             })}
@@ -187,7 +205,7 @@ function Employee() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           label="Total Employees"
-          value={totalEmployee}
+          value={totalEmployeesCount}
           icon={Users}
           colorClass="bg-blue-500"
           loading={loading}
@@ -197,7 +215,7 @@ function Employee() {
         />
         <StatCard
           label="Bench Employees"
-          value={benchEmployee}
+          value={benchEmployeesCount}
           icon={BriefcaseBusiness}
           colorClass="bg-orange-500"
           loading={loading}
@@ -207,7 +225,7 @@ function Employee() {
         />
         <StatCard
           label="Notice Period"
-          value={noticeEmployee}
+          value={noticeEmployeesCount}
           icon={Hourglass}
           colorClass="bg-red-500"
           loading={loading}
@@ -230,6 +248,8 @@ function Employee() {
       {/* Employee Table */}
       <div className='flex-1 w-full mt-4'>
         <EmployeeTable
+          employees={allEmployees}
+          loading={loading}
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
           filters={combinedFilters}
           searchValue={searchQuery}

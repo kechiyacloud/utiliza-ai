@@ -62,29 +62,20 @@ function Dashboard() {
   const [isDeletingTodo, setIsDeletingTodo] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadAllData = async () => {
       try {
         const res = await fetchDashboardData();
         setData(res.data);
+        if (res.todos) {
+          setTodos(res.todos);
+        }
       } catch (error) {
         console.error("Failed to load dashboard data", error);
       } finally {
         setLoading(false);
       }
     };
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    const loadTodos = async () => {
-      try {
-        const data = await fetchTodos();
-        setTodos(data);
-      } catch (e) {
-        console.error('Failed to load todos', e);
-      }
-    };
-    loadTodos();
+    loadAllData();
   }, []);
 
   const handleToggleTodo = async (id) => {
@@ -182,6 +173,7 @@ function Dashboard() {
       // Optional: Refresh dashboard data
       const res = await fetchDashboardData();
       setData(res.data);
+      if (res.todos) setTodos(res.todos);
     } catch (e) {
       console.error("Failed to add project", e);
       alert("Failed to create project");
@@ -194,6 +186,7 @@ function Dashboard() {
       setIsClientModalOpen(false);
       const res = await fetchDashboardData();
       setData(res.data);
+      if (res.todos) setTodos(res.todos);
     } catch (e) {
       console.error("Failed to add client", e);
       alert("Failed to create client");
@@ -310,7 +303,7 @@ function Dashboard() {
           {/* Moved Top Cards Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="dashboard-cards">
             <ExecutiveDashboardCards data={data?.executiveCards} />
-            <EmployeeMonthCard />
+            <EmployeeMonthCard onClick={(emp) => navigate(`/info/employee/${emp.employee_id}`, { state: { employee: emp } })} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">

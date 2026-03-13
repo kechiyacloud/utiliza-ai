@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronRight, Search, Filter, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 
 // AllocationBar — color matches EmployeeStatusTag palette
@@ -46,34 +45,16 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
-    const [employees, setEmployees] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
         const saved = sessionStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
     });
 
-    useEffect(() => {
-        const fetchEmployees = async () => {
-            setLoading(true);
-            try {
-                const data = await getEmployeeList();
-                setEmployees(data);
-            } catch (err) {
-                console.error("Error fetching employees:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchEmployees();
-    }, []);
-
     // Count active filters for badge
     const activeFilterCount = [
-        ...(filters?.departments || []),
         ...(filters?.types || []),
         ...(filters?.skills || []),
         ...(filters?.locations || []),
