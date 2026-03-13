@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from pydantic import BaseModel
 from datetime import date
 
@@ -72,10 +72,10 @@ def projects_overview():
         """)
         ongoing = cur.fetchone()[0]
 
-        # partner projects
+        # partner projects - explicitly set as Partner type
         cur.execute("""
             SELECT COUNT(*) FROM projects
-            WHERE project_type = 'Partner'
+            WHERE LOWER(COALESCE(project_type, 'client')) = 'partner'
         """)
         partner = cur.fetchone()[0]
 
@@ -93,17 +93,17 @@ def projects_overview():
         """)
         upcoming = cur.fetchone()[0]
 
-        # internal
+        # internal - explicitly Internal type
         cur.execute("""
             SELECT COUNT(*) FROM projects
-            WHERE project_type = 'Internal'
+            WHERE LOWER(COALESCE(project_type, 'client')) = 'internal'
         """)
         internal = cur.fetchone()[0]
 
-        # client 
+        # client - Client type OR NULL (defaults to Client) AND NOT Internal/Partner
         cur.execute("""
             SELECT COUNT(*) FROM projects
-            WHERE project_type = 'Client'
+            WHERE LOWER(COALESCE(project_type, 'client')) = 'client'
         """)
         client = cur.fetchone()[0]
 
@@ -118,7 +118,8 @@ def projects_overview():
         }
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
+
 
 
 @router.get("/list")
@@ -159,7 +160,7 @@ def projects_list():
         ]
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/{project_id}/details")
@@ -198,7 +199,7 @@ def get_project_details(project_id: str):
         }
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/{project_id}/details")
@@ -245,7 +246,7 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/{project_id}/resources")
@@ -282,7 +283,7 @@ def project_resources(project_id: str):
         ]
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.put("/{project_id}/resources")
 def update_project_resources(project_id: str, payload: ResourceAllocationUpdate):
@@ -343,7 +344,7 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.put("/{project_id}")
 def update_project(project_id: str, updates: ProjectUpdate):
@@ -392,7 +393,7 @@ def update_project(project_id: str, updates: ProjectUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("")
@@ -469,7 +470,7 @@ def create_project(project: ProjectCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.delete("/{project_id}")
@@ -504,4 +505,4 @@ def delete_project(project_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

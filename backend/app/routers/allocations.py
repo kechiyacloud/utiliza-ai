@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 
 router = APIRouter(prefix="/allocations", tags=["Allocations"])
 
@@ -78,7 +78,7 @@ def allocation_metrics():
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/projects")
@@ -120,7 +120,7 @@ def allocation_projects():
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/projects/{project_id}/employees")
@@ -162,7 +162,7 @@ def project_employees(project_id: str):
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/organization")
@@ -213,7 +213,7 @@ def organization_utilization():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/department-breakdown")
@@ -295,7 +295,7 @@ def department_allocation_breakdown():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 
@@ -339,7 +339,7 @@ def get_forecast_bench():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/possible-projects/{employee_id}")
@@ -453,4 +453,4 @@ def get_possible_projects(employee_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

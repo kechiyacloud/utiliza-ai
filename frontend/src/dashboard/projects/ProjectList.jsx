@@ -218,7 +218,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                 </div>
                                             </td>
                                             <td className="py-4 text-gray-600 font-medium">
-                                                <span className={`px - 3 py - 1 bg - gray - 100 text - gray - 600 rounded - md text - xs font - bold border border - gray - 200`}>
+                                                <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold border border-gray-200">
                                                     {project.type}
                                                 </span>
                                             </td>
@@ -230,7 +230,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                 </div>
                                             </td>
                                             <td className="py-4 text-center">
-                                                <span className={`px - 4 py - 1.5 rounded - full text - xs font - bold ${project.statusPillColor} `}>
+                                                <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${project.statusPillColor}`}>
                                                     {project.status}
                                                 </span>
                                             </td>

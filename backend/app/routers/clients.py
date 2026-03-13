@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from pydantic import BaseModel
 from typing import Optional
 
@@ -12,6 +12,50 @@ class ClientCreate(BaseModel):
     industry: Optional[str] = "Retail"
     status: Optional[str] = "Stable"
     budget: Optional[str] = None
+
+@router.get("")
+def get_clients():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT 
+                c.client_id,
+                c.client_name,
+                c.website_url,
+                c.industry,
+                c.status,
+                c.budget,
+                COUNT(DISTINCT p.project_id) AS total_projects,
+                COUNT(DISTINCT CASE WHEN LOWER(p.project_status) IN ('running', 'in progress', 'live', 'active') THEN p.project_id END) AS active_projects
+            FROM clients c
+            LEFT JOIN projects p ON p.client_id = c.client_id
+            GROUP BY c.client_id, c.client_name, c.website_url, c.industry, c.status, c.budget
+            ORDER BY c.client_name
+        """)
+        rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "name": r[1],
+                "url": r[2] or "",
+                "industry": r[3] or "General",
+                "status": r[4] or "Stable",
+                "budget": str(r[5]) if r[5] else "0",
+                "activeProjects": r[7] or 0,
+                "totalProjects": r[6] or 0,
+                "logo": (r[1] or "CL")[:2].upper(),
+                "contact": "",
+                "projects": []
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
 
 @router.post("")
 def create_client(client: ClientCreate):
@@ -36,4 +80,4 @@ def create_client(client: ClientCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
