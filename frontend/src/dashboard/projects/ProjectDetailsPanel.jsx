@@ -61,13 +61,13 @@ const AllocationTable = ({ projectId }) => {
         { w1: 0, w2: 0, w3: 0, w4: 0 }
     );
     const totalHours = totals.w1 + totals.w2 + totals.w3 + totals.w4;
-    const weeklyCapacity = Math.round(totalHours / 4);
+    const weeklyAvailability = Math.round(totalHours / 4);
 
     const summaryCards = [
         { label: 'Total Roles', value: new Set(rows.map(r => r.role).filter(Boolean)).size, icon: Briefcase, color: 'text-indigo-500 bg-indigo-50 border-indigo-100' },
         { label: 'Total Headcount', value: rows.length, icon: Users, color: 'text-blue-500 bg-blue-50 border-blue-100' },
         { label: 'Total Hours', value: `${totalHours}h`, icon: Clock, color: 'text-emerald-500 bg-emerald-50 border-emerald-100' },
-        { label: 'Weekly Capacity', value: `${weeklyCapacity}h`, icon: Zap, color: 'text-amber-500 bg-amber-50 border-amber-100' },
+        { label: 'Weekly Availability', value: `${weeklyAvailability}h`, icon: Zap, color: 'text-amber-500 bg-amber-50 border-amber-100' },
     ];
 
     return (

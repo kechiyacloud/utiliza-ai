@@ -1,8 +1,12 @@
 import React from 'react';
-import { Edit2, Briefcase, Phone, Trash2 } from 'lucide-react';
+import { Edit2, Briefcase, Phone, Trash2, LayoutDashboard, BarChart3 } from 'lucide-react';
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import ClientInsights from './ClientInsights';
+import { useState } from 'react';
 
 const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
+    const [activeTab, setActiveTab] = useState('overview'); // 'overview' or 'insights'
+
     if (!client) return (
         <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <p>Select a client to view details</p>
@@ -54,8 +58,28 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                 </div>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="px-6 py-2 border-b border-slate-100 flex gap-6 bg-white sticky top-0 z-10">
+                <button 
+                    onClick={() => setActiveTab('overview')}
+                    className={`flex items-center gap-2 py-2 border-b-2 transition-all text-sm font-bold ${activeTab === 'overview' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                >
+                    <LayoutDashboard size={14} />
+                    <span>Overview</span>
+                </button>
+                <button 
+                    onClick={() => setActiveTab('insights')}
+                    className={`flex items-center gap-2 py-2 border-b-2 transition-all text-sm font-bold ${activeTab === 'insights' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                >
+                    <BarChart3 size={14} />
+                    <span>Insights</span>
+                </button>
+            </div>
+
             {/* Scrollable Content */}
             <div className="flex-1 overflow-auto custom-scrollbar p-6 space-y-8">
+                {activeTab === 'overview' ? (
+                    <>
 
                 {/* Active Projects Table */}
                 <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
@@ -93,7 +117,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 font-mono text-xs">
-                                            {project.deadline}
+                                            {project.end_date || 'TBD'}
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium border
@@ -135,47 +159,72 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                 {/* Resource Dist & Stakeholders */}
                 <div className="grid grid-cols-2 gap-4">
                     {/* Donut */}
-                    <div>
-                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Resources</h3>
-                        <div className="h-32 relative" style={{ minHeight: '128px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <RePieChart>
-                                    <Pie
-                                        data={resourceDistData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={25}
-                                        outerRadius={40}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
-                                        {resourceDistData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                                        ))}
-                                    </Pie>
-                                </RePieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-slate-800 font-bold text-lg">85%</span>
+                    <div className="flex flex-col">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Resource Mix</h3>
+                        <div className="flex-1 flex items-center gap-4">
+                            <div className="h-24 w-24 relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RePieChart>
+                                        <Pie
+                                            data={resourceDistData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={25}
+                                            outerRadius={40}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            {resourceDistData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                    </RePieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <span className="text-slate-800 font-bold text-xs">85%</span>
+                                </div>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                                {resourceDistData.map((d, i) => (
+                                    <div key={i} className="flex items-center justify-between text-[10px]">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: d.color }}></div>
+                                            <span className="text-slate-600">{d.name}</span>
+                                        </div>
+                                        <span className="font-bold text-slate-800">{d.value}%</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
 
                     {/* Stakeholders */}
                     <div>
-                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Key Stakeholders</h3>
-                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500"></div>
-                                <div>
-                                    <div className="text-slate-800 text-sm font-medium">Alex Johnson</div>
-                                    <div className="text-slate-500 text-xs">CTO • Decision Maker</div>
+                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Key Stakeholders (From Projects)</h3>
+                        <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+                            {(client.stakeholders || []).map((s, i) => (
+                                <div key={i} className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 flex items-center gap-3">
+                                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white uppercase text-center">
+                                        {s.name.split(' ').map(n => n[0]).join('')}
+                                    </div>
+                                    <div>
+                                        <div className="text-slate-800 text-xs font-semibold">{s.name}</div>
+                                        <div className="text-slate-500 text-[10px]">{s.role || 'Project Member'}</div>
+                                    </div>
                                 </div>
-                            </div>
+                            ))}
+                            {(!client.stakeholders || client.stakeholders.length === 0) && (
+                                <div className="text-xs text-slate-400 italic p-4 text-center border-2 border-dashed border-slate-100 rounded-xl">
+                                    No stakeholders identified from projects.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
-
+                </>
+                ) : (
+                    <ClientInsights client={client} />
+                )}
             </div>
         </div>
     );

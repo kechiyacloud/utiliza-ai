@@ -175,16 +175,24 @@ const ProjectStatusChart = ({ projects }) => {
                     {insights.length > 0 ? insights.map(p => {
                         let badgeColor = 'bg-green-50 text-green-600 border-green-100';
                         let indicator = '🟢';
-                        let progress = 35; // default mock progress
+                        let progress = 0;
+                        if (p.startDate && p.endDate && p.startDate !== 'Not Set' && p.endDate !== 'Not Set') {
+                            const start = new Date(p.startDate);
+                            const end = new Date(p.endDate);
+                            const today = new Date();
+                            const total = end - start;
+                            const elapsed = today - start;
+                            progress = total > 0 ? Math.min(100, Math.max(0, Math.round((elapsed / total) * 100))) : 0;
+                        } else {
+                            progress = p.daysRemaining < 30 ? 75 : 25; // fallback
+                        }
 
                         if (p.daysRemaining < 7) {
                             badgeColor = 'bg-red-50 text-red-600 border-red-100';
                             indicator = '🔴';
-                            progress = 90; // mock close to completion
                         } else if (p.daysRemaining <= 30) {
                             badgeColor = 'bg-amber-50 text-amber-600 border-amber-100';
                             indicator = '🟡';
-                            progress = 65;
                         }
 
                         // Parse members from resourceNames string
