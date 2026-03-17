@@ -2,14 +2,14 @@ import React from 'react';
 import { Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const TopPerformers = ({ employees }) => {
+const HighlyAllocatedEmployees = ({ employees }) => {
     const navigate = useNavigate();
     if (!employees) return null;
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 w-full flex flex-col">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 w-full flex flex-col" id="dashboard-high-allocation-list">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-base font-bold text-slate-800 tracking-tight">Top Performers</h3>
+                <h3 className="text-base font-bold text-slate-800 tracking-tight">Highly Allocated Employees</h3>
                 <button
                     onClick={() => navigate('/info/employees/list', { state: { showBack: true } })}
                     className="text-blue-500 text-[10px] font-black hover:text-blue-700 uppercase tracking-widest transition-colors"
@@ -32,7 +32,7 @@ const TopPerformers = ({ employees }) => {
                             <tr
                                 key={emp.id}
                                 onClick={() => {
-                                    sessionStorage.setItem('returnToTopPerformers', 'true');
+                                    sessionStorage.setItem('returnToHighlyAllocated', 'true');
                                     navigate(`/info/employee/${emp.id}`);
                                 }}
                                 className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
@@ -62,4 +62,4 @@ const TopPerformers = ({ employees }) => {
     );
 };
 
-export default TopPerformers;
+export default HighlyAllocatedEmployees;

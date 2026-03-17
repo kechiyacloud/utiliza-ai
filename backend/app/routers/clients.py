@@ -34,9 +34,52 @@ def get_clients():
             ORDER BY c.client_name
         """)
         rows = cur.fetchall()
-        return [
-            {
-                "id": r[0],
+        
+        # Fetch projects and stakeholders for each client
+        client_list = []
+        for r in rows:
+            client_id = r[0]
+            # Fetch projects
+            cur.execute("""
+                SELECT project_id, project_name, project_status, start_date, end_date, budget
+                FROM projects
+                WHERE client_id = %s
+            """, (client_id,))
+            proj_rows = cur.fetchall()
+            
+            projects = []
+            stakeholders = []
+            seen_stakeholders = set()
+
+            for p in proj_rows:
+                project_id = p[0]
+                projects.append({
+                    "id": project_id,
+                    "name": p[1],
+                    "status": p[2],
+                    "start_date": p[3],
+                    "end_date": p[4],
+                    "budget": str(p[5]) if p[5] else "0"
+                })
+
+                # Fetch allocations for this project as stakeholders
+                cur.execute("""
+                    SELECT em.employee_name, pa.role_in_project, em.employee_id
+                    FROM projects_allocation pa
+                    JOIN employee_master em ON pa.employee_id = em.employee_id
+                    WHERE pa.project_id = %s
+                """, (project_id,))
+                for s in cur.fetchall():
+                    if s[2] not in seen_stakeholders:
+                        stakeholders.append({
+                            "name": s[0],
+                            "role": s[1],
+                            "id": s[2]
+                        })
+                        seen_stakeholders.add(s[2])
+
+            client_list.append({
+                "id": client_id,
                 "name": r[1],
                 "url": r[2] or "",
                 "industry": r[3] or "General",
@@ -46,10 +89,11 @@ def get_clients():
                 "totalProjects": r[6] or 0,
                 "logo": (r[1] or "CL")[:2].upper(),
                 "contact": "",
-                "projects": []
-            }
-            for r in rows
-        ]
+                "projects": projects,
+                "stakeholders": stakeholders
+            })
+            
+        return client_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

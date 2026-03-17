@@ -10,8 +10,8 @@ const Navbar = () => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
-    const userName = userEmail.split('@')[0];
-    const userInitials = userName.substring(0, 2).toUpperCase();
+    const userName = (userEmail || '').split('@')[0] || 'User';
+    const userInitials = (userName || 'U').substring(0, 2).toUpperCase();
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard' },

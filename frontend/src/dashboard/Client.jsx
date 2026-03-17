@@ -10,7 +10,8 @@ import { fetchClientData, createClient } from '../api/clientApi';
 const Client = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [clientsData, setClientsData] = useState([]);
+   const [clientsData, setClientsData] = useState([]);
+  const [stats, setStats] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,7 @@ const Client = () => {
       try {
         const res = await fetchClientData();
         setClientsData(res.data.clients);
+        setStats(res.data.stats);
         if (res.data.clients.length > 0) {
           setSelectedClient(res.data.clients[0]);
         }
@@ -165,7 +167,7 @@ const Client = () => {
       </div>
 
       {/* Row 1: KPI Row */}
-      <ClientKPIs />
+      <ClientKPIs stats={stats} />
 
       {/* Row 2: Main Split View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-240px)] min-h-[500px]">

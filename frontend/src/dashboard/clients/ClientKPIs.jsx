@@ -1,12 +1,12 @@
 import React from 'react';
 import { Users, Briefcase, Star, UserCheck } from 'lucide-react';
 
-const ClientKPIs = () => {
+const ClientKPIs = ({ stats }) => {
     const kpiData = [
-        { label: 'Total Clients', value: '34', change: '+2 vs last mo', icon: Users, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-        { label: 'Active Projects', value: '56', change: '+5 new', icon: Briefcase, color: 'text-purple-400', bg: 'bg-purple-400/10' },
-        { label: 'Allocated Employees', value: '138', change: '92% util', icon: UserCheck, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-        { label: 'Avg Satisfaction', value: '4.8', sub: '/5.0', change: 'Top Tier', icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
+        { label: 'Total Clients', value: stats?.totalClients?.value || '0', change: stats?.totalClients?.trend || 'Stable', icon: Users, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+        { label: 'Active Projects', value: stats?.activeProjects?.value || '0', change: stats?.activeProjects?.trend || 'Active', icon: Briefcase, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+        { label: 'Total Budget (DB)', value: stats?.totalRevenue?.value || '$0', change: stats?.totalRevenue?.trend || 'Current', icon: UserCheck, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+        { label: 'Avg Satisfaction', value: stats?.clientSatisfaction?.value || 'N/A', sub: stats?.clientSatisfaction?.value !== 'N/A' ? '/5.0' : '', change: stats?.clientSatisfaction?.trend || 'Normal', icon: Star, color: 'text-amber-400', bg: 'bg-amber-50' },
     ];
 
     return (

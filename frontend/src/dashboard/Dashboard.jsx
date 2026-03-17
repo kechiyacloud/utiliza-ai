@@ -4,7 +4,7 @@ import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -13,13 +13,13 @@ import {
 } from 'recharts';
 
 import { fetchDashboardData, fetchTodos, addTodo, toggleTodo, clearTodo, exportRiskBoard } from '../api/dashboardApi';
+import { getEmployeeList, getFilterOptions } from '../api/employeeApi';
 import { createProject } from '../api/projectsApi';
 import { createClient } from '../api/clientApi';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
-import HighAllocationProjects from './landing-dashboard/HighAllocationProjects';
-import TopPerformers from './landing-dashboard/TopPerformers';
+import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import AddProjectPanel from './projects/AddProjectPanel';
 import AddClientModal from './clients/AddClientModal';
 import EmployeeMonthCard from './landing-dashboard/EmployeeMonthCard';
@@ -61,14 +61,39 @@ function Dashboard() {
   const [todoToDelete, setTodoToDelete] = useState(null);
   const [isDeletingTodo, setIsDeletingTodo] = useState(false);
 
+  // Department State
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState(() => {
+    return localStorage.getItem("dashboard_department") || "Overall";
+  });
+
+  // Workforce Split View States
+  const [isSplitViewOpen, setIsSplitViewOpen] = useState(false);
+  const [allEmployees, setAllEmployees] = useState([]);
+
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        const res = await fetchDashboardData();
-        setData(res.data);
-        if (res.todos) {
-          setTodos(res.todos);
+        // Parallel fetch for all initial dashboard requirements
+        const [dashRes, empListRes, filterOptsRes] = await Promise.allSettled([
+          fetchDashboardData(false, selectedDepartment),
+          getEmployeeList(),
+          getFilterOptions()
+        ]);
+
+        if (dashRes.status === 'fulfilled') {
+          setData(dashRes.value.data);
+          if (dashRes.value.todos) setTodos(dashRes.value.todos);
         }
+
+        if (empListRes.status === 'fulfilled') {
+          setAllEmployees(empListRes.value);
+        }
+
+        if (filterOptsRes.status === 'fulfilled' && filterOptsRes.value?.departments) {
+          setDepartmentOptions(filterOptsRes.value.departments);
+        }
+
       } catch (error) {
         console.error("Failed to load dashboard data", error);
       } finally {
@@ -78,9 +103,33 @@ function Dashboard() {
     loadAllData();
   }, []);
 
-  const handleToggleTodo = async (id) => {
+  const handleDepartmentChange = async (e) => {
+    const newDept = e.target.value;
+    setSelectedDepartment(newDept);
+    localStorage.setItem("dashboard_department", newDept);
+    
+    setLoading(true);
     try {
-      const updated = await toggleTodo(id);
+      const res = await fetchDashboardData(false, newDept);
+      setData(res.data);
+      if (res.todos) setTodos(res.todos);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleTodo = async (id) => {
+    if (id.toString().startsWith('sys-')) {
+      // Local toggle for system suggestions
+      setTodos(prev => prev.map(t => t.id === id ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t));
+      return;
+    }
+
+    try {
+      const realId = id.toString().replace('manual-', '');
+      const updated = await toggleTodo(realId);
       setTodos(prev => prev.map(t => t.id === id ? { ...t, status: updated.status } : t));
     } catch (e) { console.error(e); }
   };
@@ -91,9 +140,18 @@ function Dashboard() {
 
   const confirmDeleteTodo = async () => {
     if (!todoToDelete) return;
+    
+    if (todoToDelete.id.toString().startsWith('sys-')) {
+      // Local removal for system suggestions
+      setTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
+      setTodoToDelete(null);
+      return;
+    }
+
     setIsDeletingTodo(true);
     try {
-      await clearTodo(todoToDelete.id);
+      const realId = todoToDelete.id.toString().replace('manual-', '');
+      await clearTodo(realId);
       setTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
     } catch (e) {
       console.error(e);
@@ -133,9 +191,9 @@ function Dashboard() {
     if (!loading) {
       setTimeout(() => {
         let elId = null;
-        if (sessionStorage.getItem('returnToTopPerformers') === 'true') {
-          elId = 'dashboard-top-performers';
-          sessionStorage.removeItem('returnToTopPerformers');
+        if (sessionStorage.getItem('returnToHighlyAllocated') === 'true') {
+          elId = 'dashboard-high-allocation-list';
+          sessionStorage.removeItem('returnToHighlyAllocated');
         } else if (sessionStorage.getItem('returnToDashboardCards') === 'true') {
           elId = 'dashboard-cards';
           sessionStorage.removeItem('returnToDashboardCards');
@@ -208,26 +266,26 @@ function Dashboard() {
   const _metrics = data?.executiveMetrics || {};
 
   const dynamicKpiData = [
-    { title: "Company Utilization", value: `${_metrics.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
-    { title: "Billable Headcount", value: _metrics.billable_headcount || 0, subtext: `out of ${_metrics.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true } },
-    { title: "Bench Headcount", value: _metrics.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true } },
-    { title: "Upcoming Bench (30d)", value: _metrics.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true } }
+    { title: "Company Utilization", value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
+    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true } },
+    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true } },
+    { title: "Upcoming Bench (30d)", value: _metrics?.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true } }
   ];
 
-  const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
+  const dynamicAllocatedAvailableData = Array.isArray(_metrics?.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
 
   const dynamicAllocationData = [
-    { name: 'Billable', value: _metrics.billable_headcount || 0, color: '#3b82f6' },
-    { name: 'Internal', value: _metrics.internal_headcount || 0, color: '#10b981' },
-    { name: 'Bench', value: _metrics.bench_headcount || 0, color: '#f59e0b' },
-    { name: 'Notice Period', value: _metrics.notice_period || 0, color: '#ef4444' },
+    { name: 'Billable', value: _metrics?.billable_headcount || 0, color: '#3b82f6' },
+    { name: 'Internal', value: _metrics?.internal_headcount || 0, color: '#10b981' },
+    { name: 'Bench', value: _metrics?.bench_headcount || 0, color: '#f59e0b' },
+    { name: 'Notice Period', value: _metrics?.notice_period || 0, color: '#ef4444' },
   ].filter(item => item.value > 0);
 
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
 
-  const dynamicBenchSkillsData = Array.isArray(_metrics.bench_skills) && _metrics.bench_skills.length > 0 ? _metrics.bench_skills : [];
-  const dynamicAlerts = Array.isArray(_metrics.alerts) && _metrics.alerts.length > 0 ? _metrics.alerts : [];
-  const dynamicProjectsAtRisk = Array.isArray(_metrics.projects_at_risk) && _metrics.projects_at_risk.length > 0 ? _metrics.projects_at_risk : [];
+  const dynamicBenchSkillsData = Array.isArray(_metrics?.bench_skills) && _metrics.bench_skills.length > 0 ? _metrics.bench_skills : [];
+  const dynamicAlerts = Array.isArray(_metrics?.alerts) && _metrics.alerts.length > 0 ? _metrics.alerts : [];
+  const dynamicProjectsAtRisk = Array.isArray(_metrics?.projects_at_risk) && _metrics.projects_at_risk.length > 0 ? _metrics.projects_at_risk : [];
 
   return (
     <div className="w-full h-full overflow-y-auto bg-slate-50 text-slate-800 transition-colors duration-300">
@@ -244,8 +302,18 @@ function Dashboard() {
         {/* Header with Actions */}
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-4">
               Dashboard
+              <select
+                value={selectedDepartment}
+                onChange={handleDepartmentChange}
+                className="ml-2 text-sm font-semibold border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="Overall">Overall View</option>
+                {Array.isArray(departmentOptions) && departmentOptions.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
             </h1>
             <p className="mt-1.5 text-sm font-medium text-slate-500">
               Strategic overview of workforce utilization, financials, and project health.
@@ -307,7 +375,7 @@ function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
-            {/* Demand vs Capacity (Span 2) */}
+            {/* Allocated vs Available Resources (Span 2) */}
             <div
               className="lg:col-span-2 bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
@@ -316,21 +384,21 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Demand vs. Capacity Forecast
+                    Allocated vs. Available Resources
                   </h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Projected headcount vs staff availability</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Current allocations vs staff availability</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <BarChart data={dynamicAllocatedAvailableData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                     <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="capacity" name="Available Capacity" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="demand" name="Projected Demand" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="capacity" name="Available Resources" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="demand" name="Allocated Resources" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -339,7 +407,7 @@ function Dashboard() {
             {/* Actionable Todo List (Span 1) */}
             <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col gap-3">
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <AlertCircle size={16} className="text-rose-500" />
+                <ListTodo size={16} className="text-blue-500" />
                 Actionable Todo List
                 <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
               </h2>
@@ -365,10 +433,10 @@ function Dashboard() {
 
               {/* Todo Items */}
               <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
-                {todos.length === 0 && (
+                {(!Array.isArray(todos) || todos.length === 0) && (
                   <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
                 )}
-                {todos.map((todo) => (
+                {Array.isArray(todos) && todos.map((todo) => (
                   <div
                     key={todo.id}
                     className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
@@ -384,7 +452,7 @@ function Dashboard() {
                       <CheckCircle2 size={18} strokeWidth={2} />
                     </button>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                      <p className={`text-xs font-bold leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-950'
                         }`}>
                         {todo.message}
                       </p>
@@ -393,15 +461,27 @@ function Dashboard() {
                           todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
                             'bg-blue-50 text-blue-600 border border-blue-100'
                           }`}>{todo.type}</span>
-                        <span className="text-[9px] text-slate-400">{todo.time}</span>
+                        <span className="text-[9px] text-slate-400 font-bold">{todo.time}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => promptDeleteTodo(todo)}
-                      className="ml-auto flex-shrink-0 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
+                        <button
+                          onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
+                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                          title="Take Action"
+                        >
+                          <ArrowUpRight size={16} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => promptDeleteTodo(todo)}
+                        className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
+                        title="Delete task"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -409,15 +489,11 @@ function Dashboard() {
           </div>
 
           {/* Executive Bottom Section */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
               className={`bg-white border p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-gray-100'}`}
-              onClick={() => {
-                setForcedTab('optimization');
-                const el = document.getElementById('dashboard-operational-insights');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <PieChartIcon size={18} className="text-indigo-500" />
@@ -503,75 +579,11 @@ function Dashboard() {
                 </ResponsiveContainer>
               </div>
             </div>
-
-            {/* Projects at Risk */}
-            <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col max-h-[420px]">
-              <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <Briefcase size={16} className="text-amber-500" />
-                  Delivery Risk Board
-                </h2>
-                <span className="ml-auto text-[10px] font-bold text-slate-400">{dynamicProjectsAtRisk.length} projects</span>
-              </div>
-              <div className="space-y-3 flex-1 overflow-y-auto no-scrollbar">
-                {dynamicProjectsAtRisk.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No delivery risks detected.</p>
-                )}
-                {dynamicProjectsAtRisk.map((project, idx) => (
-                  <div key={idx} className="bg-slate-50 border border-gray-50 p-3 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer group">
-                    <div className="flex justify-between items-start mb-1.5 gap-2">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-slate-800 text-xs font-bold truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">{project.name}</h4>
-                        <p className="text-[10px] text-slate-400 font-bold truncate uppercase tracking-tighter">{project.client}</p>
-                      </div>
-                      <span className={`flex-shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-md border uppercase ${project.risk === 'High' ? 'text-rose-600 bg-rose-50 border-rose-100' :
-                        project.risk === 'Medium' ? 'text-amber-600 bg-amber-50 border-amber-100' :
-                          'text-emerald-600 bg-emerald-50 border-emerald-100'
-                        }`}>
-                        {project.risk}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 text-left truncate leading-tight">{project.reason}</p>
-                    <div className="w-full bg-slate-200 rounded-full h-1 mt-2.5 overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${project.health}%`, backgroundColor: project.health < 50 ? '#ef4444' : project.health < 75 ? '#f59e0b' : '#10b981' }}>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => navigate('/info/projects', { state: { showBack: true } })}
-                  className="flex-1 text-xs font-bold text-blue-600 hover:text-blue-500 flex items-center justify-center gap-1 transition-colors"
-                >
-                  View All <ArrowRight size={14} />
-                </button>
-                <button
-                  onClick={handleExportRisk}
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-emerald-600 border border-slate-200 hover:border-emerald-300 px-3 py-1.5 rounded-lg transition-all"
-                >
-                  <Download size={13} />
-                  Export CSV
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 
         {/* --- OPERATIONAL SECTION --- */}
         <div className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-bottom-4 duration-500 text-slate-800">
-
-          {/* Side by side row for High Allocation & Top Performers */}
-          <div className="flex flex-col lg:flex-row gap-6 w-full mt-2">
-            <div className="w-full lg:w-1/2 min-w-0" id="dashboard-high-allocation">
-              <HighAllocationProjects projects={data?.highAllocationProjects} />
-            </div>
-
-            <div className="w-full lg:w-1/2 min-w-0" id="dashboard-top-performers">
-              <TopPerformers employees={data?.topPerformers} />
-            </div>
-          </div>
 
           {/* New Operational Insights Tables */}
           <div className="w-full mt-2 pb-8">
@@ -582,6 +594,7 @@ function Dashboard() {
               certifications={data?.certificationExpiry || []}
               benchAging={data?.executiveMetrics?.bench_aging || []}
               trends={data?.executiveMetrics?.utilization_trends || []}
+              riskInsights={data?.riskInsights || []}
               forcedTab={forcedTab}
             />
           </div>
@@ -599,7 +612,13 @@ function Dashboard() {
       <AddClientModal
         isOpen={isClientModalOpen}
         onClose={() => setIsClientModalOpen(false)}
-        onAdd={handleAddClient}
+        onSubmit={handleAddClient}
+      />
+
+      <WorkforceSplitView
+        isOpen={isSplitViewOpen}
+        onClose={() => setIsSplitViewOpen(false)}
+        employees={allEmployees}
       />
     </div>
   );
