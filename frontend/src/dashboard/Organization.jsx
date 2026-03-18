@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Mail, Phone, MapPin, Briefcase, Calendar, X } from 'lucide-react';
+import { Search, Mail, Phone, MapPin, Briefcase, Calendar, X, BarChart2, Network } from 'lucide-react';
 import { getEmployeeList } from '../api/employeeApi';
+import { fetchDashboardData } from '../api/dashboardApi';
+import OrganizationInsights from './OrganizationInsights';
 
 const Organization = () => {
     const [departments, setDepartments] = useState([]);
@@ -9,6 +11,8 @@ const Organization = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [viewMode, setViewMode] = useState('map'); // 'map' or 'insights'
+    const [metrics, setMetrics] = useState(null);
 
     // Fetch Data
     useEffect(() => {
@@ -46,6 +50,11 @@ const Organization = () => {
                 if (deptArray.length > 0) {
                     setActiveDeptId(deptArray[0].id);
                 }
+
+                // Fetch real dashboard metrics for the insights view
+                const dashboard = await fetchDashboardData();
+                setMetrics(dashboard.data);
+
                 setLoading(false);
             } catch (err) {
                 console.error("Failed to load organization data:", err);
@@ -77,21 +86,41 @@ const Organization = () => {
                     <p className="text-slate-500 text-xs">Navigate through the department hierarchy.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                        <input
-                            type="text"
-                            placeholder="Search departments..."
-                            className="pl-9 pr-4 py-1.5 bg-slate-100 border border-slate-200 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 w-56 transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2">
+                        <button 
+                            onClick={() => setViewMode('map')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'map' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Network size={14} />
+                            <span>Map</span>
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('insights')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'insights' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <BarChart2 size={14} />
+                            <span>Insights</span>
+                        </button>
                     </div>
+                    {viewMode === 'map' && (
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                            <input
+                                type="text"
+                                placeholder="Search departments..."
+                                className="pl-9 pr-4 py-1.5 bg-slate-100 border border-slate-200 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 w-56 transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Main Canvas: Horizontal Scroll */}
-            <div className="flex-1 overflow-x-auto overflow-y-hidden p-8 flex items-stretch gap-12 relative custom-scrollbar bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
+            {/* Main Content */}
+            <div className={`flex-1 overflow-hidden ${viewMode === 'insights' ? 'overflow-y-auto p-6 bg-slate-50' : ''}`}>
+                {viewMode === 'map' ? (
+                    <div className="h-full flex items-stretch gap-12 p-8 relative overflow-x-auto overflow-y-hidden custom-scrollbar bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
 
                 {/* COLUMN 1: DEPARTMENTS */}
                 <div className="flex flex-col gap-2 min-w-[260px] w-[260px] z-10 overflow-y-auto pr-2 custom-scrollbar">
@@ -256,6 +285,12 @@ const Organization = () => {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+                    </div>
+                ) : (
+                    <div className="max-w-7xl mx-auto">
+                        <OrganizationInsights departments={departments} metrics={metrics} />
                     </div>
                 )}
             </div>

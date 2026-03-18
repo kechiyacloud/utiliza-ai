@@ -15,6 +15,7 @@ import ProtectedRoute from './ProtectedRoute'
 import MainDashboard from './MainDashboard'
 import Dashboard from './dashboard/Dashboard'
 import Projects from './dashboard/Projects'
+import Availability from './dashboard/Availability'
 import Settings from './dashboard/Settings'
 import Client from './dashboard/Client'
 import Allocations from './dashboard/Allocations'
@@ -51,6 +52,7 @@ function App() {
             <Route path='employees/list' element={<EmployeeMasterList />} />
             <Route path='client' element={<Client />} />
             <Route path='allocation' element={<Allocations />} />
+            <Route path='availability' element={<Availability />} />
             <Route path='organization' element={<Organization />} />
             <Route path='settings' element={<Settings />} />
             {/* <Route path='test' element={<DataInfrastructureTest />} /> */}

@@ -1,104 +1,91 @@
 import api from "./axios";
 
-export const fetchDashboardData = async () => {
-    try {
-        const [
-            infoCardsRes,
-            forecastRes,
-            highAllocationRes,
-            performersRes,
-            availabilityRes,
-            executiveRes,
-            skillsGapRes,
-            transitionsRes,
-            certsRes
-        ] = await Promise.all([
-            api.get('/dashboard/infocards').catch(e => { console.warn('infocards failed:', e.message); return { data: {} }; }),
-            api.get('/dashboard/allocation-3m').catch(e => { console.warn('allocation-3m failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/high-allocation-projects').catch(e => { console.warn('high-allocation-projects failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/top-performers').catch(e => { console.warn('top-performers failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/upcoming-availability').catch(e => { console.warn('upcoming-availability failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/executive-metrics').catch(e => { console.warn('executive-metrics failed:', e.message); return { data: null }; }),
-            api.get('/dashboard/skills-gap').catch(e => { console.warn('skills-gap failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/recent-transitions').catch(e => { console.warn('recent-transitions failed:', e.message); return { data: [] }; }),
-            api.get('/dashboard/certification-expiry').catch(e => { console.warn('certification-expiry failed:', e.message); return { data: [] }; })
-        ]);
+let dashboardCaches = {};
 
-        // Safely extract data, fallback to defaults if 500/error occurred
-        const info = infoCardsRes?.data || {};
-        const forecast = Array.isArray(forecastRes?.data) ? forecastRes.data : [];
-        const highAlloc = Array.isArray(highAllocationRes?.data) ? highAllocationRes.data : [];
-        const performers = Array.isArray(performersRes?.data) ? performersRes.data : [];
-        const availability = Array.isArray(availabilityRes?.data) ? availabilityRes.data : [];
-        const executive = executiveRes?.data || {};
-        const skillsGap = Array.isArray(skillsGapRes?.data) ? skillsGapRes.data : [];
-        const transitions = Array.isArray(transitionsRes?.data) ? transitionsRes.data : [];
-        const certs = Array.isArray(certsRes?.data) ? certsRes.data : [];
+export const fetchDashboardData = async (forceUpdate = false, department = 'Overall') => {
+    try {
+        const cacheKey = department || 'Overall';
+        const cacheEntry = dashboardCaches[cacheKey];
+
+        if (!forceUpdate && cacheEntry && (Date.now() - cacheEntry.time < 5 * 60 * 1000)) {
+            return { data: cacheEntry.data, todos: cacheEntry.todos };
+        }
+
+        const params = department && department !== 'Overall' ? { department } : {};
+        const megaRes = await api.get('/dashboard/all', { params });
+        const mega = megaRes?.data || {};
+
+        const info = mega?.infocards || {};
+        const forecast = Array.isArray(mega?.allocation_3m) ? mega.allocation_3m : [];
+        const highAlloc = Array.isArray(mega?.high_allocation) ? mega.high_allocation : [];
+        const performers = Array.isArray(mega?.top_performers) ? mega.top_performers : [];
+        const availability = Array.isArray(mega?.availability) ? mega.availability : [];
+        const executive = mega?.executive || {};
+        const skillsGap = Array.isArray(mega?.skills_gap) ? mega.skills_gap : [];
+        const transitions = Array.isArray(mega?.transitions) ? mega.transitions : [];
+        const certs = []; 
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
             executiveCards: {
-                totalEmployees: { value: info.total_employees ?? 0, change: "", label: "Total Employees" },
-                activeClients: { value: info.total_clients ?? 0, change: "", label: "Active Clients" },
-                runningProjects: { value: info.running_projects ?? 0, change: "", label: "Running Projects", alertCount: 0 },
-                benchStrength: { value: info.bench_employees ?? 0, change: "", label: "Bench Strength" }
+                totalEmployees: { value: info?.total_employees ?? 0, change: "", label: "Total Employees" },
+                activeClients: { value: info?.total_clients ?? 0, change: "", label: "Active Clients" },
+                runningProjects: { value: info?.running_projects ?? 0, change: "", label: "Running Projects", alertCount: 0 },
+                benchStrength: { value: info?.bench_employees ?? 0, change: "", label: "Bench Strength" }
             },
-            // allocation-3m: month + allocations fields from backend
             resourceForecast: forecast.map((f) => ({
-                month: f.month,           // format "2026-03"
-                totalEmployees: info.total_employees ?? 0,
-                allocated: f.allocations  // count of allocated employees
+                month: f?.month || "Unknown",
+                totalEmployees: info?.total_employees ?? 0,
+                allocated: f?.allocations ?? 0
             })),
-            // project_name + resource_count from backend
             highAllocationProjects: highAlloc.map((p, idx) => ({
                 id: idx,
-                name: p.project_name || "Unknown",
-                resources: p.resource_count ?? 0,
-                utilization: Math.min(100, Math.round((p.resource_count / Math.max(info.total_employees, 1)) * 100))
+                name: p?.project_name || "Unknown",
+                resources: p?.resource_count ?? 0,
+                utilization: Math.min(100, Math.round((p?.resource_count || 0 / Math.max(info?.total_employees || 1, 1)) * 100))
             })),
-            // top-performers: employee_id, employee_name, role, allocation
             topPerformers: performers.map((p) => ({
-                id: p.employee_id,
-                name: p.employee_name || "Unknown",
-                role: p.role || "Employee",
-                allocation: p.allocation ?? 0,
-                avatar: p.employee_name
+                id: p?.employee_id,
+                name: p?.employee_name || "Unknown",
+                role: p?.role || "Employee",
+                allocation: p?.allocation ?? 0,
+                avatar: p?.employee_name
                     ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('')
                     : "U"
             })),
-            // upcoming-availability: employee, project, release_date, allocation_percent
             resourceAvailability: availability.map((a, idx) => ({
                 id: idx.toString(),
-                name: a.employee || "Unknown",
-                project: a.project || "Unknown",
-                releaseDate: a.release_date,
-                availability: a.allocation_percent ?? 0
+                name: a?.employee || "Unknown",
+                project: a?.project || "Unknown",
+                releaseDate: a?.release_date,
+                availability: a?.allocation_percent ?? 0
             })),
             skillsGap: skillsGap.map((s, idx) => ({
                 id: idx,
-                skill: s.skill,
-                certified: s.certified ?? 0,
-                demand: s.demand ?? 0,
-                gap: s.gap || "low"
+                skill: s?.skill || "Unknown",
+                certified: s?.certified ?? 0,
+                demand: s?.demand ?? 0,
+                gap: s?.gap || "low"
             })),
             recentTransitions: transitions.map((t, idx) => ({
                 id: idx,
-                employee: t.employee,
-                project: t.project,
-                date: t.date,
-                role: t.role || "Resource"
+                employee: t?.employee || "Unknown",
+                project: t?.project || "Unknown",
+                date: t?.date,
+                role: t?.role || "Resource"
             })),
-            certificationExpiry: certs.map((c, idx) => ({
-                id: idx,
-                employee: c.employee,
-                certName: c.certName,
-                expiryDate: c.expiryDate,
-                status: c.status || "Upcoming"
-            })),
-            executiveMetrics: executive || {}
+            certificationExpiry: certs,
+            executiveMetrics: executive,
+            riskInsights: mega?.risk_insights || []
         };
 
-        return { data: REAL_DASHBOARD_DATA };
+        dashboardCaches[cacheKey] = {
+            data: REAL_DASHBOARD_DATA,
+            todos: mega.manual_todos || mega.todos || [],
+            time: Date.now()
+        };
+
+        return { data: REAL_DASHBOARD_DATA, todos: mega.manual_todos || mega.todos || [] };
 
     } catch (error) {
         console.error("Dashboard API Error:", error);
@@ -117,8 +104,25 @@ export const fetchDashboardData = async () => {
                 skillsGap: [],
                 recentTransitions: [],
                 certificationExpiry: [],
-                executiveMetrics: {}
-            }
+                executiveMetrics: {
+                    company_utilization: 0,
+                    billable_headcount: 0,
+                    bench_headcount: 0,
+                    notice_period: 0,
+                    internal_headcount: 0,
+                    total_employees: 0,
+                    bench_skills: [],
+                    upcoming_bench: 0,
+                    forecast: [],
+                    projects_at_risk: [],
+                    alerts: [],
+                    bench_aging: [],
+                    utilization_prediction: { tip: "", target: 85, gap: 0 },
+                    utilization_trends: []
+                },
+                riskInsights: []
+            },
+            todos: []
         };
     }
 };

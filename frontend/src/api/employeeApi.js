@@ -18,9 +18,17 @@ export const getNoticeCount = async () => {
     return res?.data?.count ?? res?.data ?? null;
 };
 
+// Global Cache to fix duplicate loading problems and speed up site
+let employeeListCache = null;
+let employeeListCacheTime = 0;
+
 // Fetch all employees list
-export const getEmployeeList = async () => {
+export const getEmployeeList = async (forceUpdate = false) => {
     try {
+        if (!forceUpdate && employeeListCache && (Date.now() - employeeListCacheTime < 5 * 60 * 1000)) {
+            return employeeListCache;
+        }
+
         const res = await api.get('/employees/list');
         const rawData = Array.isArray(res?.data) ? res.data : [];
 
@@ -53,6 +61,9 @@ export const getEmployeeList = async () => {
                 location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
             };
         });
+
+        employeeListCache = enriched;
+        employeeListCacheTime = Date.now();
 
         return enriched;
 
@@ -146,7 +157,7 @@ export const deleteEmployee = async (id) => {
     return res.data;
 };
 
-// Fetch action inbox
+// Action Inbox Fetch
 export const fetchActionInbox = async () => {
     try {
         const res = await api.get('/employees/action-inbox');
@@ -160,8 +171,15 @@ export const fetchActionInbox = async () => {
     }
 };
 
-export const getFilterOptions = async () => {
+let filterOptionsCache = null;
+let filterCacheTime = 0;
+
+export const getFilterOptions = async (forceUpdate = false) => {
     try {
+        if (!forceUpdate && filterOptionsCache && (Date.now() - filterCacheTime < 10 * 60 * 1000)) {
+            return filterOptionsCache;
+        }
+
         const res = await api.get('/employees/filter-options');
         if (res?.data) {
             // Normalize employee types identically to the list payload
@@ -175,6 +193,8 @@ export const getFilterOptions = async () => {
                 // Remove duplicates after mapping just in case
                 res.data.employee_types = [...new Set(res.data.employee_types)].sort();
             }
+            filterOptionsCache = res.data;
+            filterCacheTime = Date.now();
         }
         return res?.data || null;
     } catch (err) {

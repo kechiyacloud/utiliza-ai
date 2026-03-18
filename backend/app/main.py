@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, employees, dashboard, projects, allocations, clients, partner_clients
+from app.routers import auth, employees, dashboard, projects, allocations, clients, partner_clients, availability
 
 app = FastAPI()
 
@@ -45,6 +45,7 @@ app.include_router(projects.router)
 app.include_router(allocations.router)
 app.include_router(clients.router)
 app.include_router(partner_clients.router)
+app.include_router(availability.router)
 
 
 @app.get("/")

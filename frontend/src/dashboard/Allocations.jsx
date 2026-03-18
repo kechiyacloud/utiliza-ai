@@ -142,7 +142,7 @@ function Allocations() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Company Utilization</h1>
-            <p className="text-sm text-gray-500">Deep dive into organization-wide capacity and active projects.</p>
+            <p className="text-sm text-gray-500">Deep dive into organization-wide availability and active projects.</p>
           </div>
         </div>
 
@@ -186,7 +186,7 @@ function Allocations() {
           )}
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Resource Allocation</h1>
-            <p className="text-gray-500 text-sm">Monitor organization-wide utilization and capacity.</p>
+            <p className="text-gray-500 text-sm">Monitor organization-wide utilization and availability.</p>
           </div>
         </div>
         <AllocationFilters filters={filters} setFilters={setFilters} />

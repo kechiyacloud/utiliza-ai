@@ -1,7 +1,7 @@
 import React from 'react';
-import { EmployeeProvider } from './EmployeeContext';
-import { ClientProvider } from './ClientContext';
-import { ProjectProvider } from './ProjectContext';
+import { EmployeeProvider, useEmployees as useEmployeesHook } from './EmployeeContext';
+import { ClientProvider, useClients as useClientsHook } from './ClientContext';
+import { ProjectProvider, useProjects as useProjectsHook } from './ProjectContext';
 
 /**
  * Composite provider that wraps all data contexts
@@ -26,13 +26,9 @@ export { useProjects } from './ProjectContext';
 
 // Composite hook that provides access to all contexts at once  
 export const useAppData = () => {
-    const { useEmployees } = require('./EmployeeContext');
-    const { useClients } = require('./ClientContext');
-    const { useProjects } = require('./ProjectContext');
-
     return {
-        employees: useEmployees(),
-        clients: useClients(),
-        projects: useProjects()
+        employees: useEmployeesHook(),
+        clients: useClientsHook(),
+        projects: useProjectsHook()
     };
 };

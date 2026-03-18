@@ -73,11 +73,11 @@ const AddEmployee = () => {
                 skills: (editData.masterSkills || []).map(s => typeof s === 'string' ? s : s.name),
                 certificates: (editData.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
                 projects: (editData.projects || []).map(p => ({
-                    project_id: p.project_id || p.name || '',
+                    project_id: p.project_id || '',
                     project_role: p.project_role || '',
-                    project_allocation: typeof p.value === 'number' ? p.value : (p.project_allocation || 0),
-                    project_start_date: p.start_date || p.project_start_date || '',
-                    project_end_date: p.end_date || p.project_end_date || ''
+                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : 0,
+                    project_start_date: p.project_start_date || '',
+                    project_end_date: p.project_end_date || ''
                 }))
             });
             setShowPreview(true);
@@ -322,8 +322,11 @@ const AddEmployee = () => {
                 employee_status: formData.employee_status,
                 employee_allocations: formData.employee_allocations,
                 skills: formData.skills,
-                certificates: formData.certificates.map(c => typeof c === 'string' ? { certificate_name: c } : { certificate_name: c.name }),
-                projects: formData.projects
+                certificates: formData.certificates.map(c => ({ name: typeof c === 'string' ? c : (c.name || '') })),
+                projects: formData.projects.map(p => ({
+                    ...p,
+                    project_end_date: p.project_end_date || null
+                }))
             };
 
             if (isEditMode) {
@@ -332,10 +335,14 @@ const AddEmployee = () => {
                 await createEmployee(payload);
             }
 
-            navigate('/info/list');
+            navigate('/info/employee');
         } catch (error) {
             console.error('Error saving employee:', error);
-            alert('Failed to save employee. ' + (error.response?.data?.detail || error.message));
+            const detail = error.response?.data?.detail;
+            const errorMsg = typeof detail === 'string' 
+                ? detail 
+                : (typeof detail === 'object' ? JSON.stringify(detail) : error.message);
+            alert('Failed to save employee. ' + errorMsg);
         } finally {
             setLoading(false);
         }

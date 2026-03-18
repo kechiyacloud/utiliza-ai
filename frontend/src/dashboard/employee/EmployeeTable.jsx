@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronRight, Search, Filter, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 
 // AllocationBar — color matches EmployeeStatusTag palette
@@ -46,34 +45,16 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
-    const [employees, setEmployees] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
         const saved = sessionStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
     });
 
-    useEffect(() => {
-        const fetchEmployees = async () => {
-            setLoading(true);
-            try {
-                const data = await getEmployeeList();
-                setEmployees(data);
-            } catch (err) {
-                console.error("Error fetching employees:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchEmployees();
-    }, []);
-
     // Count active filters for badge
     const activeFilterCount = [
-        ...(filters?.departments || []),
         ...(filters?.types || []),
         ...(filters?.skills || []),
         ...(filters?.locations || []),
@@ -204,6 +185,7 @@ const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, 
                         <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider">
                             <th className="px-6 py-3">Employee</th>
                             <th className="px-6 py-3">Designation</th>
+                            <th className="px-6 py-3">Skills</th>
                             <th className="px-6 py-3">Status</th>
                             <th className="px-6 py-3">Allocation</th>
                             <th className="px-6 py-3">Location</th>
@@ -242,6 +224,24 @@ const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, 
                                         <div className="text-xs text-gray-400">{emp.department}</div>
                                     </td>
                                     <td className="px-6 py-2">
+                                        <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                            {emp.skills && emp.skills.length > 0 ? (
+                                                emp.skills.slice(0, 3).map((skill, idx) => (
+                                                    <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                                        {skill}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-xs text-slate-400">-</span>
+                                            )}
+                                            {emp.skills && emp.skills.length > 3 && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-50 text-slate-500 border border-slate-200">
+                                                    +{emp.skills.length - 3}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-2">
                                         <div className="flex flex-col gap-1">
                                             <EmployeeStatusTag status={emp.employee_status} />
                                             <BillableStatusTag billable={emp.billable} />
@@ -258,7 +258,7 @@ const EmployeeTable = ({ onEmployeeClick, filters, searchValue, onSearchChange, 
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="6" className="px-6 py-12 text-center">
+                                <td colSpan="7" className="px-6 py-12 text-center">
                                     <div className="flex flex-col items-center gap-2">
                                         <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-2">
                                             <Search className="w-6 h-6 text-gray-300" />

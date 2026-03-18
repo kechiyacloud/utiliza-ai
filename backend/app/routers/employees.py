@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
@@ -50,7 +50,7 @@ def get_total_employee_count():
         return 0 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.post("/employee/bench")
 def get_bench_employee_count():
@@ -65,7 +65,7 @@ def get_bench_employee_count():
         return 0
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.post("/employee/notice")
 def get_notice_employee_count():
@@ -80,7 +80,7 @@ def get_notice_employee_count():
         return 0
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/list")
 def get_all_employees():
@@ -159,7 +159,7 @@ def get_all_employees():
         
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/upcoming-bench")
 def get_upcoming_bench():
@@ -201,7 +201,7 @@ def get_upcoming_bench():
         return []
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/new-joiners")
 def get_new_joiners():
@@ -231,7 +231,7 @@ def get_new_joiners():
         return []
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/employee-of-month")
 def fetch_employee_of_month():
@@ -266,7 +266,7 @@ def fetch_employee_of_month():
         return None
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/action-inbox")
 def fetch_action_inbox():
@@ -329,7 +329,7 @@ def fetch_action_inbox():
         print(f"Error generating action inbox: {e}")
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
         
     return tasks
 
@@ -369,7 +369,7 @@ def get_employee_filter_options():
         return {"error": str(e), "departments": [], "locations": [], "employee_types": [], "skills": [], "status_tags": []}
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/departments/roles-mapping")
 def get_departments_roles_mapping():
@@ -411,7 +411,7 @@ def get_employee_id_by_email(email_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employees/{employee_id}")
 def get_employee_by_id(employee_id: str):
@@ -518,6 +518,7 @@ def get_employee_by_id(employee_id: str):
         # 4️⃣ Fetch Projects & Allocations (with project manager name)
         projects_query = """
         SELECT 
+            pa.project_id,
             p.project_name,
             pa.role_in_project,
             pa.allocation_percentage,
@@ -549,14 +550,15 @@ def get_employee_by_id(employee_id: str):
 
         projects = [
             {
-                "project_name": row[0],
-                "role": row[1],
-                "allocation_percentage": row[2],
-                "start_date": row[3],
-                "end_date": row[4],
-                "status": row[5],
-                "billable": row[6],
-                "project_manager": row[7]
+                "project_id": row[0],
+                "project_name": row[1],
+                "project_role": row[2],
+                "project_allocation": row[3],
+                "project_start_date": row[4],
+                "project_end_date": row[5],
+                "status": row[6],
+                "billable": row[7],
+                "project_manager": row[8]
             }
             for row in project_rows
         ]
@@ -595,7 +597,7 @@ def get_employee_by_id(employee_id: str):
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.post("/employees")
 def create_employee(emp: EmployeeCreateUpdate):
@@ -677,7 +679,7 @@ def create_employee(emp: EmployeeCreateUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.put("/employees/{employee_id}")
 def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
@@ -772,7 +774,7 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.delete("/employees/{employee_id}")
 def delete_employee(employee_id: str):
