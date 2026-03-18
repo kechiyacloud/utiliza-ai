@@ -150,7 +150,7 @@ function Allocations() {
         <div className="flex justify-end w-full">
           <AllocationFilters filters={filters} setFilters={setFilters} />
         </div>
-        <AllocationMetrics metrics={data?.metrics} />
+        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} />
 
         <div className="flex flex-col lg:flex-row gap-6 w-full pb-8">
           <ProjectUtilization
@@ -193,7 +193,7 @@ function Allocations() {
       </div>
 
       {/* Metrics Row */}
-      <AllocationMetrics metrics={data?.metrics} />
+      <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} />
 
       {/* Utilization Row (Projects & Organization Chart / Employee Allocation) */}
       <div className="flex flex-col lg:flex-row gap-6 w-full">

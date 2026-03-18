@@ -110,8 +110,8 @@ const SkillsOverview = ({ employees }) => {
                             <PolarGrid stroke="#e5e7eb" />
                             <PolarAngleAxis dataKey="skill" tick={{ fill: '#4b5563', fontSize: 11, fontWeight: 600 }} />
                             <PolarRadiusAxis angle={30} domain={[0, radarData[0]?.fullMark || 'auto']} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} />
-                            <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} formatter={(value) => [`${value} Employees`, 'Availability']} />
-                            <Radar name="Department Availability" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="#3b82f6" fillOpacity={0.4} dot={{ r: 3, fill: '#2563eb' }} activeDot={{ r: 5, fill: '#1d4ed8' }} />
+                            <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} formatter={(value) => [`${value} Employees`, 'Capacity']} />
+                            <Radar name="Department Capacity" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="#3b82f6" fillOpacity={0.4} dot={{ r: 3, fill: '#2563eb' }} activeDot={{ r: 5, fill: '#1d4ed8' }} />
                         </RadarChart>
                     </ResponsiveContainer>
                 </div>
@@ -124,9 +124,9 @@ const SkillsOverview = ({ employees }) => {
                         <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                             <th className="py-3 px-2 w-8"></th>
                             <th className="py-3 px-2 text-left">Skill / Technology</th>
-                            <th className="py-3 px-2 text-right">Total Availability</th>
+                            <th className="py-3 px-2 text-right">Total Capacity</th>
                             <th className="py-3 px-2 text-right">Available (Bench)</th>
-                            <th className="py-3 px-2 text-left w-1/3">Availability Distribution</th>
+                            <th className="py-3 px-2 text-left w-1/3">Capacity Distribution</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">

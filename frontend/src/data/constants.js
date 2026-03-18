@@ -31,6 +31,13 @@ export const STATUS_OPTIONS = [
     'Allocated'
 ];
 
+export const PROJECT_STATUS_OPTIONS = [
+    'Not Started',
+    'In Progress',
+    'On Hold',
+    'Completed'
+];
+
 export const WORK_MODES = [
     'Remote',
     'Hybrid',

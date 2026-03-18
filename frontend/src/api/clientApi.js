@@ -10,11 +10,21 @@ export const createClient = async (clientData) => {
     }
 };
 
+export const fetchClientsList = async () => {
+    try {
+        const response = await api.get('/clients');
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching clients list", error);
+        return [];
+    }
+};
+
 export const fetchClientData = async (filterText = '') => {
     try {
         const response = await api.get('/clients');
         const clients = Array.isArray(response.data) ? response.data : [];
-
+        
         const filtered = filterText
             ? clients.filter(c =>
                 (c.name || '').toLowerCase().includes(filterText.toLowerCase()) ||

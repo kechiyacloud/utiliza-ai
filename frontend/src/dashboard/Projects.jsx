@@ -49,6 +49,7 @@ function Projects() {
         stats={data?.stats}
         activeFilter={activeCardFilter}
         onFilterChange={setActiveCardFilter}
+        onProjectAdded={loadData}
       />
 
       {/* Projects List Section */}

@@ -606,12 +606,8 @@ def dashboard_infocards():
         cur.execute("SELECT COUNT(*) FROM employee_master")
         total_employees = cur.fetchone()[0]
 
-        # ---- Total Clients (count of client-type projects) ----
-        cur.execute("""
-            SELECT COUNT(DISTINCT client_id)
-            FROM projects
-            WHERE client_id IS NOT NULL
-        """)
+        # ---- Total Clients ----
+        cur.execute("SELECT COUNT(*) FROM clients")
         total_clients = cur.fetchone()[0]
 
         # ---- Running Projects (case safe) ----

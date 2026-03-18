@@ -26,14 +26,15 @@ export const fetchProjectsData = async () => {
                 const s = (p.status || '').toLowerCase();
                 let pillColor = "bg-gray-100 text-gray-600";
 
-                if (s === "in progress" || s === "running") pillColor = "bg-blue-100 text-blue-600";
-                else if (s === "live" || s === "active") pillColor = "bg-green-100 text-green-600";
-                else if (s === "completed" || s === "done" || s === "ended" || s === "end") pillColor = "bg-emerald-100 text-emerald-600";
-                else if (s === "delayed" || s === "on hold") pillColor = "bg-red-100 text-red-600";
-                else if (s === "planned") pillColor = "bg-yellow-100 text-yellow-600";
+                if (s === "in progress" || s === "running") pillColor = { backgroundColor: '#DBEAFE', color: '#1E40AF' };
+                else if (s === "live" || s === "active") pillColor = { backgroundColor: '#DCFCE7', color: '#166534' };
+                else if (s === "closed" || s === "completed" || s === "done" || s === "ended" || s === "end") pillColor = { backgroundColor: '#DBEAFE', color: '#1E40AF' };
+                else if (s === "on hold" || s === "delayed") pillColor = { backgroundColor: '#FEE2E2', color: '#991B1B' };
+                else if (s === "not started" || s === "planned") pillColor = { backgroundColor: '#FEF3C7', color: '#92400E' };
 
                 // Backend already maps billable to 'Client' or 'Internal' in the list endpoint
                 const type = p.type || 'Internal';
+                const clientName = p.client_name || type;
 
                 return {
                     id: p.project_id,
@@ -41,12 +42,13 @@ export const fetchProjectsData = async () => {
                     statusText: "Active", // Default placeholder for secondary health text
                     statusColor: "text-green-500",
                     resources: p.resource_count || 0,
-                    client: type,
+                    client: clientName,
                     startDate: p.start_date || "Not Set",
                     endDate: p.end_date || "TBD",
                     type: type,
                     status: p.status,
                     statusPillColor: pillColor,
+                    billable: (p.billable || '').replace(/\s+/g, ''), // Normalize 'Non - Billable' to 'Non-Billable'
                     icon: p.project_name ? p.project_name.charAt(0).toUpperCase() : "P",
                     resourceNames: p.resource_names || "None"
                 };

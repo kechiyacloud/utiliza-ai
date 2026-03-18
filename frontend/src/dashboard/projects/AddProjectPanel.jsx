@@ -1,42 +1,421 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Save, Trash2, Building, Users } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check } from 'lucide-react';
 import axios from '../../api/axios';
+import {
+    fetchSimpleClients,
+    createSimpleClient,
+    updateSimpleClient,
+    deleteSimpleClient,
+    fetchPartnerClients,
+    createPartnerClient,
+    updatePartnerClient,
+    deletePartnerClient,
+} from '../../api/entitiesApi';
+import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
+
+/* ──────────────────────────────────────────────────────────
+   INLINE MODAL — Add / Edit / Delete confirmation
+   ────────────────────────────────────────────────────────── */
+const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCancel, error }) => {
+    const [name, setName] = useState(initialName || '');
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isOpen && inputRef.current) {
+            setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    const isDelete = mode === 'delete';
+    const title = isDelete ? `Delete ${entityLabel}` : mode === 'edit' ? `Edit ${entityLabel}` : `Add ${entityLabel}`;
+    const accentColor = isDelete ? 'red' : mode === 'edit' ? 'blue' : 'emerald';
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
+            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-in">
+                <div className={`px-6 pt-6 pb-4 border-b border-gray-100`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
+                            {isDelete ? <Trash2 size={18} className={`text-${accentColor}-500`} /> :
+                             mode === 'edit' ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
+                             <Plus size={18} className={`text-${accentColor}-500`} />}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                {isDelete ? `This action cannot be undone.` : `Enter the ${entityLabel.toLowerCase()} name below.`}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-5">
+                    {error && (
+                        <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+                            <AlertCircle size={16} className="shrink-0" /> {error}
+                        </div>
+                    )}
+
+                    {isDelete ? (
+                        <p className="text-sm text-gray-600">
+                            Are you sure you want to delete <strong className="text-gray-900">"{initialName}"</strong>?
+                        </p>
+                    ) : (
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{entityLabel} Name</label>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder={`Enter ${entityLabel.toLowerCase()} name`}
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white focus:border-blue-300 transition-all font-medium text-gray-800"
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onConfirm(name); } }}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 pb-6 flex justify-end gap-3">
+                    <button type="button" onClick={onCancel}
+                        className="px-5 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 font-bold text-sm hover:bg-gray-50 transition-all">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        onClick={() => onConfirm(isDelete ? initialName : name)}
+                        className={`px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all shadow-lg flex items-center gap-2
+                            ${isDelete
+                                ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
+                                : mode === 'edit'
+                                    ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-200'
+                                    : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
+                            }`}>
+                        {isDelete ? <><Trash2 size={14} /> Delete</> :
+                         mode === 'edit' ? <><Check size={14} /> Update</> :
+                         <><Plus size={14} /> Add</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+/* ──────────────────────────────────────────────────────────
+   SEARCHABLE DROPDOWN  —  scrollable + filterable
+   ────────────────────────────────────────────────────────── */
+const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found' }) => {
+    const [search, setSearch] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    const selectedItem = items.find(i => String(i.id) === String(selectedId));
+    const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+                setSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div ref={containerRef} className="relative flex-1">
+            {/* Trigger */}
+            <button
+                type="button"
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                disabled={disabled}
+                className={`w-full p-2.5 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2
+                    ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
+                    ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
+                    ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
+            >
+                <span className={selectedItem ? 'text-gray-800' : 'text-gray-400'}>
+                    {selectedItem ? selectedItem.name : placeholder || `Select ${label}`}
+                </span>
+                <Search size={14} className="text-gray-400 shrink-0" />
+            </button>
+
+            {/* Dropdown List */}
+            {!disabled && isOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                    {/* Search Input */}
+                    <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder={`Search ${label}...`}
+                                className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-lg outline-none focus:bg-white focus:border-blue-200 transition-all"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+
+                    {/* Options */}
+                    <div className="max-h-48 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
+                        ) : (
+                            filtered.map((item) => (
+                                <button
+                                    type="button"
+                                    key={item.id}
+                                    onClick={() => {
+                                        onSelect(item);
+                                        setIsOpen(false);
+                                        setSearch('');
+                                    }}
+                                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2
+                                        ${String(item.id) === String(selectedId)
+                                            ? 'bg-blue-50 text-blue-700 font-semibold'
+                                            : 'text-gray-700 hover:bg-gray-50 font-medium'
+                                        }`}
+                                >
+                                    {String(item.id) === String(selectedId) && <Check size={14} className="text-blue-500" />}
+                                    {item.name}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+/* ══════════════════════════════════════════════════════════
+   MAIN COMPONENT — AddProjectPanel
+   ══════════════════════════════════════════════════════════ */
 const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
-
+    const DIRECT_CLIENT_TYPE = 'Direct Client';
+    const PARTNER_CLIENT_TYPE = 'Partner Client';
+    const CLOUD_DESTINATION_PARTNER = 'Cloud Destination';
 
     // --- Form State ---
     const [formData, setFormData] = useState({
         name: '',
+        type: 'Client',
+        clientType: DIRECT_CLIENT_TYPE,
+        clientId: '',
+        clientName: '',
+        partnerId: '',
+        partnerName: CLOUD_DESTINATION_PARTNER,
+        department: '',
         billable: 'Billable',
-        status: 'Planned',
+        status: 'Not Started',
         startDate: '',
         endDate: '',
         teamMembers: []
     });
 
+    const [clients, setClients] = useState([]);
+    const [partnerClients, setPartnerClients] = useState([]);
+
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
+    const [entityError, setEntityError] = useState('');
+
+    // --- Modal State ---
+    const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
+
+    async function loadEntities() {
+        setEntityError('');
+        try {
+            const [clientData, partnerData] = await Promise.all([
+                fetchSimpleClients(),
+                fetchPartnerClients(),
+            ]);
+            setClients(clientData);
+            setPartnerClients(partnerData);
+        } catch {
+            setEntityError('Failed to load clients/partner clients.');
+        }
+    }
 
     // Fetch initial data
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (isOpen) {
-            // Reset form
+            setSubmitError('');
+            setEntityError('');
             setFormData({
                 name: '',
+                type: 'Client',
+                clientType: DIRECT_CLIENT_TYPE,
+                clientId: '',
+                clientName: '',
+                partnerId: '',
+                partnerName: CLOUD_DESTINATION_PARTNER,
+                department: '',
                 billable: 'Billable',
-                status: 'Planned',
+                status: 'Not Started',
                 startDate: '',
                 endDate: '',
                 teamMembers: []
             });
+            loadEntities();
         }
     }, [isOpen]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // --- Handlers ---
     const handleChange = (e) => {
         const { name, value } = e.target;
+        if (name === 'type') {
+            const isClientType = value === 'Client';
+            setFormData(prev => ({
+                ...prev,
+                type: value,
+                clientType: isClientType ? DIRECT_CLIENT_TYPE : '',
+                clientId: '',
+                clientName: '',
+                partnerId: '',
+                partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
+                department: value === 'Internal' ? prev.department : '',
+            }));
+            return;
+        }
+        if (name === 'clientType') {
+            setFormData(prev => ({
+                ...prev,
+                clientType: value,
+                clientId: '',
+                clientName: '',
+                partnerId: value === DIRECT_CLIENT_TYPE ? '' : prev.partnerId,
+                partnerName: value === DIRECT_CLIENT_TYPE ? CLOUD_DESTINATION_PARTNER : '',
+            }));
+            return;
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleClientSelect = (item) => {
+        setFormData(prev => ({ ...prev, clientId: String(item.id), clientName: item.name }));
+    };
+
+    const handlePartnerSelect = (item) => {
+        setFormData(prev => ({
+            ...prev,
+            partnerId: String(item.id),
+            partnerName: item.name,
+            clientId: '',
+            clientName: '',
+        }));
+    };
+
+    const hasPartnerMappedClients = useMemo(
+        () =>
+            clients.some((client) =>
+                ['partner_id', 'partnerId', 'partner_client_id', 'partnerClientId'].some(
+                    (key) => client[key] !== undefined && client[key] !== null
+                )
+            ),
+        [clients]
+    );
+
+    const filteredClients = useMemo(() => {
+        const isPartnerClientFlow = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        if (!isPartnerClientFlow || !formData.partnerId) {
+            return clients;
+        }
+
+        return clients.filter((client) => {
+            const linkedPartner =
+                client.partner_id ??
+                client.partnerId ??
+                client.partner_client_id ??
+                client.partnerClientId;
+
+            if (linkedPartner === undefined || linkedPartner === null || linkedPartner === '') {
+                return true;
+            }
+            return String(linkedPartner) === String(formData.partnerId);
+        });
+    }, [clients, formData.type, formData.clientType, formData.partnerId]);
+
+    // --- Entity Modal Openers ---
+    const openModal = (mode, entityType) => {
+        const isClient = entityType === 'client';
+        const selectedId = isClient ? formData.clientId : formData.partnerId;
+        const selectedName = isClient ? formData.clientName : formData.partnerName;
+
+        if ((mode === 'edit' || mode === 'delete') && !selectedId) {
+            setEntityError(`Select a ${isClient ? 'client' : 'partner'} to ${mode}.`);
+            return;
+        }
+
+        setModal({
+            isOpen: true,
+            mode,
+            entityType,
+            name: mode === 'add' ? '' : selectedName,
+            error: '',
+        });
+    };
+
+    const closeModal = () => setModal({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
+
+    const handleModalConfirm = async (name) => {
+        const isClient = modal.entityType === 'client';
+        const selectedId = isClient ? formData.clientId : formData.partnerId;
+        const trimmedName = (name || '').trim();
+
+        if (modal.mode !== 'delete' && !trimmedName) {
+            setModal(prev => ({ ...prev, error: 'Name cannot be empty.' }));
+            return;
+        }
+
+        try {
+            if (modal.mode === 'add') {
+                const created = isClient
+                    ? await createSimpleClient(trimmedName)
+                    : await createPartnerClient(trimmedName);
+                await loadEntities();
+                if (isClient) {
+                    setFormData(prev => ({ ...prev, clientId: String(created.id), clientName: created.name }));
+                } else {
+                    setFormData(prev => ({ ...prev, partnerId: String(created.id), partnerName: created.name }));
+                }
+            } else if (modal.mode === 'edit') {
+                const updated = isClient
+                    ? await updateSimpleClient(selectedId, trimmedName)
+                    : await updatePartnerClient(selectedId, trimmedName);
+                await loadEntities();
+                if (isClient) {
+                    setFormData(prev => ({ ...prev, clientName: updated.name }));
+                } else {
+                    setFormData(prev => ({ ...prev, partnerName: updated.name }));
+                }
+            } else if (modal.mode === 'delete') {
+                if (isClient) {
+                    await deleteSimpleClient(selectedId);
+                    setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
+                } else {
+                    await deletePartnerClient(selectedId);
+                    setFormData(prev => ({ ...prev, partnerId: '', partnerName: '' }));
+                }
+                await loadEntities();
+            }
+            setEntityError('');
+            closeModal();
+        } catch (error) {
+            const msg = error?.response?.data?.detail || `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
+            setModal(prev => ({ ...prev, error: msg }));
+        }
     };
 
     // --- Team Member Logic ---
@@ -77,14 +456,52 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     // --- Form Submission ---
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitError('');
+
+        if (!formData.name.trim()) {
+            setSubmitError('Project name is required.');
+            return;
+        }
+        if (!formData.startDate) {
+            setSubmitError('Start date is required.');
+            return;
+        }
+        if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
+            setSubmitError('End date cannot be earlier than start date.');
+            return;
+        }
+        if (formData.type === 'Client' && !formData.clientType) {
+            setSubmitError('Please select a client type.');
+            return;
+        }
+        if (formData.type === 'Client' && formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
+            setSubmitError('Please select a client.');
+            return;
+        }
+        if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
+            setSubmitError('Please select a partner.');
+            return;
+        }
+        if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.clientId) {
+            setSubmitError('Please select a client.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
+        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const effectiveType = isPartnerClientProject ? 'Partner' : formData.type;
 
         const payload = {
             project_id: projectId,
             project_name: formData.name,
             project_status: formData.status,
+            type: effectiveType,
+            client_id: formData.type === 'Client' ? (formData.clientId || null) : null,
+            client: formData.type === 'Client' && !isPartnerClientProject ? (formData.clientName || null) : null,
+            partner_id: isPartnerClientProject ? (formData.partnerId || null) : null,
+            partner: isPartnerClientProject ? (formData.partnerName || null) : null,
             billable: formData.billable,
             start_date: formData.startDate,
             end_date: formData.endDate || null,
@@ -92,24 +509,29 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         };
 
         try {
-            await axios.post('/projects', payload);
+            const response = await axios.post('/projects', payload);
             setIsSubmitting(false);
-            if (onAdd) onAdd(payload);
+            if (onAdd) onAdd(response?.data || payload);
             onClose();
         } catch (err) {
             console.error(err);
-            alert("Failed to create project.");
+            setSubmitError(err.response?.data?.detail || "Failed to create project.");
             setIsSubmitting(false);
         }
     };
 
     if (!isOpen) return null;
 
+    const isClientProject = formData.type === 'Client';
+    const isDirectClient = isClientProject && formData.clientType === DIRECT_CLIENT_TYPE;
+    const isPartnerClient = isClientProject && formData.clientType === PARTNER_CLIENT_TYPE;
+    const entityLabel = modal.entityType === 'client' ? 'Client' : 'Partner';
+
     return (
         <>
             <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
-            {/* Expansive Panel (Wider for the table) */}
+            {/* Panel */}
             <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
 
                 {/* Header */}
@@ -126,6 +548,16 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                 {/* Form Content */}
                 <div className="flex-1 overflow-y-auto w-full">
                     <form id="add-project-form" onSubmit={handleSubmit} className="p-6 flex flex-col gap-8">
+                        {submitError && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0" /> {submitError}
+                            </div>
+                        )}
+                        {entityError && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0" /> {entityError}
+                            </div>
+                        )}
 
                         {/* --- TOP SECTION: Project Details --- */}
                         <div className="flex flex-col gap-5">
@@ -142,25 +574,120 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                         value={formData.name} onChange={handleChange} />
                                 </div>
 
+                                {/* TYPE DROPDOWN */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Type</label>
+                                    <label className="text-xs font-bold text-gray-600 uppercase">Project Type</label>
                                     <select name="type" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.type} onChange={handleChange}>
                                         <option value="Client">Client</option>
                                         <option value="Internal">Internal</option>
-                                        <option value="Partner">Partner</option>
                                     </select>
                                 </div>
+
+                                {/* CLIENT TYPE DROPDOWN */}
+                                {isClientProject && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Client Type</label>
+                                        <select name="clientType" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                            value={formData.clientType} onChange={handleChange}>
+                                            <option value={DIRECT_CLIENT_TYPE}>{DIRECT_CLIENT_TYPE}</option>
+                                            <option value={PARTNER_CLIENT_TYPE}>{PARTNER_CLIENT_TYPE}</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {/* DIRECT CLIENT PARTNER FIELD */}
+                                {isDirectClient && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Partner</label>
+                                        <input
+                                            type="text"
+                                            value={CLOUD_DESTINATION_PARTNER}
+                                            disabled
+                                            className="p-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* PARTNER DROPDOWN + CRUD */}
+                                {isPartnerClient && (
+                                    <div className="flex flex-col gap-1.5 col-span-2">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Partner</label>
+                                        <div className="flex gap-2">
+                                            <SearchableDropdown
+                                                items={partnerClients}
+                                                selectedId={formData.partnerId}
+                                                onSelect={handlePartnerSelect}
+                                                placeholder="Select Partner"
+                                                label="partners"
+                                            />
+                                            <button type="button" onClick={() => openModal('add', 'partner')}
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Partner">
+                                                <Plus size={12} /> Add
+                                            </button>
+                                            <button type="button" onClick={() => openModal('edit', 'partner')}
+                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1" title="Edit Partner">
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" onClick={() => openModal('delete', 'partner')}
+                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-1" title="Delete Partner">
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CLIENT DROPDOWN + CRUD */}
+                                {isClientProject && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Client</label>
+                                        <div className="flex gap-2">
+                                            <SearchableDropdown
+                                                items={filteredClients}
+                                                selectedId={formData.clientId}
+                                                onSelect={handleClientSelect}
+                                                placeholder={isPartnerClient && hasPartnerMappedClients && !formData.partnerId ? 'Select Partner first' : 'Select Client'}
+                                                label="clients"
+                                                disabled={Boolean(isPartnerClient && hasPartnerMappedClients && !formData.partnerId)}
+                                                noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
+                                            />
+                                            <button type="button" onClick={() => openModal('add', 'client')}
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
+                                                <Plus size={12} /> Add
+                                            </button>
+                                            <button type="button" onClick={() => openModal('edit', 'client')}
+                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1" title="Edit Client">
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" onClick={() => openModal('delete', 'client')}
+                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-1" title="Delete Client">
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* INTERNAL — Department dropdown */}
+                                {formData.type === 'Internal' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Department (Optional)</label>
+                                        <select name="department" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                            value={formData.department} onChange={handleChange}>
+                                            <option value="">Select Department</option>
+                                            {DEPARTMENTS.map((dept) => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Status</label>
                                     <select name="status" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.status} onChange={handleChange}>
-                                        <option value="Planned">Planned</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Delayed">Delayed</option>
-                                        <option value="On Hold">On Hold</option>
-                                        <option value="Completed">Completed</option>
+                                        {PROJECT_STATUS_OPTIONS.map((status) => (
+                                            <option key={status} value={status}>{status}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -170,7 +697,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white cursor-pointer font-medium text-gray-700"
                                         value={formData.billable} onChange={handleChange}>
                                         <option value="Billable">Billable</option>
-                                        <option value="Non - Billable">Non - Billable</option>
+                                        <option value="Non-Billable">Non-Billable</option>
                                     </select>
                                 </div>
 
@@ -286,6 +813,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Entity Modal */}
+            <EntityModal
+                key={`${modal.mode}-${modal.entityType}-${modal.name}-${modal.isOpen ? 'open' : 'closed'}`}
+                isOpen={modal.isOpen}
+                mode={modal.mode}
+                entityLabel={entityLabel}
+                initialName={modal.name}
+                onConfirm={handleModalConfirm}
+                onCancel={closeModal}
+                error={modal.error}
+            />
         </>
     );
 };

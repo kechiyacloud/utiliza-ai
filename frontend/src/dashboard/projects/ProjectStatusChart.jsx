@@ -16,11 +16,11 @@ const ProjectStatusChart = ({ projects }) => {
             const nameL = (p.name || '').toLowerCase();
 
             const isPartner = typeL === 'partner';
-            const isCompleted = ['completed', 'done', 'ended', 'end', 'finished'].includes(statusL);
+            const isCompleted = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes(statusL);
             const isOngoing = ['live', 'in progress', 'running', 'active', 'ongoing'].includes(statusL);
 
             const isFutureDate = p.startDate && p.startDate !== 'Not Set' && new Date(p.startDate) > new Date();
-            const isUpcoming = ['planned', 'upcoming'].includes(statusL) || isFutureDate;
+            const isUpcoming = ['not started', 'planned', 'upcoming'].includes(statusL) || isFutureDate;
 
             // Prioritize Partner -> Completed -> Upcoming -> Ongoing
             if (isPartner) {
@@ -38,8 +38,8 @@ const ProjectStatusChart = ({ projects }) => {
         });
 
         const rawData = [
-            { name: 'Live', value: live, color: '#22C55E' },      // green-500
-            { name: 'Completed', value: completed, color: '#3B82F6' }, // blue-500
+            { name: 'Live', value: live, color: '#166534' },      // Standard Green Text
+            { name: 'Completed', value: completed, color: '#1E40AF' }, // Standard Blue Text
             { name: 'Upcoming', value: upcoming, color: '#EAB308' },  // yellow-500
             { name: 'Partner Projects', value: partner, color: '#A855F7' }     // purple-500
         ].filter(item => item.value > 0);
@@ -175,24 +175,16 @@ const ProjectStatusChart = ({ projects }) => {
                     {insights.length > 0 ? insights.map(p => {
                         let badgeColor = 'bg-green-50 text-green-600 border-green-100';
                         let indicator = '🟢';
-                        let progress = 0;
-                        if (p.startDate && p.endDate && p.startDate !== 'Not Set' && p.endDate !== 'Not Set') {
-                            const start = new Date(p.startDate);
-                            const end = new Date(p.endDate);
-                            const today = new Date();
-                            const total = end - start;
-                            const elapsed = today - start;
-                            progress = total > 0 ? Math.min(100, Math.max(0, Math.round((elapsed / total) * 100))) : 0;
-                        } else {
-                            progress = p.daysRemaining < 30 ? 75 : 25; // fallback
-                        }
+                        let progress = 35; // default mock progress
 
                         if (p.daysRemaining < 7) {
                             badgeColor = 'bg-red-50 text-red-600 border-red-100';
                             indicator = '🔴';
+                            progress = 90; // mock close to completion
                         } else if (p.daysRemaining <= 30) {
                             badgeColor = 'bg-amber-50 text-amber-600 border-amber-100';
                             indicator = '🟡';
+                            progress = 65;
                         }
 
                         // Parse members from resourceNames string
