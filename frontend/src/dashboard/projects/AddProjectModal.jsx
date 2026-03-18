@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { X, Calendar, Plus } from 'lucide-react';
+import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
 const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
     const [formData, setFormData] = useState({
         name: '',
         type: 'Client', // Default
         client: '',
-        status: 'In Progress',
+        status: 'Not Started',
         startDate: '',
         endDate: '',
         resources: 0
@@ -101,10 +102,9 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                                 value={formData.status}
                                 onChange={handleChange}
                             >
-                                <option value="In Progress">In Progress</option>
-                                <option value="Delayed">Delayed</option>
-                                <option value="Completed">Completed</option>
-                                <option value="On Hold">On Hold</option>
+                                {PROJECT_STATUS_OPTIONS.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
                             </select>
                         </div>
                     </div>

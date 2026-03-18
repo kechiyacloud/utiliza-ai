@@ -263,10 +263,24 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
 
                             {/* Badges Row */}
                             <div className="flex flex-wrap items-center gap-3">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${project.statusPillColor || 'bg-gray-200 text-gray-700'} border border-opacity-20`}>
+                                <span 
+                                    className="px-3 py-1 rounded-full text-xs font-bold border"
+                                    style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
+                                        backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
+                                        color: project.status === 'Completed' ? '#1E40AF' : '#166534',
+                                        borderColor: 'transparent'
+                                    }}
+                                >
                                     {project.status || 'Unknown'}
                                 </span>
-                                <span className="px-3 py-1 bg-white border border-gray-200 text-gray-700 rounded-full text-xs font-bold shadow-sm">
+                                <span 
+                                    className="px-3 py-1 rounded-full text-xs font-bold border"
+                                    style={{
+                                        backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
+                                        color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
+                                        borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
+                                    }}
+                                >
                                     {project.type || 'Standard'}
                                 </span>
                                 <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold border border-emerald-100 shadow-sm">

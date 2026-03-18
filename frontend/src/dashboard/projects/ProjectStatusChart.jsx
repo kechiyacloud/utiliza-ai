@@ -16,11 +16,11 @@ const ProjectStatusChart = ({ projects }) => {
             const nameL = (p.name || '').toLowerCase();
 
             const isPartner = typeL === 'partner';
-            const isCompleted = ['completed', 'done', 'ended', 'end', 'finished'].includes(statusL);
+            const isCompleted = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes(statusL);
             const isOngoing = ['live', 'in progress', 'running', 'active', 'ongoing'].includes(statusL);
 
             const isFutureDate = p.startDate && p.startDate !== 'Not Set' && new Date(p.startDate) > new Date();
-            const isUpcoming = ['planned', 'upcoming'].includes(statusL) || isFutureDate;
+            const isUpcoming = ['not started', 'planned', 'upcoming'].includes(statusL) || isFutureDate;
 
             // Prioritize Partner -> Completed -> Upcoming -> Ongoing
             if (isPartner) {
@@ -38,8 +38,8 @@ const ProjectStatusChart = ({ projects }) => {
         });
 
         const rawData = [
-            { name: 'Live', value: live, color: '#22C55E' },      // green-500
-            { name: 'Completed', value: completed, color: '#3B82F6' }, // blue-500
+            { name: 'Live', value: live, color: '#166534' },      // Standard Green Text
+            { name: 'Completed', value: completed, color: '#1E40AF' }, // Standard Blue Text
             { name: 'Upcoming', value: upcoming, color: '#EAB308' },  // yellow-500
             { name: 'Partner Projects', value: partner, color: '#A855F7' }     // purple-500
         ].filter(item => item.value > 0);

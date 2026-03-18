@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Filter, RotateCcw } from 'lucide-react';
+import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
 const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
     const [filters, setFilters] = useState({
@@ -89,6 +90,7 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     <option value="Client">Client</option>
                                     <option value="Internal">Internal</option>
                                     <option value="Partner">Partner</option>
+                                    <option value="POC">POC</option>
                                 </select>
                             </div>
 
@@ -101,13 +103,10 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     value={filters.status}
                                     onChange={handleChange}
                                 >
-                                    <option value="">All Statuses</option>
-                                    <option value="Live">Live</option>
-                                    <option value="Active">Active</option>
-                                    <option value="In Progress">In Progress</option>
-                                    <option value="Delayed">Delayed</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="On Hold">On Hold</option>
+                                    <option value="">All Status</option>
+                                    {PROJECT_STATUS_OPTIONS.map((status) => (
+                                        <option key={status} value={status}>{status}</option>
+                                    ))}
                                 </select>
                             </div>
 

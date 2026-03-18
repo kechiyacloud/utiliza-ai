@@ -62,7 +62,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         // Quick Card Filter logic
         let matchesCardFilter = true;
         if (activeCardFilter === 'Internal') {
-            matchesCardFilter = project.type === 'Internal';
+            matchesCardFilter = ['Internal', 'POC'].includes(project.type);
         } else if (activeCardFilter === 'Client') {
             matchesCardFilter = project.type === 'Client';
         } else if (activeCardFilter === 'Ongoing') {
@@ -71,9 +71,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             matchesCardFilter = project.type === 'Partner';
         } else if (activeCardFilter === 'Upcoming') {
             const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
-            matchesCardFilter = (project.status || '').toLowerCase() === 'planned' || isFutureDate;
+            matchesCardFilter = (project.status || '').toLowerCase() === 'not started' || isFutureDate;
         } else if (activeCardFilter === 'Completed') {
-            matchesCardFilter = ['completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
+            matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
         }
 
         return matchesSearchTerm && matchesNameFilter && matchesType && matchesStatus && matchesResources && matchesCardFilter;
@@ -95,7 +95,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         if (!projectToDelete) return;
         setIsDeleting(true);
         try {
-            await axios.delete(`/ projects / ${projectToDelete.id} `);
+            await axios.delete(`/projects/${projectToDelete.project_id || projectToDelete.id}`);
             if (onRefresh) onRefresh();
             setProjectToDelete(null);
         } catch (error) {
@@ -122,10 +122,12 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
     const handleSaveProject = async (updatedProject) => {
         try {
-            await axios.put(`/projects/${updatedProject.id}`, {
+            await axios.put(`/projects/${updatedProject.project_id || updatedProject.id}`, {
                 project_name: updatedProject.name,
                 project_status: updatedProject.status,
                 type: updatedProject.type,
+                client: updatedProject.client,
+                billable: updatedProject.billable,
                 start_date: updatedProject.startDate || null,
                 end_date: updatedProject.endDate || null,
             });
@@ -133,7 +135,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             setIsEditFormOpen(false);
         } catch (error) {
             console.error("Failed to update project", error);
-            alert("Failed to save project. Please try again.");
+            throw error;
         }
     };
 
@@ -192,10 +194,11 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                 <thead>
                                     <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                                         <th className="text-left py-4 pl-4">Project Name</th>
-                                        <th className="text-left py-4">Project Type</th>
-                                        <th className="text-left py-4">End Date</th>
-                                        <th className="text-center py-4">Resources</th>
                                         <th className="text-center py-4">Status</th>
+                                        <th className="text-center py-4">Billable</th>
+                                        <th className="text-center py-4">Start Date</th>
+                                        <th className="text-center py-4">End Date</th>
+                                        <th className="text-center py-4">Resources</th>
                                         <th className="w-10"></th>
                                     </tr>
                                 </thead>
@@ -213,26 +216,40 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                     </div>
                                                     <div>
                                                         <div className="font-bold text-gray-800 transition-colors group-hover:bg-blue-50 group-hover:text-blue-700 px-2 py-1 rounded-md w-fit -mx-2">{project.name}</div>
-                                                        <div className="text-[10px] text-gray-400 font-mono">{project.id}</div>
+                                                        <div className="text-[10px] text-gray-400 font-mono">{project.project_id || project.id}</div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="py-4 text-gray-600 font-medium">
-                                                <span className={`px - 3 py - 1 bg - gray - 100 text - gray - 600 rounded - md text - xs font - bold border border - gray - 200`}>
-                                                    {project.type}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 text-gray-500 text-sm font-mono">{project.endDate}</td>
                                             <td className="py-4 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className="text-sm font-extrabold text-blue-600">{project.resources}</span>
-                                                    <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
-                                                </div>
-                                            </td>
-                                            <td className="py-4 text-center">
-                                                <span className={`px - 4 py - 1.5 rounded - full text - xs font - bold ${project.statusPillColor} `}>
+                                                <span 
+                                                    className="px-4 py-1.5 rounded-full text-xs font-bold"
+                                                    style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
+                                                        backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
+                                                        color: project.status === 'Completed' ? '#1E40AF' : '#166534'
+                                                    }}
+                                                >
                                                     {project.status}
                                                 </span>
+                                            </td>
+                                            <td className="py-4 text-center">
+                                                <span 
+                                                    className="px-3 py-1 rounded-md text-xs font-bold border"
+                                                    style={{
+                                                        backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
+                                                        color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
+                                                        borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
+                                                    }}
+                                                >
+                                                    {project.billable || 'Unknown'}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.start_date || project.startDate || '-'}</td>
+                                            <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.end_date || project.endDate || '-'}</td>
+                                            <td className="py-4 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-sm font-extrabold text-blue-600">{project.resource_count || project.resources || 0}</span>
+                                                    <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
+                                                </div>
                                             </td>
                                             <td className="py-4 pr-4 text-right flex justify-end gap-2">
                                                 <button

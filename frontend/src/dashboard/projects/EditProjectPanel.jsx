@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Plus } from 'lucide-react';
+import { fetchClientsList } from '../../api/clientApi';
+import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
 const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
+    const [clients, setClients] = useState([]);
+    const [saveError, setSaveError] = useState('');
     const [formData, setFormData] = useState({
         name: '',
         type: 'Client',
         client: '',
-        status: 'In Progress',
+        status: 'Not Started',
+        billable: 'Billable',
         startDate: '',
         endDate: '',
         resources: 0
@@ -14,17 +19,33 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     useEffect(() => {
         if (project) {
+            setSaveError('');
             setFormData({
-                name: project.name || '',
+                name: project.name || project.project_name || '',
                 type: project.type || 'Client',
-                client: project.client || '',
-                status: project.status || 'In Progress',
-                startDate: project.startDate || '',
-                endDate: project.endDate || '',
-                resources: project.resources || 0
+                client: project.client || project.client_name || '',
+                status: project.status || 'Not Started',
+                billable: project.billable || 'Billable',
+                startDate: project.start_date || project.startDate || '',
+                endDate: project.end_date || project.endDate || '',
+                resources: project.resource_count || project.resources || 0
             });
         }
     }, [project]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const loadClients = async () => {
+            try {
+                const data = await fetchClientsList();
+                setClients(Array.isArray(data) ? data : []);
+            } catch (error) {
+                console.error('Failed to load clients', error);
+                setClients([]);
+            }
+        };
+        loadClients();
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -33,10 +54,18 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave({ ...project, ...formData });
-        onClose();
+        setSaveError('');
+        if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
+            setSaveError('End date cannot be earlier than start date.');
+            return;
+        }
+        try {
+            await onSave({ ...project, ...formData });
+        } catch (error) {
+            setSaveError(error?.response?.data?.detail || 'Failed to save project.');
+        }
     };
 
     return (
@@ -65,6 +94,11 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                     {/* Form Content */}
                     <div className="flex-1 overflow-y-auto p-6">
                         <form id="edit-project-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+                            {saveError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                                    {saveError}
+                                </div>
+                            )}
 
                             {/* Project Name */}
                             <div className="flex flex-col gap-1">
@@ -91,10 +125,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                             onChange={handleChange}
                                         >
                                             <option value="">Select Client</option>
-                                            <option value="TechGlobal Inc">TechGlobal Inc</option>
-                                            <option value="FinServe Corp">FinServe Corp</option>
-                                            <option value="HealthPlus Med">HealthPlus Med</option>
-                                            <option value="MegaCorp">MegaCorp</option>
+                                            {clients.map((client) => (
+                                                <option key={client.id} value={client.name}>{client.name}</option>
+                                            ))}
                                         </select>
                                         <button type="button" className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors">
                                             <Plus size={20} />
@@ -115,6 +148,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     <option value="Client">Client</option>
                                     <option value="Internal">Internal</option>
                                     <option value="Partner">Partner</option>
+                                    <option value="POC">POC</option>
                                 </select>
                             </div>
 
@@ -127,10 +161,23 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     value={formData.status}
                                     onChange={handleChange}
                                 >
-                                    <option value="In Progress">In Progress</option>
-                                    <option value="Delayed">Delayed</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="On Hold">On Hold</option>
+                                    {PROJECT_STATUS_OPTIONS.map((status) => (
+                                        <option key={status} value={status}>{status}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Billable */}
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-500 uppercase">Billable</label>
+                                <select
+                                    name="billable"
+                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                    value={formData.billable}
+                                    onChange={handleChange}
+                                >
+                                    <option value="Billable">Billable</option>
+                                    <option value="Non-Billable">Non-Billable</option>
                                 </select>
                             </div>
 

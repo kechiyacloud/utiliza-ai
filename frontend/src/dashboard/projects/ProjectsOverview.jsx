@@ -3,18 +3,27 @@ import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, Tr
 import { useNavigate, useLocation } from 'react-router-dom';
 import AddProjectPanel from './AddProjectPanel';
 
-const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, trendUp, onClick, active }) => {
+const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, trendUp, onClick, active, customColors }) => {
     return (
         <div
             onClick={onClick}
             className={`bg-white p-4 rounded-xl shadow-sm border ${active ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-100'} flex flex-col justify-between min-w-[140px] flex-1 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all relative overflow-hidden group`}
         >
             {/* Background gradient effect */}
-            <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${colorClass.split(' ')[0]}`}></div>
+            <div 
+                className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity`}
+                style={{ backgroundColor: customColors?.bg || '#F1F5F9' }}
+            ></div>
 
             <div className="flex justify-between items-start mb-3 relative z-10">
-                <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10 text-opacity-100`}>
-                    <Icon size={18} className={colorClass.replace('bg-', 'text-').replace('100', '500')} />
+                <div 
+                    className={`p-2 rounded-lg ${customColors ? '' : (colorClass + ' bg-opacity-10')}`}
+                    style={{ 
+                        backgroundColor: customColors?.bg || (colorClass ? undefined : '#F1F5F9'),
+                        color: customColors?.text || (colorClass ? undefined : '#475569')
+                    }}
+                >
+                    <Icon size={18} />
                 </div>
 
                 {trend && (
@@ -34,21 +43,25 @@ const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, tr
             </div>
 
             {/* Colored Status indicator line at the bottom */}
-            <div className={`absolute bottom-0 left-0 w-full h-1 opacity-50 ${colorClass.split(' ')[0]}`}></div>
+            <div 
+                className={`absolute bottom-0 left-0 w-full h-1 opacity-50 ${customColors ? '' : colorClass.split(' ')[0]}`}
+                style={{ backgroundColor: customColors?.text || (colorClass ? undefined : '#CBD5E1') }}
+            ></div>
         </div>
     );
 };
 
-const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
+const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
 
     if (!stats) return null;
 
-    const handleAddProject = (newProject) => {
-        console.log("New Project Added:", newProject);
-        // In real app, this would call an API or update parent state
+    const handleAddProject = () => {
+        if (onProjectAdded) {
+            onProjectAdded();
+        }
     };
 
     return (
@@ -77,14 +90,14 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
                 </button>
             </div>
 
-            {/* 6 Metric Cards Layout */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
+            {/* 5 Metric Cards Layout */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-4">
                 <StatCard
                     label="Total Projects"
                     value={stats.totalProjects}
                     description="All-time tracked projects"
                     icon={Briefcase}
-                    colorClass="bg-indigo-100 text-indigo-500"
+                    customColors={{ bg: '#EFF6FF', text: '#2563EB' }}
                     trend="12"
                     trendUp={true}
                     active={activeFilter === null}
@@ -95,40 +108,30 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
                     value={stats.clientProjects}
                     description="Billable external work"
                     icon={Globe}
-                    colorClass="bg-sky-100 text-sky-500"
+                    customColors={{ bg: '#F5F3FF', text: '#7C3AED' }}
                     trend="5"
                     trendUp={true}
                     active={activeFilter === 'Client'}
                     onClick={() => onFilterChange(activeFilter === 'Client' ? null : 'Client')}
                 />
                 <StatCard
-                    label="Internal Projects"
+                    label="Internal Projects / POCs"
                     value={stats.internalProjects}
-                    description="Non-billable initiatives"
+                    description="Non-billable initiatives & POCs"
                     icon={Radio}
-                    colorClass="bg-purple-100 text-purple-500"
+                    customColors={{ bg: '#F3F4F6', text: '#374151' }}
                     trend="2"
                     trendUp={false}
                     active={activeFilter === 'Internal'}
                     onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
                 />
-                <StatCard
-                    label="Partner Projects"
-                    value={stats.partnerCount || stats.partner_projects}
-                    description="External partner engagements"
-                    icon={FileText}
-                    colorClass="bg-amber-100 text-amber-500"
-                    trend="15"
-                    trendUp={true}
-                    active={activeFilter === 'Partner'}
-                    onClick={() => onFilterChange(activeFilter === 'Partner' ? null : 'Partner')}
-                />
+
                 <StatCard
                     label="Upcoming Projects"
                     value={stats.upcoming_projects}
                     description="Not yet started"
                     icon={CalendarClock}
-                    colorClass="bg-violet-100 text-violet-500"
+                    customColors={{ bg: '#FFFBEB', text: '#F59E0B' }}
                     trend="4"
                     trendUp={true}
                     active={activeFilter === 'Upcoming'}
@@ -139,7 +142,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange }) => {
                     value={stats.completedProjects}
                     description="Successfully delivered"
                     icon={CheckCircle}
-                    colorClass="bg-emerald-100 text-emerald-500"
+                    customColors={{ bg: '#ECFDF5', text: '#10B981' }}
                     trend="24"
                     trendUp={true}
                     active={activeFilter === 'Completed'}

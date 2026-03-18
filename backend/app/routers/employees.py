@@ -371,6 +371,29 @@ def get_employee_filter_options():
         cur.close()
         conn.close()
 
+@router.get("/departments/roles-mapping")
+def get_departments_roles_mapping():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT department, role_designation FROM employee_master WHERE department IS NOT NULL AND role_designation IS NOT NULL")
+        mapping = {}
+        for row in cur.fetchall():
+            dep, role = row[0].strip(), row[1].strip()
+            if not dep or not role: continue
+            if dep not in mapping:
+                mapping[dep] = set()
+            mapping[dep].add(role)
+        
+        # Convert sets to sorted lists
+        return {k: sorted(list(v)) for k, v in mapping.items()}
+    except Exception as e:
+        print(f"Error fetching dept/role mapping: {e}")
+        return {}
+    finally:
+        cur.close()
+        conn.close()
+
 @router.get("/employee/by-email/{email_id}")
 def get_employee_id_by_email(email_id: str):
     conn = get_db_connection()

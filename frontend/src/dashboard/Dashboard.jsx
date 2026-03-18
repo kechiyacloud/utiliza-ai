@@ -13,7 +13,6 @@ import {
 } from 'recharts';
 
 import { fetchDashboardData, fetchTodos, addTodo, toggleTodo, clearTodo, exportRiskBoard } from '../api/dashboardApi';
-import { createProject } from '../api/projectsApi';
 import { createClient } from '../api/clientApi';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
@@ -168,23 +167,12 @@ function Dashboard() {
 
   const handleAddProject = async (projectData) => {
     try {
-      const payload = {
-        project_id: (projectData.name.replace(/\s+/g, '-').toUpperCase() + '-' + Math.floor(Math.random() * 1000)).substring(0, 20),
-        project_name: projectData.name,
-        project_status: projectData.status,
-        billable: projectData.type === 'Client' ? 'Yes' : 'No',
-        start_date: projectData.startDate || null,
-        end_date: projectData.endDate || null
-      };
-      await createProject(payload);
-
       setIsProjectPanelOpen(false);
-      // Optional: Refresh dashboard data
       const res = await fetchDashboardData();
       setData(res.data);
     } catch (e) {
       console.error("Failed to add project", e);
-      alert("Failed to create project");
+      alert(projectData?.detail || "Failed to refresh dashboard after creating the project.");
     }
   };
 
