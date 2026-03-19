@@ -43,5 +43,22 @@ services:
       - ./frontend:/app
       - /app/node_modules
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: project-ngrok-tunnel
+    restart: always
+    environment:
+      # You can put NGROK_AUTHTOKEN inside a .env file or export it locally
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "frontend:5173"
+      - "--url=nonhabitably-arabinosic-dedra.ngrok-free.dev"
+    ports:
+      - "4040:4040"
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
   postgres_data:

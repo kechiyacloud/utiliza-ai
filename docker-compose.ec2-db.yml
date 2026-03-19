@@ -1,0 +1,25 @@
+services:
+
+  backend:
+    restart: always
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: project-backend-dev
+    env_file: ./backend/.env
+    # DB configuration is read directly from backend/.env (host, port, credentials)
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: project-frontend-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

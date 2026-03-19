@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check } from 'lucide-react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
 import axios from '../../api/axios';
 import {
     fetchSimpleClients,
@@ -12,6 +12,46 @@ import {
     deletePartnerClient,
 } from '../../api/entitiesApi';
 import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
+
+/* ──────────────────────────────────────────────────────────
+   HELPERS — for Last 4 Weeks visualization
+   ────────────────────────────────────────────────────────── */
+function getMonday(date) {
+    const d = new Date(date);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+function getISOWeekNumber(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+function fmtDate(d) {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function getLast4Weeks() {
+    const today = new Date();
+    const thisMonday = getMonday(today);
+    const weeks = [];
+    for (let i = 3; i >= 0; i--) {
+        const monday = new Date(thisMonday);
+        monday.setDate(thisMonday.getDate() - i * 7);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const wk = getISOWeekNumber(monday);
+        weeks.push({
+            label: i === 0 ? `This Week` : `Week -${i}`,
+            dateRange: `${fmtDate(monday)} – ${fmtDate(sunday)}`,
+            weekNum: wk,
+            year: monday.getFullYear()
+        });
+    }
+    return weeks;
+}
 
 
 /* ──────────────────────────────────────────────────────────
@@ -223,6 +263,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
     const [clients, setClients] = useState([]);
     const [partnerClients, setPartnerClients] = useState([]);
+    const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
+    const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
 
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -235,12 +277,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     async function loadEntities() {
         setEntityError('');
         try {
-            const [clientData, partnerData] = await Promise.all([
+            const [clientData, partnerData, empRes, rolesRes] = await Promise.all([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
+                axios.get('/employees/list'),
+                axios.get('/employees/roles'),
             ]);
             setClients(clientData);
             setPartnerClients(partnerData);
+            setEmployees(empRes.data || []);
+            // roles API returns { department: [roles] }; flatten into unique sorted list
+            const allRoles = new Set();
+            Object.values(rolesRes.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
+            setRolesList(Array.from(allRoles).sort());
         } catch {
             setEntityError('Failed to load clients/partner clients.');
         }
@@ -286,6 +335,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                 partnerId: '',
                 partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
                 department: value === 'Internal' ? prev.department : '',
+                billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
             }));
             return;
         }
@@ -418,15 +468,32 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         }
     };
 
-    // --- Team Member Logic ---
     const handleAddTeamMember = () => {
         setFormData(prev => ({
             ...prev,
             teamMembers: [
                 ...prev.teamMembers,
-                { name: '', role: '', company: 'Cloud Destinations', company_type: 'Internal', location: 'Remote', w1: 0, w2: 0, w3: 0, w4: 0 }
+                { employee_id: '', name: '', role: '', company: 'Cloud Destinations', company_type: 'Internal', location: 'Remote', w1: 0, w2: 0, w3: 0, w4: 0 }
             ]
         }));
+    };
+
+    const handleEmployeeSelect = (index, emp) => {
+        const newTeam = [...formData.teamMembers];
+        newTeam[index] = {
+            ...newTeam[index],
+            employee_id: emp.employee_id,
+            name: emp.employee_name,
+            // Auto-fill role from employee designation if role is empty
+            role: newTeam[index].role || emp.role_designation || '',
+        };
+        setFormData({ ...formData, teamMembers: newTeam });
+    };
+
+    const handleRoleSelect = (index, role) => {
+        const newTeam = [...formData.teamMembers];
+        newTeam[index].role = role;
+        setFormData({ ...formData, teamMembers: newTeam });
     };
 
     const handleRemoveTeamMember = (index) => {
@@ -694,8 +761,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Billable</label>
                                     <select name="billable"
-                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white cursor-pointer font-medium text-gray-700"
-                                        value={formData.billable} onChange={handleChange}>
+                                        className={`p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium 
+                                            ${formData.type === 'Internal' ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700 cursor-pointer focus:bg-white'}`}
+                                        value={formData.billable} 
+                                        onChange={handleChange}
+                                        disabled={formData.type === 'Internal'}>
                                         <option value="Billable">Billable</option>
                                         <option value="Non-Billable">Non-Billable</option>
                                     </select>
@@ -731,6 +801,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                 </button>
                             </div>
 
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-3">
+                                <Info size={16} className="text-blue-500 mt-0.5 shrink-0" />
+                                <div className="text-[11px] text-blue-700 leading-relaxed">
+                                    <strong>Allocation Logic:</strong> Weekly hours are based on a 40h standard (40h = 100%). You are currently planning for the <strong>last 4 weeks</strong> (Current week + previous 3 weeks).
+                                </div>
+                            </div>
+
                             {formData.teamMembers.length === 0 ? (
                                 <div className="text-center py-8 text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
                                     No team members allocated to this project yet.
@@ -746,10 +823,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                 <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Comp. Type</th>
                                                 <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Company</th>
                                                 <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Location</th>
-                                                <th className="px-2 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">W1</th>
-                                                <th className="px-2 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">W2</th>
-                                                <th className="px-2 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">W3</th>
-                                                <th className="px-2 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">W4</th>
+                                                {getLast4Weeks().map((wk, idx) => (
+                                                    <th key={idx} className="px-2 py-3 text-center min-w-[70px]">
+                                                        <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-tight">{wk.label}</div>
+                                                        <div className="text-[9px] font-medium text-slate-400 whitespace-nowrap">{wk.dateRange}</div>
+                                                    </th>
+                                                ))}
                                                 <th className="px-3 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"></th>
                                             </tr>
                                         </thead>
@@ -757,11 +836,25 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                             {formData.teamMembers.map((member, idx) => (
                                                 <tr key={idx} className="border-b border-gray-50 bg-white hover:bg-slate-50/40">
                                                     <td className="px-3 py-2 text-center text-slate-400 font-medium">{idx + 1}</td>
-                                                    <td className="px-2 py-2 min-w-[120px]">
-                                                        <input type="text" value={member.name} onChange={(e) => handleTeamMemberChange(idx, 'name', e.target.value)} required placeholder="Name" className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                    <td className="px-2 py-2 min-w-[160px]">
+                                                        {/* Employee name — searchable dropdown */}
+                                                        <SearchableDropdown
+                                                            items={employees.map(e => ({ id: e.employee_id, name: e.employee_name, _raw: e }))}
+                                                            selectedId={member.employee_id}
+                                                            onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
+                                                            placeholder="Select Employee"
+                                                            label="employees"
+                                                        />
                                                     </td>
-                                                    <td className="px-2 py-2 min-w-[120px]">
-                                                        <input type="text" value={member.role} onChange={(e) => handleTeamMemberChange(idx, 'role', e.target.value)} required placeholder="Role" className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                    <td className="px-2 py-2 min-w-[150px]">
+                                                        {/* Role — searchable dropdown */}
+                                                        <SearchableDropdown
+                                                            items={rolesList.map(r => ({ id: r, name: r }))}
+                                                            selectedId={member.role}
+                                                            onSelect={(item) => handleRoleSelect(idx, item.name)}
+                                                            placeholder="Select Role"
+                                                            label="roles"
+                                                        />
                                                     </td>
                                                     <td className="px-2 py-2 min-w-[100px]">
                                                         <select value={member.company_type} onChange={(e) => handleTeamMemberChange(idx, 'company_type', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer font-semibold text-slate-600">

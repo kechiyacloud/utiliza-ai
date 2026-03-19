@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 import psycopg2
 
 router = APIRouter(prefix="/partner-clients", tags=["Partner Clients"])
@@ -22,7 +22,7 @@ def list_partner_clients():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("")
@@ -48,7 +48,7 @@ def create_partner_client(payload: PartnerClientCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/{partner_client_id}")
@@ -76,7 +76,7 @@ def update_partner_client(partner_client_id: int, payload: PartnerClientCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.delete("/{partner_client_id}")
@@ -101,4 +101,4 @@ def delete_partner_client(partner_client_id: int):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
