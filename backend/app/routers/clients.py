@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from pydantic import BaseModel
 from typing import Optional
 import psycopg2
@@ -25,22 +25,68 @@ def list_clients():
     try:
         cur.execute("SELECT client_id, client_name, website_url, industry, status, budget FROM clients ORDER BY client_name")
         rows = cur.fetchall()
-        return [
-            {
-                "id": r[0],
+        
+        # Fetch projects and stakeholders for each client
+        client_list = []
+        for r in rows:
+            client_id = r[0]
+            # Fetch projects
+            cur.execute("""
+                SELECT p.project_id, p.project_name, p.project_status, p.start_date, p.end_date, pc.budget
+                FROM projects p
+                LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
+                WHERE p.client_id = %s
+            """, (client_id,))
+            proj_rows = cur.fetchall()
+            
+            projects = []
+            stakeholders = []
+            seen_stakeholders = set()
+
+            for p in proj_rows:
+                project_id = p[0]
+                projects.append({
+                    "id": project_id,
+                    "name": p[1],
+                    "status": p[2],
+                    "start_date": p[3],
+                    "end_date": p[4],
+                    "budget": str(p[5]) if p[5] else "0"
+                })
+
+                # Fetch allocations for this project as stakeholders
+                cur.execute("""
+                    SELECT em.employee_name, pa.role_in_project, em.employee_id
+                    FROM projects_allocation pa
+                    JOIN employee_master em ON pa.employee_id = em.employee_id
+                    WHERE pa.project_id = %s
+                """, (project_id,))
+                for s in cur.fetchall():
+                    if s[2] not in seen_stakeholders:
+                        stakeholders.append({
+                            "name": s[0],
+                            "role": s[1],
+                            "id": s[2]
+                        })
+                        seen_stakeholders.add(s[2])
+
+            client_list.append({
+                "id": client_id,
                 "name": r[1],
                 "url": r[2],
                 "industry": r[3],
                 "status": r[4],
-                "budget": float(r[5]) if r[5] else 0.0
-            }
-            for r in rows
-        ]
+                "budget": float(r[5]) if r[5] else 0.0,
+                "projects": projects,
+                "stakeholders": stakeholders
+            })
+            
+        return client_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.post("")
 def create_client(client: ClientCreate):
@@ -65,7 +111,7 @@ def create_client(client: ClientCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.delete("/{client_id}")
 def delete_client(client_id: str):
@@ -91,7 +137,7 @@ def delete_client(client_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/simple")
@@ -106,7 +152,7 @@ def list_simple_clients():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("/simple")
@@ -132,7 +178,7 @@ def create_simple_client(payload: EntityNameCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/simple/{client_id}")
@@ -160,7 +206,7 @@ def update_simple_client(client_id: str, payload: EntityNameCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.delete("/simple/{client_id}")
@@ -185,7 +231,7 @@ def delete_simple_client(client_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/partners")
@@ -200,7 +246,7 @@ def list_partners():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("/partners")
@@ -226,7 +272,7 @@ def create_partner(payload: EntityNameCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/partners/{partner_id}")
@@ -254,7 +300,7 @@ def update_partner(partner_id: int, payload: EntityNameCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.delete("/partners/{partner_id}")
@@ -279,4 +325,4 @@ def delete_partner(partner_id: int):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

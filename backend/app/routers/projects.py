@@ -5,7 +5,7 @@ import psycopg2
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -37,16 +37,19 @@ class ProjectUpdate(BaseModel):
 
 
 class TeamMemberCreate(BaseModel):
+    employee_id: Optional[str] = None
     name: str
     role: str
     department: Optional[str] = None
-    company: str
-    company_type: str
-    location: str
-    w1: int
-    w2: int
-    w3: int
-    w4: int
+    company: Optional[str] = "Cloud Destinations"
+    company_type: Optional[str] = "Internal"
+    location: Optional[str] = "Remote"
+    allocation_start_date: Optional[str] = None
+    allocation_end_date: Optional[str] = None
+    w1: int = 0
+    w2: int = 0
+    w3: int = 0
+    w4: int = 0
 
 
 class ResourceAllocationUpdate(BaseModel):
@@ -229,7 +232,7 @@ def projects_overview():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/list")
@@ -247,13 +250,14 @@ def projects_list():
                 p.end_date,
                 COUNT(DISTINCT pa.employee_id) AS resource_count,
                 STRING_AGG(DISTINCT em.employee_name, ', ') AS resource_names,
-                p.client_name,
+                c.client_name,
                 p.billable,
                 p.client_id
             FROM projects p
             LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
             LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
-            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, p.client_name, p.billable, p.client_id
+            LEFT JOIN clients c ON p.client_id = c.client_id
+            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, p.billable, p.client_id
             ORDER BY p.start_date DESC NULLS LAST
         """)
         rows = cur.fetchall()
@@ -279,7 +283,7 @@ def projects_list():
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/{project_id}/details")
@@ -288,12 +292,14 @@ def get_project_details(project_id: str):
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT
-                project_id, project_name, project_status, billable, start_date, end_date,
-                budget, billing_type, contract_type, revenue_model, commercial_notes,
-                objective, deliverables, milestones, timeline_notes
-            FROM projects
-            WHERE project_id = %s
+            SELECT 
+                p.project_id, p.project_name, p.project_status, p.billable, p.start_date, p.end_date,
+                pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
+                ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes
+            FROM projects p
+            LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
+            LEFT JOIN project_scopes ps ON p.project_id = ps.project_id
+            WHERE p.project_id = %s
         """, (project_id,))
         row = cur.fetchone()
         if not row:
@@ -318,7 +324,7 @@ def get_project_details(project_id: str):
         }
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/{project_id}/details")
@@ -326,49 +332,39 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
-        if not cur.fetchone():
+        cur.execute("SELECT project_name, client_id FROM projects WHERE project_id = %s", (project_id,))
+        proj_row = cur.fetchone()
+        if not proj_row:
             raise HTTPException(status_code=404, detail="Project not found")
+            
+        project_name = proj_row[0]
+        client_id = proj_row[1]
 
-        payload = _model_payload(details)
-        if not payload:
-            raise HTTPException(status_code=400, detail="No project detail fields were provided.")
+        start_date_val = None if not details.start_date or details.start_date in ['Not Set', 'TBD'] else details.start_date
+        end_date_val = None if not details.end_date or details.end_date in ['Not Set', 'TBD'] else details.end_date
 
-        field_map = {
-            "budget": "budget",
-            "billing_type": "billing_type",
-            "contract_type": "contract_type",
-            "revenue_model": "revenue_model",
-            "commercial_notes": "commercial_notes",
-            "objective": "objective",
-            "deliverables": "deliverables",
-            "milestones": "milestones",
-            "timeline_notes": "timeline_notes",
-        }
-        fields = []
-        values = []
-
-        start_date_val = _parse_optional_date(payload["start_date"]) if "start_date" in payload else None
-        end_date_val = _parse_optional_date(payload["end_date"]) if "end_date" in payload else None
-        _validate_project_dates(start_date_val, end_date_val)
-
-        for api_field, db_field in field_map.items():
-            if api_field in payload:
-                fields.append(f"{db_field} = %s")
-                values.append(_normalize_text(payload[api_field]))
-
-        if "start_date" in payload:
-            fields.append("start_date = %s")
-            values.append(start_date_val)
-        if "end_date" in payload:
-            fields.append("end_date = %s")
-            values.append(end_date_val)
-
-        if not fields:
-            raise HTTPException(status_code=400, detail="No valid project detail fields were provided.")
-
-        values.append(project_id)
-        cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
+        # Update core projects
+        cur.execute("""
+            UPDATE projects SET
+                start_date = COALESCE(%s, start_date),
+                end_date = COALESCE(%s, end_date)
+            WHERE project_id = %s
+        """, (start_date_val, end_date_val, project_id))
+        
+        # Replace commercial details
+        cur.execute("DELETE FROM project_commercials WHERE project_id = %s", (project_id,))
+        cur.execute("""
+            INSERT INTO project_commercials (project_id, project_name, client_id, budget, billing_type, contract_type, revenue_model, commercial_notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (project_id, project_name, client_id, details.budget, details.billing_type, details.contract_type, details.revenue_model, details.commercial_notes))
+        
+        # Replace scope details
+        cur.execute("DELETE FROM project_scopes WHERE project_id = %s", (project_id,))
+        cur.execute("""
+            INSERT INTO project_scopes (project_id, objective, deliverables, milestones, timeline_notes)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (project_id, details.objective, details.deliverables, details.milestones, details.timeline_notes))
+        
         conn.commit()
         return {"message": "Project details updated successfully"}
     except HTTPException:
@@ -379,7 +375,7 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/{project_id}/resources")
@@ -387,48 +383,116 @@ def project_resources(project_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        # Fetch all resources and their weekly allocations in one go
         cur.execute("""
             SELECT
                 em.employee_name,
                 em.role_designation,
                 em.location,
                 em.employee_id,
-                em.department,
-                pa.w1, pa.w2, pa.w3, pa.w4,
-                (
-                    SELECT COUNT(DISTINCT pa2.project_id)
-                    FROM projects_allocation pa2
-                    WHERE pa2.employee_id = pa.employee_id
-                ) AS project_count
+                pa.allocation_id,
+                pa.allocation_start_date,
+                pa.allocation_end_date,
+                pa.allocation_percentage,
+                wa.week_number,
+                COALESCE(wa.allocated_hours, 0)
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
+            LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
             WHERE pa.project_id = %s
-            ORDER BY em.employee_name
+            ORDER BY em.employee_name, wa.week_number
         """, (project_id,))
         rows = cur.fetchall()
-        return [
-            {
-                "employee_id": r[3],
-                "name": r[0] if r[0] else "Unknown Resource",
-                "role": r[1] if r[1] else "Team Member",
-                "department": r[4] if r[4] else "Not Set",
-                "company": "Cloud Destinations",
-                "location": r[2] if r[2] else "Remote",
-                "w1": r[5] or 0,
-                "w2": r[6] or 0,
-                "w3": r[7] or 0,
-                "w4": r[8] or 0,
-                "project_count": r[9] or 1,
-            }
-            for r in rows
+        
+        import datetime
+        today = datetime.date.today()
+        # Get Monday of the current week
+        monday = today - datetime.timedelta(days=today.weekday())
+        
+        # Calculate the 4 target ISO week numbers
+        target_weeks = []
+        for i in range(3, -1, -1):
+            target_date = monday - datetime.timedelta(weeks=i)
+            target_weeks.append(target_date.isocalendar()[1])
+        
+        # Mapping from absolute week number to UI slot (w1..w4)
+        week_to_slot = { week: f"w{i+1}" for i, week in enumerate(target_weeks) }
+
+        # Group allocations by employee
+        resources_dict = {}
+        for r in rows:
+            emp_id = r[3]
+            if emp_id not in resources_dict:
+                resources_dict[emp_id] = {
+                    "employee_id": emp_id,
+                    "name": r[0] if r[0] else "Unknown Resource",
+                    "role": r[1] if r[1] else "Team Member",
+                    "company": "Cloud Destinations",
+                    "location": r[2] if r[2] else "Remote",
+                    "allocation_start_date": str(r[5]) if r[5] else None,
+                    "allocation_end_date": str(r[6]) if r[6] else None,
+                    "allocation_percentage": r[7] or 0,
+                    "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
+                    "_has_weekly_data": False,
+                }
+
+            week_num = r[8]
+            hours = float(r[9]) if (r[9] is not None) else 0.0
+            if week_num is not None and week_num in week_to_slot and hours > 0:
+                resources_dict[emp_id][week_to_slot[week_num]] = hours
+                resources_dict[emp_id]["_has_weekly_data"] = True
+
+        # ── Dynamic calculation for employees with no stored weekly data ────
+        # For each such employee, count how many active projects they are on
+        # and divide 40h equally across those projects.
+        emp_ids_needing_calc = [
+            eid for eid, rec in resources_dict.items() if not rec["_has_weekly_data"]
         ]
+
+        if emp_ids_needing_calc:
+            placeholders = ",".join(["%s"] * len(emp_ids_needing_calc))
+            cur.execute(f"""
+                SELECT pa.employee_id, COUNT(DISTINCT pa.project_id) AS active_count
+                FROM projects_allocation pa
+                JOIN projects p ON pa.project_id = p.project_id
+                WHERE pa.employee_id IN ({placeholders})
+                  AND LOWER(p.project_status) NOT IN (
+                      'completed', 'closed', 'ended', 'end', 'done', 'cancelled'
+                  )
+                GROUP BY pa.employee_id
+            """, emp_ids_needing_calc)
+            project_count_map = {r[0]: max(1, r[1]) for r in cur.fetchall()}
+
+            for emp_id in emp_ids_needing_calc:
+                rec = resources_dict[emp_id]
+                n_projects = project_count_map.get(emp_id, 1)
+                computed_hours = round(40.0 / n_projects, 1)
+                rec["w1"] = computed_hours
+                rec["w2"] = computed_hours
+                rec["w3"] = computed_hours
+                rec["w4"] = computed_hours
+                rec["allocation_percentage"] = round(100.0 / n_projects, 1)
+
+        # Strip internal tracking flag before returning
+        result = []
+        for rec in resources_dict.values():
+            rec.pop("_has_weekly_data", None)
+            result.append(rec)
+
+        return result
+
+    except Exception as e:
+        print("PROJECT RESOURCES FETCH ERROR:", e)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/{project_id}/resources")
 def update_project_resources(project_id: str, payload: ResourceAllocationUpdate):
+    import datetime
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -440,20 +504,54 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
         _validate_resource_rows(payload.resources)
 
         project_billable = (project_row[0] or "").lower()
-        project_start_date = project_row[1]
-        project_end_date = project_row[2]
 
+        # Compute real ISO week numbers for the last 4 calendar weeks
+        # so that weekly_allocations rows align with GET /resources slot mapping.
+        today = datetime.date.today()
+        monday = today - datetime.timedelta(days=today.weekday())
+        real_week_nums = []
+        for i in range(3, -1, -1):
+            target_monday = monday - datetime.timedelta(weeks=i)
+            real_week_nums.append(target_monday.isocalendar()[1])
+        # real_week_nums[0] = w1 (3 wks ago), ..., real_week_nums[3] = w4 (current)
+        current_year = today.year
+
+        # Delete existing allocations AND weekly_allocations for this project
+        cur.execute("""
+            DELETE FROM weekly_allocations
+            WHERE allocation_id IN (
+                SELECT allocation_id FROM projects_allocation WHERE project_id = %s
+            )
+        """, (project_id,))
         cur.execute("DELETE FROM projects_allocation WHERE project_id = %s", (project_id,))
 
         for idx, tm in enumerate(payload.resources):
-            cur.execute("""
-                SELECT employee_id FROM employee_master
-                WHERE LOWER(employee_name) = LOWER(%s)
-                LIMIT 1
-            """, (_normalize_text(tm.name),))
-            emp_row = cur.fetchone()
+            # Prefer employee_id from payload; fall back to name lookup
+            if tm.employee_id:
+                cur.execute(
+                    "SELECT employee_id FROM employee_master WHERE employee_id = %s LIMIT 1",
+                    (tm.employee_id,)
+                )
+                emp_row = cur.fetchone()
+                if not emp_row:
+                    # Try name fallback if the provided id doesn't match
+                    cur.execute(
+                        "SELECT employee_id FROM employee_master WHERE LOWER(employee_name) = LOWER(%s) LIMIT 1",
+                        (_normalize_text(tm.name),)
+                    )
+                    emp_row = cur.fetchone()
+            else:
+                cur.execute(
+                    "SELECT employee_id FROM employee_master WHERE LOWER(employee_name) = LOWER(%s) LIMIT 1",
+                    (_normalize_text(tm.name),)
+                )
+                emp_row = cur.fetchone()
+
             if not emp_row:
-                raise HTTPException(status_code=422, detail=f"Resource '{tm.name}' does not exist in employee_master.")
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Resource '{tm.name}' does not exist in employee_master."
+                )
 
             employee_id = emp_row[0]
             avg_hours = (tm.w1 + tm.w2 + tm.w3 + tm.w4) / 4 if any([tm.w1, tm.w2, tm.w3, tm.w4]) else 0
@@ -461,24 +559,37 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
             allocation_id = f"AL-{project_id}-{idx + 1:03d}"
             project_tag = "Billable" if "non" not in project_billable else "Non-Billable"
 
-            cur.execute("""
-                INSERT INTO projects_allocation (
+            # Parse allocation dates from payload
+            alloc_start = _parse_optional_date(tm.allocation_start_date)
+            alloc_end = _parse_optional_date(tm.allocation_end_date)
+
+            try:
+                cur.execute("""
+                    INSERT INTO projects_allocation (
+                        allocation_id, employee_id, project_id,
+                        role_in_project, allocation_percentage,
+                        allocation_start_date, allocation_end_date,
+                        project_tags
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
                     allocation_id, employee_id, project_id,
-                    role_in_project, allocation_percentage,
-                    allocation_start_date, allocation_end_date,
-                    project_tags, w1, w2, w3, w4
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                allocation_id,
-                employee_id,
-                project_id,
-                _normalize_text(tm.role) or "Team Member",
-                allocation_pct,
-                project_start_date,
-                project_end_date,
-                project_tag,
-                tm.w1, tm.w2, tm.w3, tm.w4,
-            ))
+                    tm.role, allocation_pct,
+                    alloc_start, alloc_end,
+                    project_tag,
+                ))
+
+                # Insert weekly allocations using real ISO week numbers
+                week_hours = [tm.w1, tm.w2, tm.w3, tm.w4]
+                for slot_idx, hours in enumerate(week_hours):
+                    if hours > 0:
+                        iso_week = real_week_nums[slot_idx]
+                        cur.execute("""
+                            INSERT INTO weekly_allocations
+                                (allocation_id, allocation_year, week_number, allocated_hours)
+                            VALUES (%s, %s, %s, %s)
+                        """, (allocation_id, current_year, iso_week, hours))
+            except Exception as alloc_err:
+                print(f"Allocation insert error for {tm.name}: {alloc_err}")
 
         conn.commit()
         return {"message": "Project resources updated successfully"}
@@ -490,7 +601,7 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.put("/{project_id}")
@@ -532,6 +643,14 @@ def update_project(project_id: str, updates: ProjectUpdate):
             project_type = _normalize_project_type(payload["type"])
             fields.append("project_type = %s")
             values.append(project_type)
+            if project_type.lower() == "internal":
+                # Ensure it's non-billable if it's internal
+                if "billable = %s" in fields:
+                    idx = fields.index("billable = %s")
+                    values[idx] = "Non-Billable"
+                else:
+                    fields.append("billable = %s")
+                    values.append("Non-Billable")
         if "start_date" in payload:
             fields.append("start_date = %s")
             values.append(start_date_value)
@@ -562,7 +681,7 @@ def update_project(project_id: str, updates: ProjectUpdate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("")
@@ -576,14 +695,12 @@ def create_project(project: ProjectCreate):
         project_type = _normalize_project_type(project.type)
         if project.billable and project.billable.lower() not in VALID_BILLABLE_VALUES:
             raise HTTPException(status_code=422, detail="Billable must be either Billable or Non-Billable.")
-        if project_type.lower() == "client" and not _normalize_text(project.client):
-            raise HTTPException(status_code=422, detail="Client projects must include a client name.")
+        # Allow client_id to satisfy the client requirement even without a client name
+        if project_type.lower() == "client" and not _normalize_text(project.client) and not project.client_id:
+            raise HTTPException(status_code=422, detail="Client projects must include a client name or client ID.")
         if project_type.lower() == "partner" and not _normalize_text(project.partner):
             raise HTTPException(status_code=422, detail="Partner projects must include a partner name.")
         project_status = _normalize_project_status(project.project_status)
-
-        _validate_project_dates(project.start_date, project.end_date)
-        _validate_resource_rows(project.team_members)
 
         cur.execute("""
             INSERT INTO projects (
@@ -594,7 +711,7 @@ def create_project(project: ProjectCreate):
             project_name,
             project_status,
             project_type,
-            _normalize_text(project.billable),
+            "Non-Billable" if project_type.lower() == "internal" else _normalize_text(project.billable),
             _normalize_text(project.client) if project_type.lower() == "client" else _normalize_text(project.partner),
             project.client_id,
             project.start_date,
@@ -602,16 +719,32 @@ def create_project(project: ProjectCreate):
         ))
 
         for idx, tm in enumerate(project.team_members):
-            cur.execute("""
-                SELECT employee_id FROM employee_master
-                WHERE LOWER(employee_name) = LOWER(%s)
-                LIMIT 1
-            """, (_normalize_text(tm.name),))
-            emp_row = cur.fetchone()
-            if not emp_row:
-                raise HTTPException(status_code=422, detail=f"Team member '{tm.name}' does not exist in employee_master.")
+            # Prefer employee_id lookup; fall back to name lookup
+            employee_id = None
+            if tm.employee_id:
+                cur.execute(
+                    "SELECT employee_id FROM employee_master WHERE employee_id = %s LIMIT 1",
+                    (tm.employee_id,)
+                )
+                emp_row = cur.fetchone()
+                if emp_row:
+                    employee_id = emp_row[0]
 
-            employee_id = emp_row[0]
+            if not employee_id and tm.name:
+                cur.execute("""
+                    SELECT employee_id FROM employee_master
+                    WHERE LOWER(employee_name) = LOWER(%s)
+                    LIMIT 1
+                """, (_normalize_text(tm.name),))
+                emp_row = cur.fetchone()
+                if emp_row:
+                    employee_id = emp_row[0]
+
+            if not employee_id:
+                # Skip unknown employees but don't block project creation
+                print(f"Warning: Team member '{tm.name}' not found in employee_master — skipping allocation.")
+                continue
+
             avg_hours = (tm.w1 + tm.w2 + tm.w3 + tm.w4) / 4 if any([tm.w1, tm.w2, tm.w3, tm.w4]) else 0
             allocation_pct = min(100, int((avg_hours / 40) * 100))
             allocation_id = f"AL-{project.project_id}-{idx + 1:03d}"
@@ -620,24 +753,43 @@ def create_project(project: ProjectCreate):
             if project.billable and "non" not in project.billable.lower():
                 project_tag = "Billable"
 
-            cur.execute("""
-                INSERT INTO projects_allocation (
-                    allocation_id, employee_id, project_id,
-                    role_in_project, allocation_percentage,
-                    allocation_start_date, allocation_end_date,
-                    project_tags, w1, w2, w3, w4
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                allocation_id,
-                employee_id,
-                project.project_id,
-                _normalize_text(tm.role) or "Team Member",
-                allocation_pct,
-                project.start_date,
-                project.end_date,
-                project_tag,
-                tm.w1, tm.w2, tm.w3, tm.w4,
-            ))
+            try:
+                cur.execute("""
+                    INSERT INTO projects_allocation (
+                        allocation_id, employee_id, project_id,
+                        role_in_project, allocation_percentage,
+                        allocation_start_date, allocation_end_date,
+                        project_tags
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    allocation_id,
+                    employee_id,
+                    project.project_id,
+                    tm.role,
+                    allocation_pct,
+                    project.start_date,
+                    project.end_date,
+                    project_tag
+                ))
+
+                import datetime as _dt
+                current_year = _dt.date.today().year
+                today = _dt.date.today()
+                monday = today - _dt.timedelta(days=today.weekday())
+                real_week_nums = [
+                    (monday - _dt.timedelta(weeks=i)).isocalendar()[1]
+                    for i in range(3, -1, -1)
+                ]
+                for slot_idx, hours in enumerate([tm.w1, tm.w2, tm.w3, tm.w4]):
+                    if hours > 0:
+                        iso_week = real_week_nums[slot_idx]
+                        cur.execute("""
+                            INSERT INTO weekly_allocations (allocation_id, allocation_year, week_number, allocated_hours)
+                            VALUES (%s, %s, %s, %s)
+                        """, (allocation_id, current_year, iso_week, hours))
+            except Exception as alloc_err:
+                # Log but don't block project creation
+                print(f"Allocation insert skipped for {tm.name}: {alloc_err}")
 
         conn.commit()
         return {"message": "Project created successfully", "project_id": project.project_id}
@@ -652,7 +804,7 @@ def create_project(project: ProjectCreate):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.delete("/{project_id}")
@@ -684,4 +836,4 @@ def delete_project(project_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

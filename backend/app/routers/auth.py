@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.database import get_db_connection
+from app.database import get_db_connection, release_db_connection
 from app.auth_utils import hash_password, verify_password
 from pydantic import BaseModel
 
@@ -63,7 +63,7 @@ def register_user(data: RegisterRequest):
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 #-------------------- Login --------------------
 
@@ -123,4 +123,4 @@ def login_user(data: LoginRequest):
 
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

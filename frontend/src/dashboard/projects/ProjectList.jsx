@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Pencil, Eye, Trash2, AlertTriangle, Loader2, PieChart, ArrowLeft } from 'lucide-react';
+import { Search, Filter, Pencil, Eye, Trash2, AlertTriangle, Loader2, PieChart, ArrowLeft, Download, FileText, Table as TableIcon, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
+import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 
 const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -14,6 +15,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [activeView, setActiveView] = useState('table'); // 'table' or 'chart'
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -25,7 +27,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             const foundProj = projects.find(p => p.name.toLowerCase() === location.state.search.toLowerCase());
             if (foundProj) {
                 setSelectedProject(foundProj);
-                setIsDetailsPanelOpen(true);
             }
             // Clear location state to prevent reopening on subsequent renders or back navigation
             navigate(location.pathname, { replace: true, state: {} });
@@ -56,8 +57,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         const matchesType = filters.type ? project.type === filters.type : true;
         const matchesStatus = filters.status ? project.status === filters.status : true;
         const matchesResources = filters.minResources ? project.resources >= parseInt(filters.minResources) : true;
-
-        // Date filtering could be added here if project data had date objects
 
         // Quick Card Filter logic
         let matchesCardFilter = true;
@@ -139,12 +138,43 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
+    const handleExport = (format) => {
+        const exportData = filteredProjects.map(p => ({
+            'Project Name': p.name,
+            'Client/Partner': p.client || '—',
+            'Type': p.type,
+            'Status': p.status,
+            'Billable': p.billable,
+            'Resources': p.resource_count || p.resources || 0,
+            'Start Date': p.startDate || p.start_date || '—',
+            'End Date': p.endDate || p.end_date || '—'
+        }));
+
+        const fileName = `Projects_${tableTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`;
+
+        if (format === 'csv') {
+            exportToCSV(exportData, fileName);
+        } else if (format === 'excel') {
+            exportToExcel(exportData, fileName);
+        } else if (format === 'pdf') {
+            const columns = [
+                { header: 'Project Name', dataKey: 'Project Name' },
+                { header: 'Client', dataKey: 'Client/Partner' },
+                { header: 'Type', dataKey: 'Type' },
+                { header: 'Status', dataKey: 'Status' },
+                { header: 'Billable', dataKey: 'Billable' },
+                { header: 'Resources', dataKey: 'Resources' },
+            ];
+            exportToPDF(exportData, columns, `Project List - ${tableTitle}`, fileName);
+        }
+    };
+
     return (
         <div className="w-full space-y-6">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full relative min-h-[500px]">
 
                 {/* Header (Tabs and Filter) */}
-                <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-4 mb-6 gap-4">
                     {/* Left Side: Tabs */}
                     <div className="flex gap-8">
                         <button
@@ -161,97 +191,120 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         </button>
                     </div>
 
-                    {/* Right Side: Search & Filter */}
-                    <div className="flex gap-3 relative">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    {/* Right Side: Search and Export */}
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="relative group">
+                            <button 
+                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-white hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm"
+                            >
+                                <Download size={14} />
+                                Export
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isExportMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                    <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                            <FileSpreadsheet size={14} className="text-emerald-500" /> Excel (.xlsx)
+                                        </button>
+                                        <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                            <TableIcon size={14} className="text-blue-500" /> CSV (.csv)
+                                        </button>
+                                        <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors border-t border-slate-50">
+                                            <FileText size={14} className="text-red-500" /> PDF Document
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="relative flex-1 md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                             <input
                                 type="text"
                                 placeholder="Search projects..."
-                                className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-64 transition-all"
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-700"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-
                         <button
                             onClick={() => setIsFilterPanelOpen(true)}
-                            className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${isFilterPanelOpen ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                            className={`p-2 rounded-xl border transition-all shadow-sm ${isFilterPanelOpen ? 'bg-blue-50 border-blue-200 text-blue-600 ring-2 ring-blue-50' : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-white hover:border-gray-200'}`}
                         >
-                            <Filter size={16} />
-                            Filter
+                            <Filter size={18} />
                         </button>
                     </div>
                 </div>
 
                 {activeView === 'table' && (
-                    <>
-
-                        {/* Modals and Overlays (Only relevant for Table view, but mounted globally) */}
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                                        <th className="text-left py-4 pl-4">Project Name</th>
-                                        <th className="text-center py-4">Status</th>
-                                        <th className="text-center py-4">Billable</th>
-                                        <th className="text-center py-4">Start Date</th>
-                                        <th className="text-center py-4">End Date</th>
-                                        <th className="text-center py-4">Resources</th>
-                                        <th className="w-10"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredProjects.map((project) => (
-                                        <tr key={project.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                                            <td className="py-4 pl-4">
-                                                <div
-                                                    className="flex items-center gap-3 cursor-pointer group"
-                                                    onClick={() => handleViewClick(project)}
-                                                    title="View project details"
-                                                >
-                                                    <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
-                                                        {project.icon}
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-bold text-gray-800 transition-colors group-hover:bg-blue-50 group-hover:text-blue-700 px-2 py-1 rounded-md w-fit -mx-2">{project.name}</div>
-                                                        <div className="text-[10px] text-gray-400 font-mono">{project.project_id || project.id}</div>
-                                                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                    <th className="text-left py-4 pl-4">Project Name</th>
+                                    <th className="text-center py-4">Status</th>
+                                    <th className="text-center py-4">Billable</th>
+                                    <th className="text-center py-4">Start Date</th>
+                                    <th className="text-center py-4">End Date</th>
+                                    <th className="text-center py-4">Resources</th>
+                                    <th className="w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredProjects.map((project) => (
+                                    <tr key={project.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                                        <td className="py-4 pl-4">
+                                            <div
+                                                className="flex items-center gap-3 cursor-pointer group"
+                                                onClick={() => handleViewClick(project)}
+                                                title="View project details"
+                                            >
+                                                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg group-hover:bg-blue-100 transition-colors shadow-sm">
+                                                    {project.icon || project.name?.[0]?.toUpperCase()}
                                                 </div>
-                                            </td>
-                                            <td className="py-4 text-center">
-                                                <span 
-                                                    className="px-4 py-1.5 rounded-full text-xs font-bold"
-                                                    style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
-                                                        backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
-                                                        color: project.status === 'Completed' ? '#1E40AF' : '#166534'
-                                                    }}
-                                                >
-                                                    {project.status}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 text-center">
-                                                <span 
-                                                    className="px-3 py-1 rounded-md text-xs font-bold border"
-                                                    style={{
-                                                        backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
-                                                        color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
-                                                        borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
-                                                    }}
-                                                >
-                                                    {project.billable || 'Unknown'}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.start_date || project.startDate || '-'}</td>
-                                            <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.end_date || project.endDate || '-'}</td>
-                                            <td className="py-4 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className="text-sm font-extrabold text-blue-600">{project.resource_count || project.resources || 0}</span>
-                                                    <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
+                                                <div>
+                                                    <div className="font-bold text-gray-800 transition-colors group-hover:text-blue-700">{project.name}</div>
+                                                    <div className="text-[10px] text-gray-400 font-mono tracking-tighter">{project.project_id || project.id}</div>
                                                 </div>
-                                            </td>
-                                            <td className="py-4 pr-4 text-right flex justify-end gap-2">
+                                            </div>
+                                        </td>
+                                        <td className="py-4 text-center">
+                                            <span 
+                                                className="px-4 py-1.5 rounded-full text-xs font-bold"
+                                                style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
+                                                    backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
+                                                    color: project.status === 'Completed' ? '#1E40AF' : '#166534'
+                                                }}
+                                            >
+                                                {project.status}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 text-center">
+                                            <span 
+                                                className="px-3 py-1 rounded-md text-xs font-bold border"
+                                                style={{
+                                                    backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
+                                                    color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
+                                                    borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
+                                                }}
+                                            >
+                                                {project.billable || 'Unknown'}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.start_date || project.startDate || '-'}</td>
+                                        <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.end_date || project.endDate || '-'}</td>
+                                        <td className="py-4 text-center">
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-sm font-extrabold text-blue-600">{project.resource_count || project.resources || 0}</span>
+                                                <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 pr-4">
+                                            <div className="flex justify-end gap-2">
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -272,65 +325,13 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Edit Panel */}
-                        <EditProjectPanel
-                            isOpen={isEditFormOpen}
-                            onClose={() => setIsEditFormOpen(false)}
-                            project={selectedProject}
-                            onSave={handleSaveProject}
-                        />
-
-                        {/* Filter Panel */}
-                        <FilterPanel
-                            isOpen={isFilterPanelOpen}
-                            onClose={() => setIsFilterPanelOpen(false)}
-                            onApplyFilters={handleApplyFilters}
-                        />
-
-                        {/* Delete Confirmation Modal */}
-                        {projectToDelete && (
-                            <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                                    <div className="flex items-center gap-4 text-red-600 mb-4">
-                                        <div className="p-3 bg-red-100 rounded-full">
-                                            <AlertTriangle size={24} />
-                                        </div>
-                                        <h3 className="text-xl font-bold text-gray-900">Delete Project</h3>
-                                    </div>
-                                    <p className="text-gray-600 mb-6 font-medium">
-                                        Are you sure you want to delete <span className="font-bold text-gray-900">{projectToDelete.name}</span>? This action cannot be undone.
-                                    </p>
-                                    <div className="flex justify-end gap-3">
-                                        <button
-                                            onClick={() => setProjectToDelete(null)}
-                                            disabled={isDeleting}
-                                            className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg transition-colors"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleDeleteConfirm}
-                                            disabled={isDeleting}
-                                            className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                                        >
-                                            {isDeleting ? (
-                                                <><Loader2 size={16} className="animate-spin" /> Deleting...</>
-                                            ) : (
-                                                'Delete'
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
 
                 {activeView === 'chart' && (
@@ -339,6 +340,57 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
                 )}
             </div>
+
+            {/* Modals and Side Panels */}
+            <EditProjectPanel
+                isOpen={isEditFormOpen}
+                onClose={() => setIsEditFormOpen(false)}
+                project={selectedProject}
+                onSave={handleSaveProject}
+            />
+
+            <FilterPanel
+                isOpen={isFilterPanelOpen}
+                onClose={() => setIsFilterPanelOpen(false)}
+                onApplyFilters={handleApplyFilters}
+            />
+
+            {/* Delete Confirmation Modal */}
+            {projectToDelete && (
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-4 text-red-600 mb-4">
+                            <div className="p-3 bg-red-100 rounded-full">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900">Delete Project</h3>
+                        </div>
+                        <p className="text-gray-600 mb-6 font-medium">
+                            Are you sure you want to delete <span className="font-bold text-gray-900">{projectToDelete.name}</span>? This action cannot be undone.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setProjectToDelete(null)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteConfirm}
+                                disabled={isDeleting}
+                                className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                            >
+                                {isDeleting ? (
+                                    <><Loader2 size={16} className="animate-spin" /> Deleting...</>
+                                ) : (
+                                    'Delete'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

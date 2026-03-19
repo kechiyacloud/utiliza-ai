@@ -392,7 +392,7 @@ def get_departments_roles_mapping():
         return {}
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)
 
 @router.get("/employee/by-email/{email_id}")
 def get_employee_id_by_email(email_id: str):
@@ -801,4 +801,4 @@ def delete_employee(employee_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        conn.close()
+        release_db_connection(conn)

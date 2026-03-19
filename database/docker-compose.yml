@@ -7,9 +7,10 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      - "5440:5432"
     volumes:
-      - ./schema_dump.sql:/docker-entrypoint-initdb.d/schema_dump.sql
+      - ./backup_v6.sql:/docker-entrypoint-initdb.d/1_backup_v6.sql
+      - ./backup_v7.sql:/docker-entrypoint-initdb.d/2_backup_v7.sql
       - postgres_data:/var/lib/postgresql/data
 volumes:
   postgres_data:

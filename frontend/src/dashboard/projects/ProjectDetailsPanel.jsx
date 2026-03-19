@@ -8,14 +8,39 @@ const AllocationTable = ({ projectId }) => {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [employees, setEmployees] = useState([]);
+    const [roles, setRolesList] = useState([]);
 
     useEffect(() => {
         if (!projectId) return;
-        setLoading(true);
-        axios.get(`/projects/${projectId}/resources`)
-            .then(res => setRows(res.data || []))
-            .catch(() => setRows([]))
-            .finally(() => setLoading(false));
+        let cancelled = false;
+        const load = async () => {
+            setLoading(true);
+            try {
+                const [resRows, resEmp, resRoles] = await Promise.all([
+                    axios.get(`/projects/${projectId}/resources`),
+                    axios.get('/employees/list'),
+                    axios.get('/employees/departments/roles-mapping')
+                ]);
+                if (!cancelled) {
+                    setRows(resRows.data || []);
+                    setEmployees(resEmp.data || []);
+                    // Flatten roles mapping into a unique list of roles
+                    const allRoles = new Set();
+                    Object.values(resRoles.data || {}).forEach(roleList => {
+                        roleList.forEach(r => allRoles.add(r));
+                    });
+                    setRolesList(Array.from(allRoles).sort());
+                }
+            } catch (err) {
+                console.error("Fetch error:", err);
+                if (!cancelled) setRows([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
     }, [projectId]);
 
     const handleAddRow = () => {
@@ -121,10 +146,10 @@ const AllocationTable = ({ projectId }) => {
                 </div>
             ) : (
                 <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                    <table className="w-full text-xs min-w-[650px]">
+                    <table className="min-w-max text-xs">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100">
-                                {['S. No', 'Name', 'Role', 'Company', 'Location', 'W1', 'W2', 'W3', 'W4', 'Total', isEditing ? 'Actions' : null].filter(Boolean).map((col) => (
+                                {['S. No', 'Name', 'Role', 'Alloc. Start', 'Alloc. End', 'W1', 'W2', 'W3', 'W4', 'Total', isEditing ? 'Actions' : null].filter(Boolean).map((col) => (
                                     <th key={col} className={`px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap ${['W1', 'W2', 'W3', 'W4', 'Total'].includes(col) ? 'text-center' : ''}`}>
                                         {col}
                                     </th>
@@ -134,15 +159,30 @@ const AllocationTable = ({ projectId }) => {
                         <tbody>
                             {rows.map((row, idx) => {
                                 const rowTotal = (row.w1 || 0) + (row.w2 || 0) + (row.w3 || 0) + (row.w4 || 0);
-                                const locationColor = isEditing ? '' : (row.location === 'Remote' ? 'bg-emerald-50 text-emerald-600' : row.location === 'Hybrid' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600');
+
 
                                 return (
                                     <tr key={idx} className={`border-b border-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} ${!isEditing && 'hover:bg-blue-50/40'}`}>
                                         <td className="px-3 py-3 text-center text-slate-400 font-medium">{idx + 1}</td>
 
-                                        <td className="px-3 py-3 font-semibold text-slate-800 whitespace-nowrap min-w-[120px]">
+                                        <td className="px-3 py-3 font-semibold text-slate-800 whitespace-nowrap min-w-[180px]">
                                             {isEditing ? (
-                                                <input type="text" value={row.name} onChange={(e) => handleRowChange(idx, 'name', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" placeholder="Name" />
+                                                <select 
+                                                    value={row.employee_id || ''} 
+                                                    onChange={(e) => {
+                                                        const empId = e.target.value;
+                                                        const emp = employees.find(ep => ep.employee_id === empId);
+                                                        handleRowChange(idx, 'employee_id', empId);
+                                                        handleRowChange(idx, 'name', emp?.employee_name || '');
+                                                        handleRowChange(idx, 'role', emp?.role_designation || '');
+                                                    }} 
+                                                    className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                >
+                                                    <option value="">Select Employee</option>
+                                                    {employees.map(emp => (
+                                                        <option key={emp.employee_id} value={emp.employee_id}>{emp.employee_name}</option>
+                                                    ))}
+                                                </select>
                                             ) : (
                                                 row.employee_id ? (
                                                     <Link to={`/info/employee/${row.employee_id}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors decoration-blue-300 underline-offset-2">
@@ -154,43 +194,71 @@ const AllocationTable = ({ projectId }) => {
                                             )}
                                         </td>
 
-                                        <td className="px-3 py-3 text-slate-600 whitespace-nowrap min-w-[120px]">
+                                        <td className="px-3 py-3 text-slate-600 whitespace-nowrap min-w-[150px]">
                                             {isEditing ? (
-                                                <input type="text" value={row.role} onChange={(e) => handleRowChange(idx, 'role', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" placeholder="Role" />
+                                                <select 
+                                                    value={row.role || ''} 
+                                                    onChange={(e) => handleRowChange(idx, 'role', e.target.value)}
+                                                    className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                >
+                                                    <option value="">Select Role</option>
+                                                    {roles.map(r => (
+                                                        <option key={r} value={r}>{r}</option>
+                                                    ))}
+                                                    {!roles.includes(row.role) && row.role && (
+                                                        <option value={row.role}>{row.role}</option>
+                                                    )}
+                                                </select>
                                             ) : row.role}
                                         </td>
 
-                                        <td className="px-3 py-3 text-slate-500 whitespace-nowrap min-w-[100px]">
+                                        <td className="px-3 py-3 whitespace-nowrap min-w-[100px]">
                                             {isEditing ? (
-                                                <input type="text" value={row.company} onChange={(e) => handleRowChange(idx, 'company', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
-                                            ) : row.company}
-                                        </td>
-
-                                        <td className="px-3 py-3 whitespace-nowrap min-w-[90px]">
-                                            {isEditing ? (
-                                                <select value={row.location} onChange={(e) => handleRowChange(idx, 'location', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer">
-                                                    <option value="Remote">Remote</option>
-                                                    <option value="On-Site">On-Site</option>
-                                                    <option value="Hybrid">Hybrid</option>
-                                                </select>
+                                                <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(idx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                             ) : (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${locationColor}`}>
-                                                    {row.location}
-                                                </span>
+                                                <span className="text-slate-500 font-mono text-[11px]">{row.allocation_start_date || '—'}</span>
                                             )}
                                         </td>
 
-                                        {['w1', 'w2', 'w3', 'w4'].map((wCol) => (
-                                            <td key={wCol} className="px-2 py-3 text-center text-slate-500">
-                                                {isEditing ? (
-                                                    <input type="number" min="0" max="168" value={row[wCol]} onChange={(e) => handleRowChange(idx, wCol, e.target.value)} className="w-12 px-1 py-1 text-xs text-center border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
-                                                ) : (
-                                                    `${row[wCol]}h`
-                                                )}
-                                            </td>
-                                        ))}
+                                        <td className="px-3 py-3 whitespace-nowrap min-w-[100px]">
+                                            {isEditing ? (
+                                                <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(idx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                            ) : (
+                                                <span className="text-slate-500 font-mono text-[11px]">{row.allocation_end_date || '—'}</span>
+                                            )}
+                                        </td>
 
-                                        <td className="px-3 py-3 text-center font-bold text-blue-600">{rowTotal}h</td>
+                                        {['w1', 'w2', 'w3', 'w4'].map((wCol) => {
+                                            const hours = Number(row[wCol] || 0);
+                                            const pct = Math.min(100, Math.round((hours / 40) * 100));
+                                            const barColor = hours === 0 ? 'bg-gray-200' :
+                                                pct >= 100 ? 'bg-red-400' :
+                                                pct >= 75 ? 'bg-blue-500' :
+                                                pct >= 40 ? 'bg-indigo-400' :
+                                                'bg-slate-300';
+
+                                            return (
+                                                <td key={wCol} className="px-2 py-3 text-center min-w-[100px]">
+                                                    {isEditing ? (
+                                                        <input type="number" min="0" max="168" value={row[wCol]} onChange={(e) => handleRowChange(idx, wCol, e.target.value)} className="w-12 px-1 py-1 text-xs text-center border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className={`text-[11px] font-bold ${pct >= 100 ? 'text-red-600' : 'text-slate-700'}`}>
+                                                                {hours}h <span className="text-[9px] font-normal text-slate-400">({pct}%)</span>
+                                                            </span>
+                                                            <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
+                                                                <div
+                                                                    className={`h-full rounded-full transition-all ${barColor}`}
+                                                                    style={{ width: `${pct}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+
+                                        <td className="px-3 py-3 text-center font-bold text-blue-600 text-sm whitespace-nowrap min-w-[70px]">{rowTotal}h</td>
 
                                         {isEditing && (
                                             <td className="px-3 py-3 text-center">
@@ -242,11 +310,11 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
                     <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
                         <div className="flex gap-4 items-center">
                             <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xl flex-shrink-0">
-                                {project.icon || project.name?.substring(0, 1).toUpperCase()}
+                                {project.icon || (project.name || project.project_name)?.substring(0, 1).toUpperCase()}
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold text-gray-800 leading-tight mb-1">{project.name}</h2>
-                                <p className="text-sm font-medium text-gray-500">{project.client}</p>
+                                <h2 className="text-xl font-bold text-gray-800 leading-tight mb-1">{project.name || project.project_name}</h2>
+                                <p className="text-sm font-medium text-gray-500">{project.client || project.client_name}</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
@@ -289,11 +357,29 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
                                 </div>
                             </div>
 
+                            {/* Project Dates */}
+                            <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-100/50">
+                                <div>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Project Start</span>
+                                    <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
+                                        <Calendar size={14} className="text-blue-500" />
+                                        {project.startDate || project.start_date || 'Not Set'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Project End</span>
+                                    <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
+                                        <Calendar size={14} className="text-red-400" />
+                                        {project.endDate || project.end_date || 'TBD'}
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Description */}
                             <p className="text-sm text-gray-600 leading-relaxed bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
                                 This project is currently in the {project.status?.toLowerCase() || 'planning'} phase.
-                                It is a {project.type?.toLowerCase() || 'standard'} engagement for {project.client}.
-                                Currently utilizing {project.resources || 0} team members to meet the projected milestone dates.
+                                It is a {project.type?.toLowerCase() || 'standard'} engagement for {project.client || project.client_name}.
+                                Currently utilizing {project.resources || project.resource_count || 0} team members to meet the projected milestone dates.
                             </p>
                         </div>
 
