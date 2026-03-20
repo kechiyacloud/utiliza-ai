@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { X, Calendar, Users, Target, Activity, Briefcase, Clock, Zap, Loader2, Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import axios from '../../api/axios';
 
 // ─── Resource Allocation Component ───────────────────────────────────────────
 const AllocationTable = ({ projectId }) => {
+    const navigate = useNavigate();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -87,6 +88,15 @@ const AllocationTable = ({ projectId }) => {
     );
     const totalHours = totals.w1 + totals.w2 + totals.w3 + totals.w4;
     const weeklyCapacity = Math.round(totalHours / 4);
+    const getProjectCount = (row) => {
+        const parsed = Number(row?.project_count ?? row?.projectCount ?? 0);
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const getAllocationPct = (row) => {
+        const projectCount = getProjectCount(row);
+        if (projectCount <= 0) return 0;
+        return Math.round(100 / projectCount);
+    };
 
     const summaryCards = [
         { label: 'Total Roles', value: new Set(rows.map(r => r.role).filter(Boolean)).size, icon: Briefcase, color: 'text-indigo-500 bg-indigo-50 border-indigo-100' },
@@ -149,7 +159,7 @@ const AllocationTable = ({ projectId }) => {
                     <table className="min-w-max text-xs">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100">
-                                {['S. No', 'Name', 'Role', 'Alloc. Start', 'Alloc. End', 'W1', 'W2', 'W3', 'W4', 'Total', isEditing ? 'Actions' : null].filter(Boolean).map((col) => (
+                                {['S. No', 'Name', 'Role', 'Alloc. Start', 'Alloc. End', 'Allocation', 'W1', 'W2', 'W3', 'W4', 'Total', isEditing ? 'Actions' : null].filter(Boolean).map((col) => (
                                     <th key={col} className={`px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap ${['W1', 'W2', 'W3', 'W4', 'Total'].includes(col) ? 'text-center' : ''}`}>
                                         {col}
                                     </th>
@@ -228,6 +238,23 @@ const AllocationTable = ({ projectId }) => {
                                             )}
                                         </td>
 
+                                        <td className="px-3 py-3 text-slate-600 whitespace-nowrap min-w-[90px]">
+                                            {!isEditing && row.employee_id ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate('/info/allocation', { state: { showBack: true, employeeId: row.employee_id, fromProjectId: projectId } })}
+                                                    className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium cursor-pointer hover:bg-slate-200 transition-colors"
+                                                    title="View allocation dashboard"
+                                                >
+                                                    {getAllocationPct(row)}%
+                                                </button>
+                                            ) : (
+                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium">
+                                                    {getAllocationPct(row)}%
+                                                </span>
+                                            )}
+                                        </td>
+
                                         {['w1', 'w2', 'w3', 'w4'].map((wCol) => {
                                             const hours = Number(row[wCol] || 0);
                                             const pct = Math.min(100, Math.round((hours / 40) * 100));
@@ -244,7 +271,7 @@ const AllocationTable = ({ projectId }) => {
                                                     ) : (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className={`text-[11px] font-bold ${pct >= 100 ? 'text-red-600' : 'text-slate-700'}`}>
-                                                                {hours}h <span className="text-[9px] font-normal text-slate-400">({pct}%)</span>
+                                                                {hours}h
                                                             </span>
                                                             <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
                                                                 <div
@@ -273,7 +300,7 @@ const AllocationTable = ({ projectId }) => {
 
                             {rows.length > 0 && (
                                 <tr className="bg-slate-100 border-t-2 border-slate-200">
-                                    <td className="px-3 py-3 font-extrabold text-slate-700 text-right" colSpan={5}>TOTAL HOURS</td>
+                                    <td className="px-3 py-3 font-extrabold text-slate-700 text-right" colSpan={6}>TOTAL HOURS</td>
                                     <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w1}h</td>
                                     <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w2}h</td>
                                     <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w3}h</td>
