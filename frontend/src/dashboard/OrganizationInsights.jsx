@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { Briefcase, Users, TrendingUp, Zap } from 'lucide-react';
 
-const OrganizationInsights = ({ departments, metrics }) => {
+const OrganizationInsights = ({ departments, metrics, loading = false }) => {
   const executive = metrics?.executiveMetrics || {};
   const skillsGap = metrics?.skillsGap || [];
 
@@ -36,6 +36,17 @@ const OrganizationInsights = ({ departments, metrics }) => {
     month: t.month,
     headcount: t.value || 0
   }));
+
+  if (loading && !metrics) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <div className="flex flex-col items-center gap-3 text-slate-400">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500/20 border-t-teal-500"></div>
+          <p className="text-sm font-semibold">Loading organization insights...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

@@ -5,7 +5,8 @@ import ClientKPIs from './clients/ClientKPIs';
 import ClientList from './clients/ClientList';
 import ClientDetails from './clients/ClientDetails';
 import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal } from './clients/ClientModals';
-import { fetchClientData, createClient } from '../api/clientApi';
+import { fetchClientData, createClient, updateClient, deleteClient } from '../api/clientApi';
+import { deleteProject } from '../api/projectsApi';
 
 const Client = () => {
   const navigate = useNavigate();
@@ -21,51 +22,61 @@ const Client = () => {
   const [isEditClientOpen, setIsEditClientOpen] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, item: null });
 
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchClientData();
+      const nextClients = res.data.clients || [];
+      setClientsData(nextClients);
+      setStats(res.data.stats);
+      setSelectedClient((current) => {
+        if (!nextClients.length) return null;
+        if (!current) return nextClients[0];
+        return nextClients.find((client) => client.id === current.id) || nextClients[0];
+      });
+    } catch (error) {
+      console.error("Failed to fetch client data", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const res = await fetchClientData();
-        setClientsData(res.data.clients);
-        setStats(res.data.stats);
-        if (res.data.clients.length > 0) {
-          setSelectedClient(res.data.clients[0]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch client data", error);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
   }, []);
 
   const handleAddClient = async (newClientData) => {
     try {
-      await createClient(newClientData);
-      // Optimistic UI update for mocked Client view
-      const newClient = {
-        ...newClientData,
-        logo: newClientData.name.substring(0, 2).toUpperCase(),
-        activeProjects: 0,
-        projects: [],
-        contact: "+1 (555) 000-0000"
+      const payload = {
+        id: newClientData.id || `CL-${Date.now()}`,
+        name: newClientData.name,
+        url: newClientData.website || '',
+        industry: newClientData.industry,
+        status: newClientData.status || 'Stable',
+        budget: newClientData.budget || '0'
       };
-      const updatedList = [...clientsData, newClient];
-      setClientsData(updatedList);
-      setSelectedClient(newClient);
+      await createClient(payload);
+      await loadData();
     } catch (error) {
       console.error("Failed to insert client into database", error);
       alert("Failed to create client in DB");
     }
   };
 
-  const handleEditClient = (updatedClient) => {
-    const updatedList = clientsData.map(c =>
-      c.id === updatedClient.id ? updatedClient : c
-    );
-    setClientsData(updatedList);
-    setSelectedClient(updatedClient);
+  const handleEditClient = async (updatedClient) => {
+    try {
+      await updateClient(updatedClient.id, {
+        name: updatedClient.name,
+        industry: updatedClient.industry,
+        url: updatedClient.url || '',
+        status: updatedClient.status || 'Stable',
+        budget: updatedClient.budget || '0'
+      });
+      await loadData();
+    } catch (error) {
+      console.error("Failed to update client", error);
+      alert("Failed to update client in DB");
+    }
   };
 
   const handleDeleteClient = (id) => {
@@ -87,33 +98,21 @@ const Client = () => {
     });
   };
 
-  const executeDelete = () => {
+  const executeDelete = async () => {
     const { type, item } = deleteModal;
 
-    if (type === 'client') {
-      const updatedList = clientsData.filter(c => c.id !== item.id);
-      setClientsData(updatedList);
-
-      if (selectedClient && selectedClient.id === item.id) {
-        setSelectedClient(updatedList.length > 0 ? updatedList[0] : null);
+    try {
+      if (type === 'client') {
+        await deleteClient(item.id);
+      } else if (type === 'project') {
+        await deleteProject(item.id);
       }
-    } else if (type === 'project') {
-      const updatedList = clientsData.map(client => {
-        if (client.id === item.clientId) {
-          const updatedProjects = [...client.projects];
-          updatedProjects.splice(item.projectIndex, 1);
-          return { ...client, projects: updatedProjects, activeProjects: updatedProjects.length };
-        }
-        return client;
-      });
-
-      setClientsData(updatedList);
-
-      if (selectedClient && selectedClient.id === item.clientId) {
-        const updatedClient = updatedList.find(c => c.id === item.clientId);
-        setSelectedClient(updatedClient);
-      }
+      await loadData();
+    } catch (error) {
+      console.error("Failed to delete item", error);
+      alert(`Failed to delete ${type || 'item'} from DB`);
     }
+
     setDeleteModal({ isOpen: false, type: null, item: null });
   };
 
