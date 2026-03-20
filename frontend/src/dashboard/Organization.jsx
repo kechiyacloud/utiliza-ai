@@ -13,6 +13,7 @@ const Organization = () => {
     const [error, setError] = useState(null);
     const [viewMode, setViewMode] = useState('map'); // 'map' or 'insights'
     const [metrics, setMetrics] = useState(null);
+    const [metricsLoading, setMetricsLoading] = useState(false);
 
     // Fetch Data
     useEffect(() => {
@@ -51,10 +52,6 @@ const Organization = () => {
                     setActiveDeptId(deptArray[0].id);
                 }
 
-                // Fetch real dashboard metrics for the insights view
-                const dashboard = await fetchDashboardData();
-                setMetrics(dashboard.data);
-
                 setLoading(false);
             } catch (err) {
                 console.error("Failed to load organization data:", err);
@@ -64,6 +61,34 @@ const Organization = () => {
         };
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (viewMode !== 'insights' || metrics || metricsLoading) {
+            return;
+        }
+
+        let mounted = true;
+        const loadInsights = async () => {
+            setMetricsLoading(true);
+            try {
+                const dashboard = await fetchDashboardData();
+                if (mounted) {
+                    setMetrics(dashboard.data);
+                }
+            } catch (err) {
+                console.error("Failed to load organization insights:", err);
+            } finally {
+                if (mounted) {
+                    setMetricsLoading(false);
+                }
+            }
+        };
+
+        loadInsights();
+        return () => {
+            mounted = false;
+        };
+    }, [viewMode, metrics, metricsLoading]);
 
     // Derived State
     const activeDept = departments.find(d => d.id === activeDeptId);
@@ -290,7 +315,7 @@ const Organization = () => {
                     </div>
                 ) : (
                     <div className="max-w-7xl mx-auto">
-                        <OrganizationInsights departments={departments} metrics={metrics} />
+                        <OrganizationInsights departments={departments} metrics={metrics} loading={metricsLoading} />
                     </div>
                 )}
             </div>

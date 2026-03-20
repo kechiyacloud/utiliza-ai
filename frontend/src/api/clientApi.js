@@ -61,3 +61,23 @@ export const fetchClientData = async (filterText = '') => {
         };
     }
 };
+
+export const updateClient = async (clientId, clientData) => {
+    try {
+        const response = await api.put(`/clients/${clientId}`, clientData);
+        return response.data;
+    } catch (error) {
+        console.error("Error updating client", error);
+        throw error;
+    }
+};
+
+export const deleteClient = async (clientId) => {
+    try {
+        const response = await api.delete(`/clients/${clientId}`);
+        return response.data;
+    } catch (error) {
+        console.error("Error deleting client", error);
+        throw error;
+    }
+};
