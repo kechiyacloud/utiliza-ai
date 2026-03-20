@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 /**
  * Exports data to CSV
@@ -31,7 +31,7 @@ export const exportToCSV = (data, fileName = 'export') => {
 };
 
 /**
- * Exports data to Excel (.xls) via HTML table blob
+ * Exports data to Excel (.xlsx)
  * @param {Array|Object} data - Array of objects or object with sheet names as keys
  * @param {string} fileName - Base filename
  */
@@ -86,32 +86,30 @@ export const exportToExcel = (data, fileName = 'export') => {
  */
 export const exportToPDF = (data, columns, title = 'Export', fileName = 'export') => {
     if (!data || !columns) return;
-
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
+    
+    // Add Title
     doc.setFontSize(18);
     doc.setTextColor(40);
     doc.text(title, 14, 22);
-
+    
+    // Add Date
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
-    const tableHeaders = [columns.map((col) => col.header)];
-    const tableRows = data.map((item) => columns.map((col) => item?.[col.dataKey] ?? ''));
+    const tableRows = data.map(item => columns.map(col => item[col.dataKey] || ''));
+    const tableHeaders = [columns.map(col => col.header)];
 
-    const autoTableFn = autoTable?.default ?? autoTable;
-    if (typeof autoTableFn === 'function') {
-        autoTableFn(doc, {
-            head: tableHeaders,
-            body: tableRows,
-            startY: 35,
-            theme: 'striped',
-            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-            styles: { fontSize: 8, cellPadding: 2 },
-            alternateRowStyles: { fillColor: [245, 247, 250] },
-        });
-    }
+    doc.autoTable({
+        head: tableHeaders,
+        body: tableRows,
+        startY: 35,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+    });
 
     doc.save(`${fileName}.pdf`);
 };
