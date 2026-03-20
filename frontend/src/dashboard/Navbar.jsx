@@ -88,7 +88,7 @@ const Navbar = () => {
                             try {
                                 const response = await api.get(`/employee/by-email/${userEmail}`);
                                 if (response.data && response.data.employee_id) {
-                                    navigate(`/info/employees/${response.data.employee_id}`);
+                                    navigate(`/info/employee/${response.data.employee_id}`);
                                 }
                             } catch (error) {
                                 console.error("Could not fetch user profile ID", error);
