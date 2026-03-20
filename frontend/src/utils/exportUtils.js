@@ -1,3 +1,7 @@
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
 /**
  * Exports data to CSV
  * @param {Array} data - Array of objects to export
@@ -82,46 +86,30 @@ export const exportToExcel = (data, fileName = 'export') => {
  */
 export const exportToPDF = (data, columns, title = 'Export', fileName = 'export') => {
     if (!data || !columns) return;
-    const tableHeaders = columns.map((col) => `<th>${col.header}</th>`).join('');
-    const tableRows = data
-        .map((item) => {
-            const cells = columns
-                .map((col) => `<td>${String(item[col.dataKey] ?? '')}</td>`)
-                .join('');
-            return `<tr>${cells}</tr>`;
-        })
-        .join('');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    
+    // Add Title
+    doc.setFontSize(18);
+    doc.setTextColor(40);
+    doc.text(title, 14, 22);
+    
+    // Add Date
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
-    const printWindow = window.open('', '_blank', 'width=1200,height=900');
-    if (!printWindow) return;
+    const tableRows = data.map(item => columns.map(col => item[col.dataKey] || ''));
+    const tableHeaders = [columns.map(col => col.header)];
 
-    printWindow.document.write(`
-        <html>
-            <head>
-                <title>${fileName}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-                    h1 { margin: 0 0 8px; font-size: 24px; }
-                    p { margin: 0 0 20px; color: #64748b; font-size: 12px; }
-                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                    th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
-                    th { background: #dbeafe; color: #1e3a8a; font-weight: 700; }
-                    tr:nth-child(even) td { background: #f8fafc; }
-                </style>
-            </head>
-            <body>
-                <h1>${title}</h1>
-                <p>Generated on: ${new Date().toLocaleString()}</p>
-                <table>
-                    <thead>
-                        <tr>${tableHeaders}</tr>
-                    </thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-            </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    doc.autoTable({
+        head: tableHeaders,
+        body: tableRows,
+        startY: 35,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+    });
+
+    doc.save(`${fileName}.pdf`);
 };

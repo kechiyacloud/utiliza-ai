@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import psycopg2
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.database import get_db_connection, release_db_connection
@@ -40,6 +41,7 @@ class TeamMemberCreate(BaseModel):
     employee_id: Optional[str] = None
     name: str
     role: str
+    project_count: Optional[float] = None
     department: Optional[str] = None
     company: Optional[str] = "Cloud Destinations"
     company_type: Optional[str] = "Internal"
@@ -54,6 +56,11 @@ class TeamMemberCreate(BaseModel):
 
 class ResourceAllocationUpdate(BaseModel):
     resources: List[TeamMemberCreate]
+
+
+class ProjectResourcesPdfExportRequest(BaseModel):
+    resources: List[TeamMemberCreate]
+    title: Optional[str] = None
 
 
 class ProjectCreate(BaseModel):
@@ -179,6 +186,67 @@ def _validate_resource_rows(resources: List[TeamMemberCreate]):
 
 def _model_payload(model):
     return model.model_dump(exclude_unset=True) if hasattr(model, "model_dump") else model.dict(exclude_unset=True)
+
+
+def _escape_pdf_text(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _build_simple_pdf(lines: List[str]) -> bytes:
+    escaped_lines = [_escape_pdf_text(line) for line in lines]
+
+    content_chunks = [
+        "BT",
+        "/F1 10 Tf",
+        "40 560 Td",
+    ]
+    for idx, line in enumerate(escaped_lines):
+        if idx == 0:
+            content_chunks.append(f"({line}) Tj")
+        else:
+            content_chunks.append("0 -12 Td")
+            content_chunks.append(f"({line}) Tj")
+    content_chunks.append("ET")
+    content_stream = "\n".join(content_chunks).encode("latin-1", errors="replace")
+
+    objects = []
+    objects.append(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+    objects.append(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+    objects.append(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n"
+    )
+    objects.append(b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+    objects.append(
+        b"5 0 obj\n<< /Length "
+        + str(len(content_stream)).encode("ascii")
+        + b" >>\nstream\n"
+        + content_stream
+        + b"\nendstream\nendobj\n"
+    )
+
+    pdf = bytearray()
+    pdf.extend(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj)
+
+    xref_start = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010} 00000 n \n".encode("ascii"))
+
+    pdf.extend(
+        (
+            "trailer\n"
+            f"<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            "startxref\n"
+            f"{xref_start}\n"
+            "%%EOF\n"
+        ).encode("ascii")
+    )
+    return bytes(pdf)
 
 
 @router.get("/overview")
@@ -445,12 +513,10 @@ def project_resources(project_id: str):
         # ── Dynamic calculation for employees with no stored weekly data ────
         # For each such employee, count how many active projects they are on
         # and divide 40h equally across those projects.
-        emp_ids_needing_calc = [
-            eid for eid, rec in resources_dict.items() if not rec["_has_weekly_data"]
-        ]
-
-        if emp_ids_needing_calc:
-            placeholders = ",".join(["%s"] * len(emp_ids_needing_calc))
+        emp_ids = list(resources_dict.keys())
+        project_count_map = {}
+        if emp_ids:
+            placeholders = ",".join(["%s"] * len(emp_ids))
             cur.execute(f"""
                 SELECT pa.employee_id, COUNT(DISTINCT pa.project_id) AS active_count
                 FROM projects_allocation pa
@@ -460,12 +526,13 @@ def project_resources(project_id: str):
                       'completed', 'closed', 'ended', 'end', 'done', 'cancelled'
                   )
                 GROUP BY pa.employee_id
-            """, emp_ids_needing_calc)
-            project_count_map = {r[0]: max(1, r[1]) for r in cur.fetchall()}
+            """, emp_ids)
+            project_count_map = {r[0]: (r[1] or 0) for r in cur.fetchall()}
 
-            for emp_id in emp_ids_needing_calc:
-                rec = resources_dict[emp_id]
-                n_projects = project_count_map.get(emp_id, 1)
+        for emp_id, rec in resources_dict.items():
+            n_projects = max(1, project_count_map.get(emp_id, 0))
+            rec["project_count"] = n_projects
+            if not rec["_has_weekly_data"]:
                 computed_hours = round(40.0 / n_projects, 1)
                 rec["w1"] = computed_hours
                 rec["w2"] = computed_hours
@@ -487,6 +554,52 @@ def project_resources(project_id: str):
     finally:
         cur.close()
         release_db_connection(conn)
+
+
+@router.post("/{project_id}/resources/export/pdf")
+def export_project_resources_pdf(project_id: str, payload: ProjectResourcesPdfExportRequest):
+    resources = payload.resources or []
+    title = _normalize_text(payload.title) or f"Resource Allocation - {project_id}"
+    generated_on = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = [
+        title,
+        f"Generated on: {generated_on}",
+        "",
+        "Resource | Role | Start | End | Allocation | W1 | W2 | W3 | W4 | Total",
+    ]
+
+    for row in resources[:38]:
+        project_count = row.model_dump().get("project_count") if hasattr(row, "model_dump") else None
+        if project_count is None:
+            project_count = getattr(row, "project_count", None)
+        try:
+            project_count_num = float(project_count) if project_count is not None else 0
+        except Exception:
+            project_count_num = 0
+        allocation_pct = 0 if project_count_num <= 0 else round(100 / project_count_num)
+
+        total = (row.w1 or 0) + (row.w2 or 0) + (row.w3 or 0) + (row.w4 or 0)
+        line = (
+            f"{(row.name or '-')} | {(row.role or '-')} | "
+            f"{(row.allocation_start_date or '-') } | {(row.allocation_end_date or '-')} | "
+            f"{allocation_pct}% | {row.w1 or 0}h | {row.w2 or 0}h | {row.w3 or 0}h | {row.w4 or 0}h | {total}h"
+        )
+        lines.append(line)
+
+    if len(resources) > 38:
+        lines.append(f"... and {len(resources) - 38} more rows")
+
+    pdf_bytes = _build_simple_pdf(lines)
+    if not pdf_bytes:
+        raise HTTPException(status_code=500, detail="Failed to generate PDF.")
+
+    filename = f"Allocation_{project_id}_{date.today().isoformat()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put("/{project_id}/resources")

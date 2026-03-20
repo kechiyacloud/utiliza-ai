@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, TrendingUp, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search } from 'lucide-react';
 import axios from '../../api/axios';
-import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -271,6 +271,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
 };
 
 const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) => {
+    const navigate = useNavigate();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -310,7 +311,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
         setLocalRows([...localRows, ...newResources]);
     };
 
-    const handleExport = (format) => {
+    const handleExport = async (format) => {
         const weeks = getLast4Weeks();
         const exportData = localRows.map(r => ({
             'Resource': r.name,
@@ -331,16 +332,40 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
         } else if (format === 'excel') {
             exportToExcel(exportData, fileName);
         } else if (format === 'pdf') {
-            const columns = [
-                { header: 'Resource', dataKey: 'Resource' },
-                { header: 'Role', dataKey: 'Role' },
-                { header: weeks[0].label, dataKey: weeks[0].label },
-                { header: weeks[1].label, dataKey: weeks[1].label },
-                { header: weeks[2].label, dataKey: weeks[2].label },
-                { header: weeks[3].label, dataKey: weeks[3].label },
-                { header: 'Total', dataKey: 'Total' },
-            ];
-            exportToPDF(exportData, columns, `Resource Allocation - ${projectId}`, fileName);
+            try {
+                const response = await axios.post(
+                    `/projects/${projectId}/resources/export/pdf`,
+                    {
+                        title: `Resource Allocation - ${projectId}`,
+                        resources: localRows,
+                    },
+                    {
+                        responseType: 'blob',
+                        headers: { Accept: 'application/pdf' },
+                    }
+                );
+
+                const contentType = (response?.headers?.['content-type'] || '').toLowerCase();
+                const blob = response?.data;
+                if (!(blob instanceof Blob) || blob.size === 0) {
+                    throw new Error('Empty PDF response.');
+                }
+                if (!contentType.includes('application/pdf')) {
+                    throw new Error('Invalid PDF response type.');
+                }
+
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `${fileName}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('PDF export failed:', error);
+                alert('PDF export failed. Please try again.');
+            }
         }
     };
 
@@ -364,6 +389,17 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
             localRows.reduce((sum, r) => sum + Number(r[key] || 0), 0)
         ), [localRows]);
 
+    const getProjectCount = (row) => {
+        const parsed = Number(row?.project_count ?? row?.projectCount ?? 0);
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const getAllocationPct = (row) => {
+        const projectCount = getProjectCount(row);
+        if (projectCount <= 0) return 0;
+        return Math.round(100 / projectCount);
+    };
+
     if (localRows.length === 0 && !isEditing) {
         return (
             <div className="p-8 text-center text-gray-400 italic bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
@@ -381,7 +417,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
         <div className="flex flex-col gap-4">
             <div className="flex justify-between items-center px-1">
                 <div></div>
-                <div>
+                <div className="flex items-center gap-2.5">
                     {isEditing ? (
                         <div className="flex items-center gap-2">
                             <button onClick={handleAddRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
@@ -399,7 +435,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                             <Pencil size={14} /> Edit Allocation
                         </button>
                     )}
-                    <div className="relative group inline-block ml-2">
+                    <div className="relative group inline-block">
                         <button 
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm"
@@ -438,6 +474,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                             <th className="px-4 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-wider min-w-[140px]">Role</th>
                             <th className="px-4 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-wider min-w-[120px]">Alloc. Start</th>
                             <th className="px-4 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-wider min-w-[120px]">Alloc. End</th>
+                            <th className="px-4 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-wider min-w-[100px]">Allocation</th>
                             {weekSlots.map((wk, idx) => (
                                 <th key={idx} className="px-3 py-3 text-center text-[11px] font-extrabold text-slate-500 uppercase tracking-wider min-w-[110px] border-l border-slate-100">
                                     <span className={`block ${idx === 3 ? 'text-blue-600' : ''}`}>{wk.label}</span>
@@ -468,7 +505,16 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                                 label="Employee"
                                             />
                                         ) : (
-                                            row.name || '—'
+                                            row.employee_id ? (
+                                                <Link
+                                                    to={`/info/employee/${row.employee_id}`}
+                                                    className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
+                                                >
+                                                    {row.name || '—'}
+                                                </Link>
+                                            ) : (
+                                                row.name || '—'
+                                            )
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
@@ -500,6 +546,22 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                             row.allocation_end_date || '—'
                                         )}
                                     </td>
+                                    <td className="px-4 py-3 text-slate-600 text-xs min-w-[100px]">
+                                        {!isEditing && row.employee_id ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate('/info/allocation', { state: { showBack: true, employeeId: row.employee_id, fromProjectId: projectId } })}
+                                                className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 transition-colors"
+                                                title="View allocation dashboard"
+                                            >
+                                                {getAllocationPct(row)}%
+                                            </button>
+                                        ) : (
+                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
+                                                {getAllocationPct(row)}%
+                                            </span>
+                                        )}
+                                    </td>
                                     {W_KEYS.map((key, idx) => {
                                         const hours = Number(row[key] || 0);
                                         const pct = Math.min(100, Math.round((hours / HOURS_MAX) * 100));
@@ -520,7 +582,6 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className={`text-xs font-bold ${pct >= 100 ? 'text-green-600' : isCurrentWeek ? 'text-blue-700' : 'text-slate-700'}`}>
                                                                 {hours}h
-                                                                <span className="text-[10px] font-normal text-slate-400 ml-1">({pct}%)</span>
                                                             </span>
                                                             <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
                                                                 <div
@@ -550,7 +611,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                     </tbody>
                     <tfoot>
                         <tr className="bg-slate-100 border-t-2 border-slate-200">
-                            <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={4}>
+                            <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={5}>
                                 Total
                             </td>
                             {columnTotals.map((total, idx) => (
@@ -1063,11 +1124,14 @@ const ProjectDetailsPage = () => {
                                 </h3>
                             </div>
                             {/* Legend */}
-                            <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500 font-medium self-center">
-                                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span> ≥75%</span>
-                                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-400"></span> ≥40%</span>
-                                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-300"></span> &lt;40%</span>
-                                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400"></span> 100%+</span>
+                            <div className="hidden sm:flex flex-col items-start gap-1 text-[10px] text-slate-500 font-medium self-center">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Allocation % Utilization</span>
+                                <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span> &gt;75% → High utilization</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-400"></span> ~40% → Medium utilization</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-300"></span> &lt;40% → Low utilization</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400"></span> 100%+ → Over allocated</span>
+                                </div>
                             </div>
                         </div>
 
