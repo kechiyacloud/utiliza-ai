@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppDataProvider } from './context'
@@ -19,6 +18,7 @@ const EmployeeDetails = lazy(() => import('./dashboard/employee/EmployeeDetails'
 const EmployeeMasterList = lazy(() => import('./dashboard/employee/EmployeeMasterList'))
 const AddEmployee = lazy(() => import('./dashboard/employee/AddEmployee'))
 const ProjectDetailsPage = lazy(() => import('./dashboard/projects/ProjectDetailsPage'))
+const ImportResourcesPage = lazy(() => import('./dashboard/projects/ImportResourcesPage'))
 const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
 const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
@@ -50,18 +50,20 @@ function App() {
 
           {/* AUTH LAYOUT ROUTE */}
           <Route path='/' element={withSuspense(<LoginRegister />, 'Loading sign in...')}>
-            <Route index element={withSuspense(<Login />, 'Loading sign in...')} />           {/* default */}
+            <Route index element={withSuspense(<Login />, 'Loading sign in...')} />
             <Route path='login' element={withSuspense(<Login />, 'Loading sign in...')} />
             <Route path='register' element={withSuspense(<Register />, 'Loading registration...')} />
             <Route path='verify' element={withSuspense(<Verify />, 'Loading verification...')} />
           </Route>
 
-          <Route path='/info' element={withSuspense(<MainDashboard />, 'Loading workspace...')} >
+          {/* DASHBOARD */}
+          <Route path='/info' element={withSuspense(<MainDashboard />, 'Loading workspace...')}>
             <Route index element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
             <Route path='dashboard' element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
             <Route path='projects' element={withSuspense(<Projects />, 'Loading projects...')} />
             <Route path='projects/:id' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
             <Route path='projects/:id/allocation' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
+            <Route path='projects/:projectId/import' element={withSuspense(<ImportResourcesPage />, 'Loading import...')} />
             <Route path='employee' element={withSuspense(<Employee />, 'Loading employees...')} />
             <Route path='employee/add' element={withSuspense(<AddEmployee />, 'Loading employee form...')} />
             <Route path='employee/:id' element={withSuspense(<EmployeeDetails />, 'Loading employee details...')} />
@@ -73,23 +75,7 @@ function App() {
             <Route path='settings' element={withSuspense(<Settings />, 'Loading settings...')} />
             <Route path='analytics' element={withSuspense(<FullAnalytics />, 'Loading analytics...')} />
             <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
-            {/* <Route path='test' element={<DataInfrastructureTest />} /> */}
           </Route>
-
-          {/* PROTECTED ROUTES */}
-          {/* <Route element={<ProtectedRoute />}>
-          <Route path='/info' element={<MainDashboard />} >
-            <Route index element={<Dashboard />} />       
-            <Route path='dashboard' element={<Dashboard />} />
-            <Route path='projects' element={<Projects />} />
-            <Route path='projects/:id' element={<ProjectDetailsPage />} />
-            <Route path='projects/:id/allocation' element={<ProjectDetailsPage />} />
-            <Route path='employee' element={<Employee />} />
-            <Route path='client' element={<Client />} />
-            <Route path='allocation' element={<Allocations />} />
-            <Route path='settings' element={<Settings />} />          
-          </Route>
-        </Route> */}
 
           {/* FALLBACK */}
           <Route path='*' element={<Navigate to='/' />} />
@@ -101,4 +87,3 @@ function App() {
 }
 
 export default App
-

@@ -3,12 +3,32 @@ import { Link, useNavigate } from 'react-router-dom';
 import { X, Calendar, Users, Target, Activity, Briefcase, Clock, Zap, Loader2, Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import axios from '../../api/axios';
 
+const W_KEYS = ['w1', 'w2', 'w3', 'w4'];
+const WEEK_DEFAULT_HOURS = 40;
+
+function normalizeAllocationRow(row = {}) {
+    const normalized = { ...row };
+    W_KEYS.forEach((key) => {
+        const rawValue = normalized[key];
+        if (rawValue === '' || rawValue === null || rawValue === undefined) {
+            normalized[key] = WEEK_DEFAULT_HOURS;
+            return;
+        }
+
+        const parsed = Number(rawValue);
+        normalized[key] = Number.isFinite(parsed) ? parsed : WEEK_DEFAULT_HOURS;
+    });
+    return normalized;
+}
+
 // ─── Resource Allocation Component ───────────────────────────────────────────
 const AllocationTable = ({ projectId }) => {
     const navigate = useNavigate();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [employees, setEmployees] = useState([]);
     const [roles, setRolesList] = useState([]);
 
@@ -18,20 +38,37 @@ const AllocationTable = ({ projectId }) => {
         const load = async () => {
             setLoading(true);
             try {
-                const [resRows, resEmp, resRoles] = await Promise.all([
+                const [resRows, resEmp, resRoles] = await Promise.allSettled([
                     axios.get(`/projects/${projectId}/resources`),
                     axios.get('/employees/list'),
                     axios.get('/employees/departments/roles-mapping')
                 ]);
                 if (!cancelled) {
-                    setRows(resRows.data || []);
-                    setEmployees(resEmp.data || []);
-                    // Flatten roles mapping into a unique list of roles
-                    const allRoles = new Set();
-                    Object.values(resRoles.data || {}).forEach(roleList => {
-                        roleList.forEach(r => allRoles.add(r));
-                    });
-                    setRolesList(Array.from(allRoles).sort());
+                    if (resRows.status === 'fulfilled') {
+                        setRows((Array.isArray(resRows.value.data) ? resRows.value.data : []).map(normalizeAllocationRow));
+                    } else {
+                        console.error("Resource fetch failed:", resRows.reason);
+                        setRows((current) => (Array.isArray(current) ? current : []));
+                    }
+
+                    if (resEmp.status === 'fulfilled') {
+                        setEmployees(Array.isArray(resEmp.value.data) ? resEmp.value.data : []);
+                    } else {
+                        console.error("Employee fetch failed:", resEmp.reason);
+                        setEmployees((current) => (Array.isArray(current) ? current : []));
+                    }
+
+                    if (resRoles.status === 'fulfilled') {
+                        // Flatten roles mapping into a unique list of roles
+                        const allRoles = new Set();
+                        Object.values(resRoles.value.data || {}).forEach(roleList => {
+                            (roleList || []).forEach(r => allRoles.add(r));
+                        });
+                        setRolesList(Array.from(allRoles).sort());
+                    } else {
+                        console.error("Roles fetch failed:", resRoles.reason);
+                        setRolesList((current) => (Array.isArray(current) ? current : []));
+                    }
                 }
             } catch (err) {
                 console.error("Fetch error:", err);
@@ -45,7 +82,7 @@ const AllocationTable = ({ projectId }) => {
     }, [projectId]);
 
     const handleAddRow = () => {
-        setRows([...rows, { name: '', role: '', company: 'Cloud Destinations', location: 'Remote', w1: 0, w2: 0, w3: 0, w4: 0 }]);
+        setRows([...rows, normalizeAllocationRow({ name: '', role: '', company: 'Cloud Destinations', location: 'Remote', w1: '', w2: '', w3: '', w4: '' })]);
     };
 
     const handleRemoveRow = (index) => {
@@ -55,17 +92,51 @@ const AllocationTable = ({ projectId }) => {
     const handleRowChange = (index, field, value) => {
         const newRows = [...rows];
         if (['w1', 'w2', 'w3', 'w4'].includes(field)) {
-            newRows[index][field] = parseInt(value) || 0;
+            if (value === '' || value === null || value === undefined) {
+                newRows[index][field] = WEEK_DEFAULT_HOURS;
+            } else {
+                const parsed = Number(value);
+                newRows[index][field] = Number.isFinite(parsed) ? parsed : WEEK_DEFAULT_HOURS;
+            }
         } else {
             newRows[index][field] = value;
         }
         setRows(newRows);
     };
 
-    const handleSave = () => {
-        setIsEditing(false);
-        // Note: The UI is completely editable locally as requested. DB persistence for hours/etc. will be tied in later.
-        console.log("Saving allocations:", rows);
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveError('');
+        try {
+            await axios.put(`/projects/${projectId}/resources`, {
+                resources: rows.map((row) => ({
+                    ...normalizeAllocationRow(row),
+                    employee_id: row.employee_id || null,
+                    name: (row.name || '').trim(),
+                    role: (row.role || '').trim(),
+                }))
+            });
+            const [resRows, resEmp, resRoles] = await Promise.all([
+                axios.get(`/projects/${projectId}/resources`),
+                axios.get('/employees/list'),
+                axios.get('/employees/departments/roles-mapping')
+            ]);
+            setRows((resRows.data || []).map(normalizeAllocationRow));
+            setEmployees(resEmp.data || []);
+            const allRoles = new Set();
+            Object.values(resRoles.data || {}).forEach(roleList => {
+                (roleList || []).forEach(r => allRoles.add(r));
+            });
+            setRolesList(Array.from(allRoles).sort());
+            setIsEditing(false);
+        } catch (error) {
+            console.error('Failed to save allocations:', error);
+            const message = error?.response?.data?.detail || 'Failed to save allocations.';
+            setSaveError(message);
+            alert(message);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     if (loading) {
@@ -88,14 +159,11 @@ const AllocationTable = ({ projectId }) => {
     );
     const totalHours = totals.w1 + totals.w2 + totals.w3 + totals.w4;
     const weeklyCapacity = Math.round(totalHours / 4);
-    const getProjectCount = (row) => {
-        const parsed = Number(row?.project_count ?? row?.projectCount ?? 0);
-        return Number.isFinite(parsed) ? parsed : 0;
-    };
     const getAllocationPct = (row) => {
-        const projectCount = getProjectCount(row);
-        if (projectCount <= 0) return 0;
-        return Math.round(100 / projectCount);
+        const rowHours = W_KEYS.reduce((sum, key) => sum + Number(row?.[key] || 0), 0);
+        const maxCapacity = WEEK_DEFAULT_HOURS * W_KEYS.length;
+        if (maxCapacity <= 0) return 0;
+        return Math.round((rowHours / maxCapacity) * 100);
     };
 
     const summaryCards = [
@@ -119,8 +187,8 @@ const AllocationTable = ({ projectId }) => {
                             <button onClick={handleAddRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
                                 <Plus size={14} /> Add Resource
                             </button>
-                            <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors">
-                                <Save size={14} /> Save Changes
+                            <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Changes
                             </button>
                         </div>
                     ) : (
@@ -130,6 +198,11 @@ const AllocationTable = ({ projectId }) => {
                     )}
                 </div>
             </div>
+            {saveError && (
+                <div className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                    {saveError}
+                </div>
+            )}
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-3">
