@@ -7,6 +7,14 @@
     <title>Utiliza-AI</title>
   </head>
   <body>
+    <script>
+      window.onerror = function(msg, url, line, col, error) {
+        document.body.innerHTML = '<div style="color:red;padding:20px;font-family:sans-serif;"><h2>Crash Reporter:</h2><p>' + msg + '</p><pre>' + (error && error.stack ? error.stack : '') + '</pre></div>';
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        document.body.innerHTML = '<div style="color:red;padding:20px;font-family:sans-serif;"><h2>Promise Error:</h2><p>' + (event.reason ? event.reason.message || event.reason : 'Unknown') + '</p><pre>' + (event.reason && event.reason.stack ? event.reason.stack : '') + '</pre></div>';
+      });
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

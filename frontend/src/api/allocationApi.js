@@ -108,9 +108,10 @@ export const fetchDepartmentBreakdown = async () => {
     }
 };
 // ---------- Fetch Forecast Bench List ----------
-export const fetchForecastBench = async () => {
+export const fetchForecastBench = async (department = null) => {
     try {
-        const res = await api.get('/allocations/forecast-bench');
+        const params = department && department !== 'All Departments' ? { department } : {};
+        const res = await api.get('/allocations/forecast-bench', { params });
         return res.data; // [{ employee_id, employee_name, role, project_name, end_date }]
     } catch (error) {
         console.error("Forecast Bench API Error:", error);

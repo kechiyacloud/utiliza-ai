@@ -62,11 +62,11 @@ function Register() {
         From insight to impact <span className="mx-1">-</span> It starts here
       </p>
 
-      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" required/>
+      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" autoComplete="username" required/>
 
       <div className="relative input-field">
 
-        <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="input-password" required />
+        <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="input-password" autoComplete="new-password" required />
 
         <button type="button" onClick={() => setShowPassword(!showPassword)} className="input-password-icon" >
           {showPassword ? ( <EyeOff size={16} strokeWidth={1.6} /> ) : ( <Eye size={16} strokeWidth={1.6} /> )}
@@ -76,7 +76,7 @@ function Register() {
 
       <div className="relative input-field">
 
-        <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} className="input-password" required />
+        <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} className="input-password" autoComplete="new-password" required />
 
         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="input-password-icon" >
           {showConfirmPassword ? ( <EyeOff size={16} strokeWidth={1.6} /> ) : ( <Eye size={16} strokeWidth={1.6} /> )}

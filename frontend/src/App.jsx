@@ -1,31 +1,47 @@
 // frontend/src/App.jsx
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppDataProvider } from './context'
 
-// Layout
-import LoginRegister from './LoginRegister'
+const LoginRegister = lazy(() => import('./LoginRegister'))
+const Login = lazy(() => import('./login-register/Login'))
+const Register = lazy(() => import('./login-register/Register'))
+const Verify = lazy(() => import('./login-register/Verify'))
+const MainDashboard = lazy(() => import('./MainDashboard'))
+const Dashboard = lazy(() => import('./dashboard/Dashboard'))
+const Projects = lazy(() => import('./dashboard/Projects'))
+const Availability = lazy(() => import('./dashboard/Availability'))
+const Settings = lazy(() => import('./dashboard/Settings'))
+const Client = lazy(() => import('./dashboard/Client'))
+const Allocations = lazy(() => import('./dashboard/Allocations'))
+const Employee = lazy(() => import('./dashboard/Employee'))
+const EmployeeDetails = lazy(() => import('./dashboard/employee/EmployeeDetails'))
+const EmployeeMasterList = lazy(() => import('./dashboard/employee/EmployeeMasterList'))
+const AddEmployee = lazy(() => import('./dashboard/employee/AddEmployee'))
+const ProjectDetailsPage = lazy(() => import('./dashboard/projects/ProjectDetailsPage'))
+const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
+const Organization = lazy(() => import('./dashboard/Organization'))
+const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
 
-// Forms
-import Login from './login-register/Login'
-import Register from './login-register/Register'
-import Verify from './login-register/Verify'
+function RouteLoader({ label = 'Loading page...' }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-500">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500/25 border-t-blue-500"></div>
+        <p className="text-sm font-medium tracking-wide">{label}</p>
+      </div>
+    </div>
+  )
+}
 
-// Protected Dashboard (example)
-import ProtectedRoute from './ProtectedRoute'
-import MainDashboard from './MainDashboard'
-import Dashboard from './dashboard/Dashboard'
-import Projects from './dashboard/Projects'
-import Availability from './dashboard/Availability'
-import Settings from './dashboard/Settings'
-import Client from './dashboard/Client'
-import Allocations from './dashboard/Allocations'
-import Employee from './dashboard/Employee'
-import EmployeeDetails from './dashboard/employee/EmployeeDetails'
-import EmployeeMasterList from './dashboard/employee/EmployeeMasterList'
-import AddEmployee from './dashboard/employee/AddEmployee'
-import ProjectDetailsPage from './dashboard/projects/ProjectDetailsPage';
-import Organization from './dashboard/Organization'
-// import DataInfrastructureTest from './test/DataInfrastructureTest'
+function withSuspense(element, label) {
+  return (
+    <Suspense fallback={<RouteLoader label={label} />}>
+      {element}
+    </Suspense>
+  )
+}
+
 function App() {
   return (
     <AppDataProvider>
@@ -33,28 +49,30 @@ function App() {
         <Routes>
 
           {/* AUTH LAYOUT ROUTE */}
-          <Route path='/' element={<LoginRegister />}>
-            <Route index element={<Login />} />           {/* default */}
-            <Route path='login' element={<Login />} />
-            <Route path='register' element={<Register />} />
-            <Route path='verify' element={<Verify />} />
+          <Route path='/' element={withSuspense(<LoginRegister />, 'Loading sign in...')}>
+            <Route index element={withSuspense(<Login />, 'Loading sign in...')} />           {/* default */}
+            <Route path='login' element={withSuspense(<Login />, 'Loading sign in...')} />
+            <Route path='register' element={withSuspense(<Register />, 'Loading registration...')} />
+            <Route path='verify' element={withSuspense(<Verify />, 'Loading verification...')} />
           </Route>
 
-          <Route path='/info' element={<MainDashboard />} >
-            <Route index element={<Dashboard />} />
-            <Route path='dashboard' element={<Dashboard />} />
-            <Route path='projects' element={<Projects />} />
-            <Route path='projects/:id' element={<ProjectDetailsPage />} />
-            <Route path='projects/:id/allocation' element={<ProjectDetailsPage />} />
-            <Route path='employee' element={<Employee />} />
-            <Route path='employee/add' element={<AddEmployee />} />
-            <Route path='employee/:id' element={<EmployeeDetails />} />
-            <Route path='employees/list' element={<EmployeeMasterList />} />
-            <Route path='client' element={<Client />} />
-            <Route path='allocation' element={<Allocations />} />
-            <Route path='availability' element={<Availability />} />
-            <Route path='organization' element={<Organization />} />
-            <Route path='settings' element={<Settings />} />
+          <Route path='/info' element={withSuspense(<MainDashboard />, 'Loading workspace...')} >
+            <Route index element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
+            <Route path='dashboard' element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
+            <Route path='projects' element={withSuspense(<Projects />, 'Loading projects...')} />
+            <Route path='projects/:id' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
+            <Route path='projects/:id/allocation' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
+            <Route path='employee' element={withSuspense(<Employee />, 'Loading employees...')} />
+            <Route path='employee/add' element={withSuspense(<AddEmployee />, 'Loading employee form...')} />
+            <Route path='employee/:id' element={withSuspense(<EmployeeDetails />, 'Loading employee details...')} />
+            <Route path='employees/list' element={withSuspense(<EmployeeMasterList />, 'Loading employee list...')} />
+            <Route path='client' element={withSuspense(<Client />, 'Loading clients...')} />
+            <Route path='allocation' element={withSuspense(<Allocations />, 'Loading allocations...')} />
+            <Route path='availability' element={withSuspense(<Availability />, 'Loading availability...')} />
+            <Route path='organization' element={withSuspense(<Organization />, 'Loading organization...')} />
+            <Route path='settings' element={withSuspense(<Settings />, 'Loading settings...')} />
+            <Route path='analytics' element={withSuspense(<FullAnalytics />, 'Loading analytics...')} />
+            <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
             {/* <Route path='test' element={<DataInfrastructureTest />} /> */}
           </Route>
 

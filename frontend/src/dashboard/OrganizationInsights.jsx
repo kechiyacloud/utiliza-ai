@@ -80,7 +80,7 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Billable vs Non-Billable</span>
           </div>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
               <BarChart data={utilizationData} layout="vertical" margin={{ left: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide />
@@ -110,7 +110,7 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Organization-Wide proficiency</span>
           </div>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
               <RadarChart cx="50%" cy="50%" outerRadius="80%" data={skillData}>
                 <PolarGrid stroke="#e2e8f0" />
                 <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} />
@@ -131,7 +131,7 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
             </select>
           </div>
           <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
               <LineChart data={growthData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 

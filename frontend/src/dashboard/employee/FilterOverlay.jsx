@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { X, Filter, ChevronDown, Check, Users, Briefcase, Hourglass, TrendingUp, AlertCircle, DollarSign } from 'lucide-react';
 import { getEmployeeTag } from '../../components/EmployeeStatusTag';
-import { getFilterOptions } from '../../api/employeeApi';
+import { normalizeSkillName } from '../../utils/skillTopics';
 
 const Checkbox = ({ checked, onChange, label, count }) => (
     <label className={`flex items-center gap-3 cursor-pointer group border-b border-slate-50 last:border-0 transition-colors ${checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
@@ -83,11 +83,21 @@ const AccordionSection = ({
 
 // Stats summary that shows live breakdown of filtered employees
 const FilterStats = ({ employees, localFilters, getTagLabel, designations }) => {
+    const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+        if (!selectedSkills.length) return true;
+
+        const normalizedEmployeeSkills = new Set(
+            (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+        );
+
+        return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+    };
+
     const group = useMemo(() => employees.filter(emp => {
         const matchesDept = !localFilters.departments?.length || localFilters.departments.includes(emp.department);
         const matchesType = !localFilters.types?.length || localFilters.types.includes(emp.employee_type);
         const matchesLocation = !localFilters.locations?.length || localFilters.locations.includes(emp.location);
-        const matchesSkills = !localFilters.skills?.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
+        const matchesSkills = employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
         const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
         const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
         return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
@@ -141,30 +151,15 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
     const [activeSection, setActiveSection] = useState('designations');
     const [skillSearch, setSkillSearch] = useState("");
     const [designationSearch, setDesignationSearch] = useState("");
+    const getTagLabel = (status) => getEmployeeTag(status).label;
 
-    const [filterOptions, setFilterOptions] = useState({
-        departments: [],
-        locations: [],
-        skills: [],
-        employee_types: [],
-        status_tags: []
-    });
-
-    useEffect(() => {
-        const fetchOptions = async () => {
-            const data = await getFilterOptions();
-            if (data) {
-                setFilterOptions({
-                    departments: data.departments || [],
-                    locations: data.locations || [],
-                    skills: data.skills || [],
-                    employee_types: data.employee_types || [],
-                    status_tags: data.status_tags || []
-                });
-            }
-        };
-        fetchOptions();
-    }, []);
+    const filterOptions = useMemo(() => ({
+        departments: [...new Set(employees.map(emp => emp.department).filter(Boolean))].sort(),
+        locations: [...new Set(employees.map(emp => emp.location).filter(Boolean))].sort(),
+        skills: [...new Set(employees.flatMap(emp => Array.isArray(emp.skills) ? emp.skills.map(normalizeSkillName) : []).filter(Boolean))].sort(),
+        employee_types: [...new Set(employees.map(emp => emp.employee_type).filter(Boolean))].sort(),
+        status_tags: [...new Set(employees.map(emp => getTagLabel(emp.employee_status)).filter(Boolean))].sort()
+    }), [employees]);
 
     // Derive unique designations from employees
     const allDesignations = useMemo(() =>
@@ -187,14 +182,12 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         setActiveSection(prev => prev === section ? '' : section);
     };
 
-    const getTagLabel = (status) => getEmployeeTag(status).label;
-
     const headerCount = useMemo(() => {
         return employees.filter(emp => {
             const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
             const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
             const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
-            const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
+            const matchesSkills = employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
             const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
             const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
             return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
@@ -207,7 +200,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                 const matchesDept = field === 'department' || !localFilters.departments.length || localFilters.departments.includes(emp.department);
                 const matchesType = field === 'employee_type' || !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = field === 'location' || !localFilters.locations.length || localFilters.locations.includes(emp.location);
-                const matchesSkills = field === 'skills' || !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
+                const matchesSkills = field === 'skills' || employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
                 const matchesDesig = field === 'role_designation' || !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
                 return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig;
             }).reduce((acc, emp) => {
@@ -231,7 +224,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                 const matchesDept = !localFilters.departments.length || localFilters.departments.includes(emp.department);
                 const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
                 const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
-                const matchesSkills = !localFilters.skills.length || (emp.skills && localFilters.skills.some(s => emp.skills.includes(s)));
+                const matchesSkills = employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
                 const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
                 return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig;
             }).reduce((acc, emp) => {
@@ -428,3 +421,12 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 };
 
 export default FilterOverlay;
+    const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+        if (!selectedSkills.length) return true;
+
+        const normalizedEmployeeSkills = new Set(
+            (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+        );
+
+        return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+    };

@@ -33,7 +33,7 @@ const ProjectEmployeeAllocation = ({ project, onClose }) => {
                     <div className="flex items-center gap-3 mt-0.5">
                         <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Allocation Details</p>
                         <Link
-                            to={`/info/projects?id=${project.project_id}`}
+                            to={`/info/projects/${project.project_id}`}
                             className="flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-all duration-200 uppercase tracking-wide"
                         >
                             Know more info <ExternalLink size={10} strokeWidth={2.5} />

@@ -23,7 +23,7 @@ function Allocations() {
   // Filter State
   const [filters, setFilters] = useState({
     dateRange: 'Jan 2026 - Apr 2026',
-    department: 'All Departments',
+    department: location.state?.departmentFilter || 'All Departments',
     resourceType: 'All Resources'
   });
 
@@ -39,7 +39,7 @@ function Allocations() {
       try {
         const [res, benchRes] = await Promise.all([
           fetchAllocationData(filters),
-          fetchForecastBench()
+          fetchForecastBench(filters.department)
         ]);
         setData(res.data);
         setForecastBench(benchRes);

@@ -29,7 +29,7 @@ def get_all_availability(
             FROM employee_master em
             LEFT JOIN projects_allocation pa ON em.employee_id = pa.employee_id
             LEFT JOIN projects p ON pa.project_id = p.project_id
-            WHERE 1=1
+            WHERE em.date_of_resign IS NULL
         """
         params = []
         if department:
@@ -84,7 +84,7 @@ def get_availability_filters():
 
     try:
         # Get departments
-        cur.execute("SELECT DISTINCT department FROM employee_master WHERE department IS NOT NULL ORDER BY department")
+        cur.execute("SELECT DISTINCT department FROM employee_master WHERE date_of_resign IS NULL AND department IS NOT NULL ORDER BY department")
         departments = [row[0] for row in cur.fetchall()]
 
         # Get projects

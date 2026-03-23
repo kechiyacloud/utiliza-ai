@@ -9,16 +9,37 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      react: path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
-      'xlsx': path.resolve(__dirname, 'node_modules/xlsx/xlsx.mjs')
+      react: path.resolve('./node_modules/react'),
+      'react-dom': path.resolve('./node_modules/react-dom')
+    }
+  },
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return
+          }
+
+          if (id.includes('recharts')) {
+            return 'charts'
+          }
+
+          if (id.includes('lucide-react')) {
+            return 'icons'
+          }
+
+          return 'vendor'
+        }
+      }
     }
   },
   server: {
     allowedHosts: true,
     proxy: {
       '^/(login|register|employees?|dashboard|projects|allocations|clients|partners|availability|departments)': {
-        target: 'http://backend:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       }

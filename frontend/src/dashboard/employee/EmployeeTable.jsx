@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Search, Filter, DollarSign } from 'lucide-react';
+import { ChevronRight, Search, Filter, SquarePen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
+import { normalizeSkillName } from '../../utils/skillTopics';
 
 // AllocationBar — color matches EmployeeStatusTag palette
 const AllocationBar = ({ percentage, status }) => {
@@ -45,7 +46,7 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
@@ -62,30 +63,33 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filte
         ...(filters?.designations || [])
     ].length;
 
+    const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+        if (!selectedSkills.length) return true;
+
+        const normalizedEmployeeSkills = new Set(
+            (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+        );
+
+        return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+    };
+
     const filteredEmployees = employees.filter(emp => {
         const sv = filters.search?.toLowerCase().trim();
         const tagLabel = getEmployeeTag(emp.employee_status)?.label?.toLowerCase();
-        const ALL_TAG_LABELS = ['allocated', 'bench', 'partially allocated', 'partially bench', 'notice period'];
-        const isTagSearch = sv && ALL_TAG_LABELS.some(t => t.startsWith(sv));
         const matchesSearch = !sv || (
-            isTagSearch
-                ? tagLabel?.startsWith(sv)
-                : (
-                    emp.employee_name?.toLowerCase().includes(sv) ||
-                    emp.employee_id?.toLowerCase().includes(sv) ||
-                    emp.role_designation?.toLowerCase().includes(sv) ||
-                    emp.location?.toLowerCase().includes(sv) ||
-                    emp.department?.toLowerCase().includes(sv) ||
-                    tagLabel?.includes(sv) ||
-                    (emp.employee_allocations && emp.employee_allocations.toString().includes(sv)) ||
-                    (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
-                )
+            emp.employee_name?.toLowerCase().includes(sv) ||
+            emp.employee_id?.toLowerCase().includes(sv) ||
+            emp.role_designation?.toLowerCase().includes(sv) ||
+            emp.location?.toLowerCase().includes(sv) ||
+            emp.department?.toLowerCase().includes(sv) ||
+            tagLabel?.includes(sv) ||
+            (emp.employee_allocations !== null && emp.employee_allocations !== undefined && String(emp.employee_allocations).includes(sv)) ||
+            (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
         );
         const matchesDept = !filters?.departments?.length || filters.departments.includes(emp.department);
         const matchesLocation = !filters?.locations?.length || filters.locations.includes(emp.location);
         const matchesType = !filters?.types?.length || filters.types.includes(emp.employee_type);
-        const matchesSkills = !filters?.skills?.length ||
-            (emp.skills && filters.skills.some(skill => emp.skills.includes(skill)));
+        const matchesSkills = employeeHasMatchingSkill(emp.skills, filters?.skills || []);
         const matchesStatusTag = !filters?.statusTags?.length ||
             filters.statusTags.includes(getEmployeeTag(emp.employee_status)?.label);
         const matchesDesignation = !filters?.designations?.length ||
@@ -99,6 +103,8 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filte
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 switch (filters.cardFilter) {
+                    case 'billable':
+                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable'; break;
                     case 'bench':
                         matchesCardFilter = emp.employee_status?.toLowerCase() === 'bench'; break;
                     case 'notice':
@@ -185,11 +191,10 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filte
                         <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider">
                             <th className="px-6 py-3">Employee</th>
                             <th className="px-6 py-3">Designation</th>
-                            <th className="px-6 py-3">Skills</th>
                             <th className="px-6 py-3">Status</th>
                             <th className="px-6 py-3">Allocation</th>
                             <th className="px-6 py-3">Location</th>
-                            <th className="px-6 py-3 text-right"></th>
+                            <th className="px-6 py-3 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -224,24 +229,6 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filte
                                         <div className="text-xs text-gray-400">{emp.department}</div>
                                     </td>
                                     <td className="px-6 py-2">
-                                        <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                            {emp.skills && emp.skills.length > 0 ? (
-                                                emp.skills.slice(0, 3).map((skill, idx) => (
-                                                    <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                                        {skill}
-                                                    </span>
-                                                ))
-                                            ) : (
-                                                <span className="text-xs text-slate-400">-</span>
-                                            )}
-                                            {emp.skills && emp.skills.length > 3 && (
-                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-50 text-slate-500 border border-slate-200">
-                                                    +{emp.skills.length - 3}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2">
                                         <div className="flex flex-col gap-1">
                                             <EmployeeStatusTag status={emp.employee_status} />
                                             <BillableStatusTag billable={emp.billable} />
@@ -252,7 +239,20 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, filte
                                     </td>
                                     <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
                                     <td className="px-6 py-2 text-right">
-                                        <ChevronRight size={16} className="text-gray-300 group-hover:text-blue-500 transition-colors inline-block" />
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onEmployeeEdit && onEmployeeEdit(emp);
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-600 transition-colors hover:bg-blue-100"
+                                            >
+                                                <SquarePen size={13} />
+                                                Edit
+                                            </button>
+                                            <ChevronRight size={16} className="text-gray-300 group-hover:text-blue-500 transition-colors inline-block" />
+                                        </div>
                                     </td>
                                 </tr>
                             ))

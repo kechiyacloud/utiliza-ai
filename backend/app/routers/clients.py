@@ -15,8 +15,12 @@ class ClientCreate(BaseModel):
     budget: Optional[str] = None
 
 
-class EntityNameCreate(BaseModel):
-    name: str
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    industry: Optional[str] = None
+    status: Optional[str] = None
+    budget: Optional[str] = None
 
 @router.get("")
 def list_clients():
@@ -113,6 +117,56 @@ def create_client(client: ClientCreate):
         cur.close()
         release_db_connection(conn)
 
+
+@router.put("/{client_id}")
+def update_client(client_id: str, client: ClientUpdate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM clients WHERE client_id = %s", (client_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Client not found")
+
+        fields = []
+        values = []
+
+        if client.name is not None:
+            fields.append("client_name = %s")
+            values.append(client.name)
+        if client.url is not None:
+            fields.append("website_url = %s")
+            values.append(client.url)
+        if client.industry is not None:
+            fields.append("industry = %s")
+            values.append(client.industry)
+        if client.status is not None:
+            fields.append("status = %s")
+            values.append(client.status)
+        if client.budget is not None:
+            fields.append("budget = %s")
+            values.append(float(client.budget) if client.budget else 0.0)
+
+        if not fields:
+            return {"detail": "No changes supplied"}
+
+        values.append(client_id)
+        cur.execute(
+            f"UPDATE clients SET {', '.join(fields)} WHERE client_id = %s",
+            tuple(values)
+        )
+        conn.commit()
+        return {"detail": "Client updated successfully"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
 @router.delete("/{client_id}")
 def delete_client(client_id: str):
     conn = get_db_connection()
@@ -121,202 +175,10 @@ def delete_client(client_id: str):
         cur.execute("SELECT 1 FROM clients WHERE client_id = %s", (client_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Client not found")
-        
-        # Check if project depends on it
-        cur.execute("SELECT 1 FROM projects WHERE client_id = %s", (client_id,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Cannot delete client - projects are associated with it.")
 
         cur.execute("DELETE FROM clients WHERE client_id = %s", (client_id,))
         conn.commit()
         return {"detail": "Client deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.get("/simple")
-def list_simple_clients():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT client_id, client_name FROM clients ORDER BY client_name")
-        rows = cur.fetchall()
-        return [{"id": r[0], "name": r[1]} for r in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.post("/simple")
-def create_simple_client(payload: EntityNameCreate):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        name = (payload.name or "").strip()
-        if not name:
-            raise HTTPException(status_code=422, detail="Client name is required.")
-        cur.execute("INSERT INTO clients (client_name) VALUES (%s) RETURNING client_id, client_name", (name,))
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "name": row[1]}
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=409, detail="Client already exists.")
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.put("/simple/{client_id}")
-def update_simple_client(client_id: str, payload: EntityNameCreate):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        name = (payload.name or "").strip()
-        if not name:
-            raise HTTPException(status_code=422, detail="Client name is required.")
-        cur.execute("UPDATE clients SET client_name = %s WHERE client_id = %s RETURNING client_id, client_name", (name, client_id))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Client not found.")
-        conn.commit()
-        return {"id": row[0], "name": row[1]}
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=409, detail="Client already exists.")
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.delete("/simple/{client_id}")
-def delete_simple_client(client_id: str):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT 1 FROM projects WHERE client_id = %s LIMIT 1", (client_id,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Cannot delete client while projects are linked to it.")
-        cur.execute("DELETE FROM clients WHERE client_id = %s RETURNING client_id", (client_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Client not found.")
-        conn.commit()
-        return {"detail": "Client deleted successfully"}
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.get("/partners")
-def list_partners():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT id, name FROM partners ORDER BY name")
-        rows = cur.fetchall()
-        return [{"id": r[0], "name": r[1]} for r in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.post("/partners")
-def create_partner(payload: EntityNameCreate):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        name = (payload.name or "").strip()
-        if not name:
-            raise HTTPException(status_code=422, detail="Partner name is required.")
-        cur.execute("INSERT INTO partners (name) VALUES (%s) RETURNING id, name", (name,))
-        row = cur.fetchone()
-        conn.commit()
-        return {"id": row[0], "name": row[1]}
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=409, detail="Partner already exists.")
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.put("/partners/{partner_id}")
-def update_partner(partner_id: int, payload: EntityNameCreate):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        name = (payload.name or "").strip()
-        if not name:
-            raise HTTPException(status_code=422, detail="Partner name is required.")
-        cur.execute("UPDATE partners SET name = %s WHERE id = %s RETURNING id, name", (name, partner_id))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Partner not found.")
-        conn.commit()
-        return {"id": row[0], "name": row[1]}
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=409, detail="Partner already exists.")
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.delete("/partners/{partner_id}")
-def delete_partner(partner_id: int):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT 1 FROM projects WHERE partner_id = %s LIMIT 1", (partner_id,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Cannot delete partner while projects are linked to it.")
-        cur.execute("DELETE FROM partners WHERE id = %s RETURNING id", (partner_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Partner not found.")
-        conn.commit()
-        return {"detail": "Partner deleted successfully"}
     except HTTPException:
         conn.rollback()
         raise

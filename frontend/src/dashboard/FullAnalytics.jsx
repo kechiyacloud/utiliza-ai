@@ -298,7 +298,7 @@ const FullAnalytics = () => {
             </div>
           </div>
           <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
               <BarChart data={availability} layout="vertical" margin={{ left: 24, right: 12, top: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -338,7 +338,7 @@ const FullAnalytics = () => {
           </div>
           <div className="flex flex-col gap-6">
             <div className="h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                     <PieChart>
                     <Pie
                         data={benchRiskData}
@@ -406,7 +406,7 @@ const FullAnalytics = () => {
               </div>
             </div>
           <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
               <AreaChart data={recentTrends}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">

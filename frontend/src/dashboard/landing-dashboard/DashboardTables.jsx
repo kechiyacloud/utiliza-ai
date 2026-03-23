@@ -1,25 +1,36 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Calendar,
     Award,
-    ChevronRight,
+    ArrowRightLeft,
     Clock,
-    CheckCircle2,
-    AlertCircle,
     ArrowUpRight,
-    Search,
     Activity,
-    ShieldCheck,
-    History,
     TrendingUp,
-    Lightbulb,
-    ShieldAlert
+    BarChart2,
+    History,
+    ShieldAlert,
+    AlertCircle,
+    CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], certifications = [], benchAging = [], trends = [], forcedTab = null }) => {
+const DashboardTables = ({
+    availability = [],
+    skillsGap = [],
+    transitions = [],
+    certifications = [],
+    benchAging = [],
+    trends = [],
+    highUtilizationEmployee = [],
+    highUtilizationProject = [],
+    forcedTab = null
+}) => {
     const [activeTab, setActiveTab] = useState('availability');
+    const [utilizationSubTab, setUtilizationSubTab] = useState('employee');
+    const [selectedTrendIndex, setSelectedTrendIndex] = useState(null);
     const navigate = useNavigate();
+    const recentTrends = (trends || []).slice(-3);
 
     useEffect(() => {
         if (forcedTab) {
@@ -27,18 +38,59 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
         }
     }, [forcedTab]);
 
-    const getGapColor = (gap) => {
-        switch (gap?.toLowerCase()) {
-            case 'high': return 'bg-rose-50 text-rose-600 border-rose-100';
-            case 'medium': return 'bg-amber-50 text-amber-600 border-amber-100';
-            default: return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    useEffect(() => {
+        setSelectedTrendIndex(recentTrends.length > 0 ? recentTrends.length - 1 : null);
+    }, [trends]);
+
+    const getSkillGapMeta = (allocatedCount, availableCount) => {
+        if (allocatedCount > availableCount) {
+            return {
+                label: 'Shortage',
+                tone: 'bg-rose-50 text-rose-600 border-rose-100',
+                bar: 'bg-rose-500'
+            };
         }
+
+        if (allocatedCount === availableCount) {
+            return {
+                label: 'Balanced',
+                tone: 'bg-amber-50 text-amber-600 border-amber-100',
+                bar: 'bg-amber-500'
+            };
+        }
+
+        return {
+            label: 'Surplus',
+            tone: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            bar: 'bg-emerald-500'
+        };
     };
 
     const formatDate = (dateStr) => {
         if (!dateStr) return 'TBD';
+        if (typeof dateStr === 'string' && window.Date.parse(dateStr) !== window.Date.parse(dateStr)) {
+            return dateStr;
+        }
         const date = new window.Date(dateStr);
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const formatTransitionDate = (dateStr) => {
+        if (!dateStr) return 'TBD';
+        const date = new window.Date(dateStr);
+        if (Number.isNaN(date.getTime())) return 'TBD';
+        return date.toLocaleDateString('en-GB');
+    };
+
+    const getInitials = (name) => {
+        if (!name) return '?';
+        return name
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => part[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
     };
 
     const getDaysRemaining = (dateStr) => {
@@ -48,20 +100,30 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
         return days;
     };
 
+    const trendPeak = recentTrends.length > 0 ? Math.max(...recentTrends.map((item) => item.value || 0)) : 0;
+    const trendAverage = recentTrends.length > 0
+        ? Math.round(recentTrends.reduce((sum, item) => sum + (item.value || 0), 0) / recentTrends.length)
+        : 0;
+    const trendLatest = recentTrends.length > 0 ? recentTrends[recentTrends.length - 1]?.value || 0 : 0;
+    const selectedTrend = selectedTrendIndex !== null ? recentTrends[selectedTrendIndex] : null;
+    const previousTrend = selectedTrendIndex !== null && selectedTrendIndex > 0 ? recentTrends[selectedTrendIndex - 1] : null;
+    const trendDelta = selectedTrend && previousTrend ? (selectedTrend.value || 0) - (previousTrend.value || 0) : null;
+
     return (
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[400px]" id="dashboard-operational-insights">
             {/* Tab Header */}
             <div className="px-5 pt-4 pb-2 border-b border-gray-50 bg-slate-50/30">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
-                    <h3 className="text-base font-bold text-slate-800 tracking-tight">Intelligence Hub</h3>
+                    <h3 className="text-base font-bold text-slate-800 tracking-tight">Workforce Pulse</h3>
                     <div className="flex bg-slate-100 p-0.5 rounded-xl overflow-x-auto no-scrollbar">
                         {[
                             { id: 'availability', label: 'Releases', icon: Calendar },
                             { id: 'skills', label: 'Skills Gap', icon: Award },
+                            { id: 'utilization', label: 'Utilization', icon: TrendingUp },
                             { id: 'transitions', label: 'Transitions', icon: Activity },
                             { id: 'optimization', label: 'Bench Aging', icon: Clock },
-                            { id: 'trends', label: 'Growth Trends', icon: TrendingUp },
-                            { id: 'riskboard', label: 'Risk Insights', icon: Lightbulb },
+                            { id: 'certifications', label: 'Certificates', icon: Award },
+                            { id: 'trends', label: 'Growth Trends', icon: BarChart2 },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -77,11 +139,28 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
 
                 <div className="h-5">
                     {activeTab === 'availability' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Resources rolling off projects in 30 days</p>}
-                    {activeTab === 'skills' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Talent supply vs. project demand gap</p>}
-                    {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Last 5 resource movements</p>}
-                    {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Idle resources sorted by priority</p>}
-                    {activeTab === 'trends' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">6-Month historical billable growth</p>}
-                    {activeTab === 'riskboard' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Actionable improvements for delivery risk</p>}
+                    {activeTab === 'skills' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Allocated demand versus available skill coverage</p>}
+                    {activeTab === 'utilization' && (
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setUtilizationSubTab('employee')}
+                                className={`text-[9px] font-black uppercase tracking-widest transition-colors ${utilizationSubTab === 'employee' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}
+                            >
+                                High Utilization Employee
+                            </button>
+                            <div className="w-px h-2 bg-slate-200"></div>
+                            <button
+                                onClick={() => setUtilizationSubTab('project')}
+                                className={`text-[9px] font-black uppercase tracking-widest transition-colors ${utilizationSubTab === 'project' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}
+                            >
+                                High Utilization Project
+                            </button>
+                        </div>
+                    )}
+                    {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Latest project moves with from and to context</p>}
+                    {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Bench resources sorted by priority</p>}
+                    {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Certification renewals that need attention</p>}
+                    {activeTab === 'trends' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Previous 3 months utilization trend</p>}
                 </div>
             </div>
 
@@ -112,9 +191,9 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                                         <td className="py-2.5 px-5">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-black text-blue-600 border border-blue-100">
-                                                    {row.name ? row.name.split(' ').map(n => n[0]).join('') : '?'}
+                                                    {getInitials(row.name)}
                                                 </div>
-                                                <span className="font-bold text-slate-800 text-xs uppercase tracking-tight truncate max-w-[90px]">{row.name}</span>
+                                                <span className="font-bold text-slate-800 text-xs tracking-tight">{row.name}</span>
                                             </div>
                                         </td>
                                         <td className="py-2.5 text-center">
@@ -145,31 +224,97 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {skillsGap.length > 0 ? skillsGap.map((row, idx) => (
-                                <tr key={idx} className="group hover:bg-slate-50 transition-colors">
+                            {skillsGap.length > 0 ? skillsGap.map((row, idx) => {
+                                const skillGapMeta = getSkillGapMeta(row.demand, row.certified);
+                                return (
+                                    <tr key={idx} className="group hover:bg-slate-50 transition-colors">
+                                        <td className="py-2.5 px-5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-7 h-7 rounded-lg bg-slate-50 border border-gray-100 flex items-center justify-center text-blue-500">
+                                                    <Award size={14} />
+                                                </div>
+                                                <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.skill}</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-2.5 text-center">
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center gap-1 text-[8px] mb-1 font-black uppercase text-slate-400">
+                                                    <span className="text-slate-700">{row.demand}</span> / <span className="text-blue-600">{row.certified}</span>
+                                                </div>
+                                                <div className="w-20 h-0.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full transition-all duration-700 ${skillGapMeta.bar}`} style={{ width: `${Math.min(100, (row.certified / Math.max(row.demand, 1)) * 100)}%` }}></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="py-2.5 px-5 text-right">
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${skillGapMeta.tone}`}>{skillGapMeta.label}</span>
+                                        </td>
+                                    </tr>
+                                );
+                            }) : <EmptyTable icon={Award} message="No skill gap data." />}
+                        </tbody>
+                    </table>
+                )}
+
+                {activeTab === 'utilization' && utilizationSubTab === 'employee' && (
+                    <table className="w-full">
+                        <thead className="sticky top-0 bg-white z-10">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                                <th className="text-left py-2 px-5">Employee</th>
+                                <th className="text-center py-2">Role</th>
+                                <th className="text-right py-2 px-5">Alloc %</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {highUtilizationEmployee.length > 0 ? highUtilizationEmployee.map((row, idx) => (
+                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/info/employee/${row.id}`)}>
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 rounded-lg bg-slate-50 border border-gray-100 flex items-center justify-center text-blue-500">
-                                                <Award size={14} />
+                                            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500 border border-slate-200 uppercase">
+                                                {row.avatar}
                                             </div>
-                                            <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.skill}</span>
+                                            <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
                                         </div>
                                     </td>
                                     <td className="py-2.5 text-center">
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-center gap-1 text-[8px] mb-1 font-black uppercase text-slate-400">
-                                                <span className="text-slate-700">{row.demand}</span> / <span className="text-blue-600">{row.certified}</span>
-                                            </div>
-                                            <div className="w-20 h-0.5 bg-slate-100 rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full transition-all duration-700 ${row.gap === 'high' ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (row.certified / Math.max(row.demand, 1)) * 100)}%` }}></div>
-                                            </div>
-                                        </div>
+                                        <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-500 text-[9px] font-black border border-slate-100 uppercase">
+                                            {row.role}
+                                        </span>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getGapColor(row.gap)}`}>{row.gap} GAP</span>
+                                        <span className="text-blue-600 font-black text-[11px]">{row.allocation}%</span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={Award} message="No skill gap data." />}
+                            )) : <EmptyTable icon={TrendingUp} message="No highly allocated employees found." />}
+                        </tbody>
+                    </table>
+                )}
+
+                {activeTab === 'utilization' && utilizationSubTab === 'project' && (
+                    <table className="w-full">
+                        <thead className="sticky top-0 bg-white z-10">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                                <th className="text-left py-2 px-5">Project</th>
+                                <th className="text-center py-2">Resources</th>
+                                <th className="text-right py-2 px-5">Overall Util</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {highUtilizationProject.length > 0 ? highUtilizationProject.map((row, idx) => (
+                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/projects')}>
+                                    <td className="py-2.5 px-5">
+                                        <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
+                                    </td>
+                                    <td className="py-2.5 text-center">
+                                        <span className="text-slate-600 font-bold text-xs">{row.resources} Members</span>
+                                    </td>
+                                    <td className="py-2.5 px-5 text-right">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${row.utilization >= 90 ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-500'}`}>
+                                            {row.utilization}%
+                                        </span>
+                                    </td>
+                                </tr>
+                            )) : <EmptyTable icon={BarChart2} message="No high allocation projects found." />}
                         </tbody>
                     </table>
                 )}
@@ -189,19 +334,23 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
                                             <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-black text-blue-600 border border-blue-100">
-                                                {row.employee.split(' ').map(n => n[0]).join('')}
+                                                {getInitials(row.employee)}
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-slate-800 text-xs uppercase tracking-tight leading-none mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{row.employee}</span>
-                                                <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter truncate max-w-[80px]">{row.role}</span>
+                                                <span className="font-bold text-slate-800 text-xs tracking-tight leading-none mb-0.5">{row.employee}</span>
+                                                <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">{row.role}</span>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="py-2.5 text-center">
-                                        <span className="font-bold text-slate-700 text-[10px] font-mono leading-none truncate max-w-[100px] inline-block">{row.project}</span>
+                                        <div className="inline-flex max-w-[180px] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
+                                            <span className="truncate max-w-[62px]" title={row.fromProject || 'Bench'}>{row.fromProject || 'Bench'}</span>
+                                            <ArrowRightLeft size={11} className="text-blue-500 flex-shrink-0" />
+                                            <span className="truncate max-w-[62px]" title={row.toProject || 'Unknown'}>{row.toProject || 'Unknown'}</span>
+                                        </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
-                                        <span className="text-slate-400 font-mono text-[9px] font-bold">{formatDate(row.date)}</span>
+                                        <span className="text-slate-400 font-mono text-[9px] font-bold">{formatTransitionDate(row.date)}</span>
                                     </td>
                                 </tr>
                             )) : <EmptyTable icon={History} message="No recent transitions." />}
@@ -214,7 +363,7 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                         <thead className="sticky top-0 bg-white z-10">
                             <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Resource</th>
-                                <th className="text-center py-2">Idle Time</th>
+                                <th className="text-center py-2">Bench Time</th>
                                 <th className="text-right py-2 px-5">Risk</th>
                             </tr>
                         </thead>
@@ -229,7 +378,7 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
                                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${row.days > 30 ? 'bg-rose-50 text-rose-500 border-rose-100' : row.days > 15 ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>
-                                            {row.days > 30 ? 'CRITICAL' : row.days > 15 ? 'MODERATE' : 'STRICT'}
+                                            {row.days > 30 ? 'CRITICAL' : row.days > 15 ? 'MODERATE' : 'STABLE'}
                                         </span>
                                     </td>
                                 </tr>
@@ -238,11 +387,72 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                     </table>
                 )}
 
+                {activeTab === 'certifications' && (
+                    <table className="w-full">
+                        <thead className="sticky top-0 bg-white z-10">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                                <th className="text-left py-2 px-5">Name</th>
+                                <th className="text-right py-2 px-5">Expiry</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {certifications.length > 0 ? certifications.map((row, idx) => (
+                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.employee || row.name, showBack: true } })}>
+                                    <td className="py-2.5 px-5">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-[8px] font-black text-amber-600 border border-amber-100">
+                                                {getInitials(row.employee || row.name)}
+                                            </div>
+                                            <span className="font-bold text-slate-800 text-xs tracking-tight">{row.employee || row.name || 'Unknown'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="py-2.5 px-5 text-right">
+                                        <span className="text-slate-400 font-mono text-[9px] font-bold">{formatDate(row.expiryDate || row.expiry_date)}</span>
+                                    </td>
+                                </tr>
+                            )) : <EmptyTable icon={Award} message="No certification expiry records." />}
+                        </tbody>
+                    </table>
+                )}
+
                 {activeTab === 'trends' && (
                     <div className="p-8">
+                        <div className="mb-5 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Selected Change</p>
+                            {selectedTrend ? (
+                                <div className="mt-2 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-slate-900">{selectedTrend.month}</p>
+                                        <p className="text-[10px] font-medium text-slate-500">
+                                            {previousTrend ? `Compared with ${previousTrend.month}` : 'No previous month available'}
+                                        </p>
+                                    </div>
+                                    <div className={`rounded-xl px-3 py-2 text-right ${trendDelta === null ? 'bg-slate-100 text-slate-500' : trendDelta >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                        <p className="text-lg font-black">{trendDelta === null ? selectedTrend.value : `${trendDelta > 0 ? '+' : ''}${trendDelta}`}</p>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.18em]">{trendDelta === null ? 'Value' : 'Month Change'}</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="mt-2 text-sm font-medium text-slate-400">No trend data available.</p>
+                            )}
+                        </div>
+                        <div className="mb-6 grid grid-cols-3 gap-3">
+                            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-500">Latest</p>
+                                <p className="mt-1 text-lg font-black text-slate-900">{trendLatest}</p>
+                            </div>
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-500">Average</p>
+                                <p className="mt-1 text-lg font-black text-slate-900">{trendAverage}</p>
+                            </div>
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-500">Peak</p>
+                                <p className="mt-1 text-lg font-black text-slate-900">{trendPeak}</p>
+                            </div>
+                        </div>
                         <div className="flex flex-col gap-6">
-                            {(trends || []).map((t, i) => (
-                                <div key={i} className="flex items-center justify-between group">
+                            {recentTrends.map((t, i) => (
+                                <button key={i} type="button" onClick={() => setSelectedTrendIndex(i)} className={`flex items-center justify-between rounded-2xl px-2 py-2 text-left transition-all ${selectedTrendIndex === i ? 'bg-blue-50/70 ring-1 ring-blue-100' : 'hover:bg-slate-50'}`}>
                                     <div className="w-16">
                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.month}</span>
                                     </div>
@@ -250,14 +460,14 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                                         <div className="w-full h-1.5 bg-slate-50 rounded-full overflow-hidden border border-gray-50">
                                             <div
                                                 className="h-full bg-blue-500 rounded-full transition-all duration-1000"
-                                                style={{ width: `${(t.value / Math.max(...(trends?.map(x => x.value) || [1]), 1)) * 100}%` }}
+                                                style={{ width: `${(t.value / Math.max(...(recentTrends.map(x => x.value) || [1]), 1)) * 100}%` }}
                                             ></div>
                                         </div>
                                     </div>
                                     <div className="w-10 text-right">
                                         <span className="text-[11px] font-bold text-slate-800 font-mono">{t.value}</span>
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>
@@ -289,23 +499,23 @@ const DashboardTables = ({ availability = [], skillsGap = [], transitions = [], 
                                             <p className="text-[10px] text-slate-500 leading-relaxed">{s.detail}</p>
                                         </div>
                                     </div>
-            );
+                                );
                             })}
-        </div>
-    );
-})()}
+                        </div>
+                    );
+                })()}
             </div >
 
-    <div className="px-5 py-3 bg-slate-50/50 border-t border-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-3 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Crit</span>
-            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Mod</span>
-            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Stable</span>
-        </div>
-        <button onClick={() => navigate('/info/allocation', { state: { showBack: true } })} className="text-[10px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 uppercase tracking-tighter group transition-all">
-            Full Analytics <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-        </button>
-    </div>
+            <div className="px-5 py-3 bg-slate-50/50 border-t border-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Crit</span>
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Mod</span>
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Stable</span>
+                </div>
+                <button onClick={() => navigate('/info/analytics')} className="text-[10px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 uppercase tracking-tighter group transition-all">
+                    Full Analytics <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </button>
+            </div>
         </div >
     );
 };

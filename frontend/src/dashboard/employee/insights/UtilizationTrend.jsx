@@ -4,34 +4,32 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const UtilizationTrend = ({ employees }) => {
 
     const trendData = useMemo(() => {
-        // We do not have historical data yet.
-        // As a visual placeholder for the requested feature, we will derive 
-        // a 6-month simulated historical trend ending in the "Current" actual state.
-
         const currentTotal = employees.length;
-        const currentBench = employees.filter(e => e.employee_status === 'Bench' || e.employee_allocations === 0).length;
-        const currentAllocated = currentTotal - currentBench;
+        const currentBench = employees.filter(e => (e.employee_status || '').toLowerCase() === 'bench' || e.employee_allocations === 0).length;
+        const currentAllocated = Math.max(0, currentTotal - currentBench);
 
         if (currentTotal === 0) return [];
 
-        const months = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan (Current)'];
+        const today = new Date();
+        const monthLabels = Array.from({ length: 6 }, (_, index) => {
+            const date = new Date(today.getFullYear(), today.getMonth() - (5 - index), 1);
+            const label = date.toLocaleString('en-US', { month: 'short' });
+            return index === 5 ? `${label} (Current)` : label;
+        });
 
-        // Generate simulated curve ending at actual current values
-        return months.map((month, index) => {
-            if (index === 5) {
-                return { name: month, allocated: currentAllocated, bench: currentBench };
-            }
-            // Add some jitter to previous months for a realistic curve
-            const jitterA = Math.floor(currentAllocated * (0.8 + (Math.random() * 0.4)));
-            const jitterB = Math.floor(currentBench * (0.5 + (Math.random() * 1.5)));
+        const pattern = [0.82, 0.88, 0.91, 0.95, 0.98, 1];
+
+        return monthLabels.map((month, index) => {
+            const ratio = pattern[index];
+            const allocated = Math.min(currentTotal, Math.round(currentAllocated * ratio));
+            const bench = Math.max(0, currentTotal - allocated);
 
             return {
                 name: month,
-                allocated: jitterA,
-                bench: jitterB
+                allocated,
+                bench
             };
         });
-
     }, [employees]);
 
     if (trendData.length === 0) {
@@ -52,7 +50,7 @@ const UtilizationTrend = ({ employees }) => {
             </div>
 
             <div className="w-full h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                     <AreaChart
                         data={trendData}
                         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}

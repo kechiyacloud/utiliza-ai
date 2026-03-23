@@ -7,6 +7,7 @@ import FilterOverlay from './employee/FilterOverlay'
 import SkillsOverview from './employee/insights/SkillsOverview'
 import UtilizationTrend from './employee/insights/UtilizationTrend'
 import { getEmployeeList } from '../api/employeeApi'
+import { normalizeSkillName } from '../utils/skillTopics'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -53,10 +54,23 @@ function Employee() {
   const [activeDrawer, setActiveDrawer] = useState(null);
 
   // Department chip selector — default shows all unique depts; user can narrow down
-  const [selectedDepts, setSelectedDepts] = useState([]);
+  const [selectedDepts, setSelectedDepts] = useState(() => {
+    const initialDepartment = location.state?.departmentFilter;
+    return initialDepartment ? [initialDepartment] : [];
+  });
   const allDepts = useMemo(() =>
     [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()
     , [allEmployees]);
+
+  const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+    if (!selectedSkills.length) return true;
+
+    const normalizedEmployeeSkills = new Set(
+      (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+    );
+
+    return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+  };
 
   const toggleDept = (dept) => {
     setSelectedDepts(prev =>
@@ -100,7 +114,7 @@ function Employee() {
       const matchesDept = !combinedFilters.departments?.length || combinedFilters.departments.includes(emp.department);
       const matchesType = !combinedFilters.types?.length || combinedFilters.types.includes(emp.employee_type);
       const matchesLocation = !combinedFilters.locations?.length || combinedFilters.locations.includes(emp.location);
-      const matchesSkills = !combinedFilters.skills?.length || (emp.skills && combinedFilters.skills.some(s => emp.skills.includes(s)));
+      const matchesSkills = employeeHasMatchingSkill(emp.skills, combinedFilters.skills);
       const matchesDesig = !combinedFilters.designations?.length || combinedFilters.designations.includes(emp.role_designation);
 
       const sv = combinedFilters.search?.toLowerCase().trim();
@@ -233,7 +247,7 @@ function Employee() {
           isActive={cardFilter === 'notice'}
           onClick={() => setCardFilter('notice')}
         />
-        <NewJoinerCard isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
+        <NewJoinerCard employees={baseGroup} isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
         <StatCard
           label="Skills Overview"
           value="Tap to View"
@@ -251,6 +265,7 @@ function Employee() {
           employees={allEmployees}
           loading={loading}
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
+          onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
           filters={combinedFilters}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -274,8 +289,8 @@ function Employee() {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-          {activeDrawer === 'skills' && <SkillsOverview employees={allEmployees} />}
-          {activeDrawer === 'trend' && <UtilizationTrend employees={allEmployees} />}
+          {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
+          {activeDrawer === 'trend' && <UtilizationTrend employees={baseGroup} />}
         </div>
       </div>
 
