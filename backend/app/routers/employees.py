@@ -130,6 +130,7 @@ def get_all_employees():
             LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
+            WHERE m.date_of_resign IS NULL
             GROUP BY 
                 m.employee_id, 
                 m.employee_name, 
@@ -801,4 +802,4 @@ def delete_employee(employee_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
-        release_db_connection(conn)
+        conn.close()

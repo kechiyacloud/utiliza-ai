@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
-import { createEmployee, updateEmployee } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById } from '../../api/employeeApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
 
@@ -10,6 +10,7 @@ const AddEmployee = () => {
     const location = useLocation();
     const isEditMode = location.state?.isEditMode || false;
     const editData = location.state?.editData || null;
+    const editEmployeeId = location.state?.editEmployeeId || editData?.employee_id || editData?.id || null;
 
     const [currentSection, setCurrentSection] = useState('personal'); // personal, professional, project, preview
     const [loading, setLoading] = useState(false);
@@ -40,7 +41,7 @@ const AddEmployee = () => {
         // Professional
         role_designation: '',
         department: '',
-        employment_type: 'Full-time',
+        employment_type: 'Full Time',
         location: '',
         work_mode: 'Hybrid',
         employee_status: 'Bench',
@@ -53,37 +54,89 @@ const AddEmployee = () => {
     });
 
     useEffect(() => {
-        if (isEditMode && editData) {
+        const normalizeDate = (value) => {
+            if (!value) return '';
+            if (typeof value === 'string') return value.slice(0, 10);
+            try {
+                return new Date(value).toISOString().slice(0, 10);
+            } catch {
+                return '';
+            }
+        };
+
+        const normalizeEmploymentType = (value) => {
+            const normalized = String(value || '').trim().toLowerCase();
+            if (!normalized) return 'Full Time';
+            if (normalized === 'fte' || normalized === 'full-time' || normalized === 'full time') return 'Full Time';
+            if (normalized === 'intern') return 'Intern';
+            if (normalized === 'consultant') return 'Consultant';
+            return 'Contract';
+        };
+
+        const normalizeWorkMode = (value) => {
+            const normalized = String(value || '').trim().toLowerCase();
+            if (!normalized) return 'Hybrid';
+            if (normalized === 'onsite' || normalized === 'office') return 'Office';
+            if (normalized === 'remote') return 'Remote';
+            return 'Hybrid';
+        };
+
+        const applyEditData = (source) => {
+            if (!source) return;
+
             setFormData({
-                employee_id: editData.id || editData.employee_id || '',
-                employee_name: editData.name || editData.employee_name || '',
-                email: editData.email || '',
-                phone: editData.phone || '',
-                date_of_birth: editData.date_of_birth || '',
-                address: editData.address || '',
-                photo_url: editData.photo_url || editData.profilePic || '',
-                date_of_joining: editData.joiningDate || editData.date_of_joining || '',
-                role_designation: editData.designation || editData.role_designation || '',
-                department: editData.department || '',
-                employment_type: editData.employment_type || 'Full-time',
-                location: editData.status?.location || editData.location || '',
-                work_mode: editData.status?.workMode || editData.work_mode || 'Hybrid',
-                employee_status: editData.status?.allocated || editData.employee_status || 'Bench',
-                employee_allocations: typeof editData.employee_allocations === 'number' ? editData.employee_allocations : 0,
-                skills: (editData.masterSkills || []).map(s => typeof s === 'string' ? s : s.name),
-                certificates: (editData.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
-                projects: (editData.projects || []).map(p => ({
+                employee_id: source.id || source.employee_id || '',
+                employee_name: source.name || source.employee_name || '',
+                email: source.email || '',
+                phone: source.phone === null || source.phone === undefined ? '' : String(source.phone),
+                date_of_birth: normalizeDate(source.date_of_birth),
+                address: source.address || '',
+                photo_url: source.photo_url || source.profilePic || '',
+                date_of_joining: normalizeDate(source.joiningDate || source.date_of_joining),
+                role_designation: source.designation || source.role_designation || '',
+                department: source.department || '',
+                employment_type: normalizeEmploymentType(source.employment_type),
+                location: source.status?.location || source.location || '',
+                work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
+                employee_status: source.status?.allocated || source.employee_status || 'Bench',
+                employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
+                skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
+                certificates: (source.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
+                projects: (source.projects || []).map(p => ({
                     project_id: p.project_id || '',
                     project_role: p.project_role || '',
-                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : 0,
-                    project_start_date: p.project_start_date || '',
-                    project_end_date: p.project_end_date || ''
+                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation, 10) || 0),
+                    project_start_date: normalizeDate(p.project_start_date || p.allocation_start_date || p.start_date),
+                    project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date)
                 }))
             });
             setShowPreview(true);
             setCompletedSections(['personal', 'professional', 'project', 'preview']);
-        }
-    }, [isEditMode, editData]);
+        };
+
+        const loadEditData = async () => {
+            if (!isEditMode) return;
+
+            const hasRequiredIdentity = editData?.employee_name || editData?.name;
+            const hasJoiningDate = editData?.date_of_joining || editData?.joiningDate;
+
+            if (hasRequiredIdentity && hasJoiningDate) {
+                applyEditData(editData);
+                return;
+            }
+
+            if (!editEmployeeId) return;
+
+            try {
+                const fullEmployee = await getEmployeeById(editEmployeeId);
+                applyEditData(fullEmployee);
+            } catch (error) {
+                console.error('Failed to load employee details for edit', error);
+            }
+        };
+
+        loadEditData();
+    }, [isEditMode, editData, editEmployeeId]);
 
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
@@ -92,34 +145,10 @@ const AddEmployee = () => {
         { id: 'preview', label: 'Preview', icon: Check }
     ];
 
-    const departments = [
-        'Software Engineering', 'Data Engineering', 'Quality Engineering',
-        'Cloud Solutions Engineering', 'System Operations', 'Product Engineering',
-        'Security Engineering', 'US Staffing', 'Business Development',
-        'Training & Development', 'HR', 'Finance', 'PMO', 'Management'
-    ];
-    const locations = ['USA', 'Coimbatore', 'Canada', 'Malaysia', 'Chennai'];
-
-    // Department-based skill suggestions
-    const departmentSkills = {
-        'Software Engineering': ['React', 'Node.js', 'Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'MongoDB', 'AWS', 'Docker', 'Kubernetes', 'Git', 'C++', 'Go', 'Rust', 'Angular', 'Vue.js'],
-        'Data Engineering': ['Python', 'SQL', 'Spark', 'Hadoop', 'Kafka', 'Airflow', 'ETL', 'Data Warehousing', 'AWS', 'Azure', 'Snowflake', 'BigQuery'],
-        'Quality Engineering': ['Selenium', 'Cypress', 'TestNG', 'JUnit', 'Automation Testing', 'Manual Testing', 'API Testing', 'Performance Testing', 'Jira', 'BDD', 'TDD'],
-        'Cloud Solutions Engineering': ['AWS', 'Azure', 'Google Cloud', 'Terraform', 'Kubernetes', 'Docker', 'CI/CD', 'DevOps', 'Serverless', 'CloudFormation', 'Ansible'],
-        'System Operations': ['Linux', 'Windows Server', 'Monitoring', 'Shell Scripting', 'Networking', 'Troubleshooting', 'ITIL', 'Jenkins', 'Nagios', 'Splunk'],
-        'Product Engineering': ['Product Management', 'Agile', 'Scrum', 'User Research', 'Roadmapping', 'Analytics', 'Jira', 'Figma', 'Requirements Analysis'],
-        'Security Engineering': ['Cybersecurity', 'Penetration Testing', 'SIEM', 'Firewall', 'Encryption', 'Compliance', 'Risk Assessment', 'Security Audits', 'SOC'],
-        'US Staffing': ['Recruitment', 'Sourcing', 'ATS', 'LinkedIn Recruiting', 'Stakeholder Management', 'Vendor Management', 'Negotiation'],
-        'Business Development': ['Lead Generation', 'Sales', 'CRM', 'Salesforce', 'Negotiation', 'B2B Sales', 'Proposal Writing', 'Client Relations'],
-        'Training & Development': ['Training Delivery', 'Curriculum Design', 'L&D', 'Employee Engagement', 'Coaching', 'Presentation Skills', 'Learning Management Systems'],
-        'HR': ['Recruitment', 'Employee Relations', 'Performance Management', 'HR Analytics', 'Compensation', 'HRIS', 'Payroll', 'Compliance'],
-        'Finance': ['Accounting', 'Financial Analysis', 'Excel', 'SAP', 'Budgeting', 'Tax Planning', 'Financial Reporting', 'Auditing'],
-        'PMO': ['Project Management', 'PMP', 'Agile', 'Scrum', 'Risk Management', 'Stakeholder Management', 'MS Project', 'Gantt Charts', 'Resource Planning'],
-        'Management': ['Leadership', 'Strategic Planning', 'Team Management', 'Decision Making', 'Communication', 'Change Management', 'Business Strategy']
-    };
-
-    // Get all unique skills
-    const allSkills = Array.from(new Set(Object.values(departmentSkills).flat())).sort();
+    const departments = DEPARTMENTS;
+    const locations = LOCATIONS;
+    const departmentSkills = DEPARTMENT_SKILLS;
+    const allSkills = ALL_SKILLS;
 
     // Get suggested skills based on selected department
     const suggestedSkills = formData.department ? departmentSkills[formData.department] || [] : [];
@@ -255,8 +284,7 @@ const AddEmployee = () => {
             formData.department &&
             formData.location &&
             formData.work_mode &&
-            formData.employment_type &&
-            formData.skills.length > 0
+            formData.employment_type
         );
     };
 
@@ -330,7 +358,7 @@ const AddEmployee = () => {
             };
 
             if (isEditMode) {
-                await updateEmployee(formData.employee_id, payload);
+                await updateEmployee(editEmployeeId || formData.employee_id, payload);
             } else {
                 await createEmployee(payload);
             }
@@ -532,9 +560,9 @@ const AddEmployee = () => {
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                        <option value="Full-time">Full-time</option>
-                        <option value="Contract">Contract</option>
-                        <option value="Intern">Intern</option>
+                        {EMPLOYMENT_TYPES.map((type) => (
+                            <option key={type} value={type}>{type}</option>
+                        ))}
                     </select>
                 </div>
                 <div>
@@ -563,9 +591,11 @@ const AddEmployee = () => {
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                        <option value="Remote">Remote</option>
-                        <option value="Hybrid">Hybrid</option>
-                        <option value="Office">Office</option>
+                        {WORK_MODES.map((mode) => (
+                            <option key={mode} value={mode === 'Onsite' ? 'Office' : mode}>
+                                {mode === 'Onsite' ? 'Office' : mode}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <div>
@@ -585,7 +615,7 @@ const AddEmployee = () => {
             </div>
 
             <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Skills *</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Skills</label>
 
                 {/* Click-to-open dropdown */}
                 <div className="relative">

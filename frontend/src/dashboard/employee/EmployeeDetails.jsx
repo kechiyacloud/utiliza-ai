@@ -13,7 +13,7 @@ import {
     Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
@@ -93,8 +93,6 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 const EmployeeDetails = () => {
     const navigate = useNavigate();
     const { id } = useParams();
-    const location = useLocation();
-
     // State
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -114,19 +112,34 @@ const EmployeeDetails = () => {
                 // Extract inner data if nested
                 const sourceData = res.data || res;
 
-                // Filter out projects with status "End" or "Ended"
-                const filteredProjects = (sourceData.projects || []).filter(p => {
+                // Filter out projects with status "End" or "Ended" or "Completed"
+                const activeProjects = [];
+                const completedProjects = [];
+                
+                (sourceData.projects || []).forEach(p => {
                     const s = (p.status || "").toLowerCase();
-                    return !s.includes('end');
+                    if (s.includes('end') || s.includes('complet')) {
+                        completedProjects.push(p);
+                    } else {
+                        activeProjects.push(p);
+                    }
                 });
 
                 // Inject status/billable into projects for tags
-                const enhancedProjects = filteredProjects.map(p => ({
+                const enhancedProjects = activeProjects.map(p => ({
                     ...p,
                     status: p.status || sourceData.employee_status || 'Allocated',
-                    billable: p.billable || sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'), // prioritize project specific billable
+                    billable: p.billable || sourceData.billable || (sourceData.employee_status === 'Bench' ? 'No' : 'Yes'),
                     name: p.project_name || p.name,
-                    value: p.allocation_percentage || p.value || 0
+                    value: p.allocation_percentage || p.project_allocation || p.value || 0
+                }));
+                
+                const enhancedCompletedProjects = completedProjects.map(p => ({
+                    ...p,
+                    status: p.status || 'Completed',
+                    billable: p.billable || sourceData.billable || 'No',
+                    name: p.project_name || p.name,
+                    value: p.allocation_percentage || p.project_allocation || p.value || 0
                 }));
 
                 // Map backend keys to what the JSX components previously expected
@@ -147,10 +160,11 @@ const EmployeeDetails = () => {
                     shiftTiming: sourceData.shift || sourceData.shiftTiming,
                     status: {
                         allocated: sourceData.employee_status,
-                        workMode: sourceData.mode_of_work,
+                        workMode: sourceData.work_mode || sourceData.mode_of_work,
                         location: sourceData.location || (sourceData.status && sourceData.status.location)
                     },
                     projects: enhancedProjects,
+                    completedProjects: enhancedCompletedProjects,
                     masterSkills: (sourceData.skills || []).map(s => {
                         if (typeof s === 'string') return { name: s, proficiency: 'Beginner', experience_years: 0 };
                         return {
@@ -200,6 +214,7 @@ const EmployeeDetails = () => {
     // Chart Data Helpers
     // If projects is empty or undefined, handle gracefully
     const projects = userData.projects || [];
+    const completedProjectsList = userData.completedProjects || [];
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
     // Timeline always starts from RIGHT NOW (live date). The 12-week (90-day) window
@@ -230,8 +245,8 @@ const EmployeeDetails = () => {
         let durationWeeks = TOTAL_WEEKS; // default: show full window if no dates given
         let isVisibleInTimeline = true;
 
-        const rawStartDate = p.start_date || p.allocation_start_date;
-        const rawEndDate = p.end_date || p.allocation_end_date;
+        const rawStartDate = p.start_date || p.allocation_start_date || p.project_start_date;
+        const rawEndDate = p.end_date || p.allocation_end_date || p.project_end_date;
 
         if (rawStartDate || rawEndDate) {
             const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -273,7 +288,7 @@ const EmployeeDetails = () => {
 
         return {
             name: p.project_name || p.name,
-            value: p.allocation_percentage || p.value || 0,
+            value: p.allocation_percentage || p.project_allocation || p.value || 0,
             color: COLORS[index % COLORS.length],
             startWeek,
             durationWeeks,
@@ -319,7 +334,7 @@ const EmployeeDetails = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
                 {/* Actions */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
+                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
                     <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors">Delete</button>
                 </div>
 
@@ -442,7 +457,7 @@ const EmployeeDetails = () => {
 
                     {/* Chart - Reduced Size */}
                     <div className="h-40 w-full relative" style={{ minHeight: '160px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
                                 <Pie
                                     data={chartData}
@@ -457,12 +472,11 @@ const EmployeeDetails = () => {
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
-                                <Legend verticalAlign="bottom" iconSize={8} wrapperStyle={{ fontSize: '10px' }} height={24} />
+                                <Legend content={() => null} />
                             </PieChart>
                         </ResponsiveContainer>
                         {/* Center Text */}
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[60%] text-center">
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center">
                             <span className="text-lg font-bold text-slate-800">
                                 {chartData.reduce((sum, item) => sum + (Number(item.value) || 0), 0)}%
                             </span>
@@ -479,6 +493,35 @@ const EmployeeDetails = () => {
                                 navigate={navigate}
                             />
                         ))}
+                        
+                        {/* Completed Projects Dropdown Toggle */}
+                        {completedProjectsList.length > 0 && (
+                            <div className="mt-2 text-sm">
+                                <details className="group border border-slate-200 rounded-lg bg-slate-50 cursor-pointer overflow-hidden transition-all shadow-sm">
+                                    <summary className="flex items-center justify-between font-semibold text-slate-600 p-3 hover:bg-slate-100 transition-colors list-none">
+                                        <div className="flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Completed Projects ({completedProjectsList.length})
+                                        </div>
+                                        <span className="transition group-open:rotate-180">
+                                            <ChevronRight size={16} />
+                                        </span>
+                                    </summary>
+                                    <div className="p-3 bg-white border-t border-slate-100 flex flex-col gap-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+                                        {completedProjectsList.map((cp, idx) => (
+                                            <ProjectAllocationDropdown
+                                                key={`comp-${idx}`}
+                                                project={{ name: cp.name, value: cp.value, color: '#94a3b8' }}
+                                                rawProject={cp}
+                                                navigate={navigate}
+                                            />
+                                        ))}
+                                    </div>
+                                </details>
+                            </div>
+                        )}
                     </div>
                 </div>
 

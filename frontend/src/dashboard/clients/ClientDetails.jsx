@@ -163,7 +163,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                         <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Resource Mix</h3>
                         <div className="flex-1 flex items-center gap-4">
                             <div className="h-24 w-24 relative">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                                     <RePieChart>
                                         <Pie
                                             data={resourceDistData}

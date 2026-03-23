@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, User, Download } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag from '../../components/EmployeeStatusTag';
+import { normalizeSkillName } from '../../utils/skillTopics';
 
 // Helper function to calculate tenure
 const calculateTenure = (joiningDate) => {
@@ -49,20 +50,44 @@ export default function EmployeeMasterList() {
                     return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
                 });
 
-                // Apply cardFilter if present in navigation state
+                // Filter logic
                 const cardFilter = location.state?.cardFilter;
-                if (cardFilter === 'bench') {
-                    const filtered = sorted.filter(emp => emp.employee_status === 'Bench' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
-                    setEmployees(filtered);
-                    setFilterLabel(" (Bench Only)");
-                } else if (cardFilter === 'billable') {
-                    const filtered = sorted.filter(emp => emp.billable === 'billable' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
-                    setEmployees(filtered);
-                    setFilterLabel(" (Billable Only)");
-                } else {
-                    setEmployees(sorted);
-                    setFilterLabel("");
+                const deptFilter = location.state?.departmentFilter;
+                const searchTerm = String(location.state?.search || '').trim().toLowerCase();
+                
+                let filtered = [...sorted];
+                let label = "";
+
+                if (deptFilter) {
+                    filtered = filtered.filter(emp => emp.department === deptFilter);
+                    label += ` (${deptFilter})`;
                 }
+
+                if (cardFilter === 'bench') {
+                    filtered = filtered.filter(emp => (emp.employee_status || '').toLowerCase() === 'bench' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
+                    label += " - Bench Only";
+                } else if (cardFilter === 'billable') {
+                    filtered = filtered.filter(emp => emp.billable === 'billable' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
+                    label += " - Billable Only";
+                }
+
+                if (searchTerm) {
+                    filtered = filtered.filter((emp) => {
+                        const normalizedSkills = (emp.skills || []).map((skill) => normalizeSkillName(skill).toLowerCase());
+                        return (
+                            (emp.employee_name || '').toLowerCase().includes(searchTerm) ||
+                            (emp.employee_id || '').toLowerCase().includes(searchTerm) ||
+                            (emp.role_designation || '').toLowerCase().includes(searchTerm) ||
+                            (emp.department || '').toLowerCase().includes(searchTerm) ||
+                            (emp.location || '').toLowerCase().includes(searchTerm) ||
+                            normalizedSkills.some((skill) => skill.includes(searchTerm))
+                        );
+                    });
+                    label += ` - Search: ${location.state?.search}`;
+                }
+
+                setEmployees(filtered);
+                setFilterLabel(label);
             } catch (err) {
                 console.error("Error fetching employees:", err);
             } finally {
@@ -70,7 +95,7 @@ export default function EmployeeMasterList() {
             }
         };
         fetchEmployees();
-    }, [sortOrder, location.state?.cardFilter]);
+    }, [sortOrder, location.state?.cardFilter, location.state?.departmentFilter, location.state?.search]);
 
     const toggleSortOrder = () => {
         setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');

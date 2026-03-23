@@ -1,37 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Trophy } from 'lucide-react';
-import { getEmployeeOfMonth } from '../../api/employeeApi';
 
-const EmployeeMonthCard = ({ onClick }) => {
-    const [employee, setEmployee] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchEmployee = async () => {
-            try {
-                const data = await getEmployeeOfMonth();
-                setEmployee(data);
-            } catch (error) {
-                console.error('Error fetching employee of the month:', error);
-                setEmployee(null);
-
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchEmployee();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="bg-white p-3 rounded-2xl shadow-sm border border-purple-100 flex flex-col items-start relative min-w-[140px] h-full flex-1 animate-pulse">
-                <div className="w-8 h-8 bg-slate-100 rounded-lg mb-2"></div>
-                <div className="w-24 h-4 bg-slate-100 rounded mb-1"></div>
-                <div className="w-16 h-2 bg-slate-100 rounded"></div>
-            </div>
-        );
-    }
-
+const EmployeeMonthCard = ({ employee, onClick, selectedDepartment = 'Overall' }) => {
     if (!employee) {
         return (
             <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-start relative min-w-[140px] h-full flex-1">
@@ -39,6 +9,9 @@ const EmployeeMonthCard = ({ onClick }) => {
                     <Trophy size={18} />
                 </div>
                 <p className="text-[9px] text-slate-400 font-bold uppercase">No Performer</p>
+                <p className="text-[9px] text-slate-300 font-medium mt-1">
+                    {selectedDepartment === 'Overall' ? 'No allocated employee found' : `No allocated employee in ${selectedDepartment}`}
+                </p>
             </div>
         );
     }
@@ -67,6 +40,9 @@ const EmployeeMonthCard = ({ onClick }) => {
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight leading-none mb-1 truncate max-w-full">{employee.employee_name}</h3>
                 <p className="text-slate-500 text-[9px] font-bold tracking-wider uppercase mb-0.5 whitespace-nowrap">Employee of the Month</p>
                 <p className="text-[9px] text-slate-400 font-medium truncate">{employee.role_designation}</p>
+                <p className="text-[9px] text-purple-500 font-bold mt-1 truncate">
+                    {employee.employee_allocations ?? 0}% allocation
+                </p>
             </div>
         </div>
     );

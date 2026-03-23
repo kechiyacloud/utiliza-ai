@@ -54,11 +54,11 @@ function Login() {
         One view <span className="mx-1">·</span> Every insight <span className="mx-1">·</span> Complete control
       </p>
 
-      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" required />
+      <input type="email" name="email" placeholder="Email ID" value={formData.email} onChange={handleChange} className="input-field" autoComplete="username" required />
 
       <div className="relative input-field">
 
-        <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="input-password" required />
+        <input type={showPassword ? "text" : "password"} name="password" placeholder="Password" value={formData.password} onChange={handleChange} className="input-password" autoComplete="current-password" required />
 
         <button type="button" onClick={() => setShowPassword(!showPassword)} className="input-password-icon" >
           {showPassword ? (<EyeOff size={16} strokeWidth={1.6} />) : (<Eye size={16} strokeWidth={1.6} />)}

@@ -11,7 +11,7 @@ import { deleteProject } from '../api/projectsApi';
 const Client = () => {
   const navigate = useNavigate();
   const location = useLocation();
-   const [clientsData, setClientsData] = useState([]);
+  const [clientsData, setClientsData] = useState([]);
   const [stats, setStats] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');

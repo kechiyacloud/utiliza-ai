@@ -69,7 +69,7 @@ const ClientInsights = ({ client }) => {
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Budget Consumption (DB)</h4>
             <div className="flex items-center gap-8">
                 <div className="h-28 w-28">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                         <PieChart>
                             <Pie 
                                 data={budgetData} 
@@ -121,7 +121,7 @@ const ClientInsights = ({ client }) => {
             </div>
         </div>
         <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                 <AreaChart data={revenueData}>
                     <defs>
                         <linearGradient id="colorProjected" x1="0" y1="0" x2="0" y2="1">

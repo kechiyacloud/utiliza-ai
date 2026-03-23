@@ -21,6 +21,12 @@ export const getNoticeCount = async () => {
 // Global Cache to fix duplicate loading problems and speed up site
 let employeeListCache = null;
 let employeeListCacheTime = 0;
+const clearEmployeeCache = () => {
+    employeeListCache = null;
+    employeeListCacheTime = 0;
+    filterOptionsCache = null;
+    filterCacheTime = 0;
+};
 
 // Fetch all employees list
 export const getEmployeeList = async (forceUpdate = false) => {
@@ -60,7 +66,7 @@ export const getEmployeeList = async (forceUpdate = false) => {
                 employee_type: normalizedType,
                 location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
             };
-        });
+        }).filter(emp => !emp.date_of_resign);
 
         employeeListCache = enriched;
         employeeListCacheTime = Date.now();
@@ -127,8 +133,8 @@ export const getTopPerformers = async () => {
             return res.data.map((p) => ({
                 id: p.employee_id,
                 name: p.employee_name,
-                role: `${p.project_count} Projects`,
-                allocation: 100,
+                role: p.role || 'Top Performer',
+                allocation: p.allocation ?? 0,
                 avatar: p.employee_name ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('') : "U"
             }));
         }
@@ -142,18 +148,21 @@ export const getTopPerformers = async () => {
 // Create new employee
 export const createEmployee = async (employeeData) => {
     const res = await api.post('/employees', employeeData);
+    clearEmployeeCache();
     return res.data;
 };
 
 // Update employee
 export const updateEmployee = async (id, employeeData) => {
     const res = await api.put(`/employees/${id}`, employeeData);
+    clearEmployeeCache();
     return res.data;
 };
 
 // Delete employee
 export const deleteEmployee = async (id) => {
     const res = await api.delete(`/employees/${id}`);
+    clearEmployeeCache();
     return res.data;
 };
 

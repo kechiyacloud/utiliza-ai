@@ -20,8 +20,8 @@ const Navbar = () => {
         { icon: PieChart, label: 'Allocation', path: 'allocation' },
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
         { icon: Briefcase, label: 'Client', path: 'client' },
-        { icon: Network, label: 'Organization', path: 'organization' },
-        { icon: Settings, label: 'Settings', path: 'settings' },
+        { icon: Network, label: 'Organization', path: 'workstatus' },
+        { icon: Settings, label: 'Settings', path: 'workstatus' },
     ];
 
     const handleLogout = () => {

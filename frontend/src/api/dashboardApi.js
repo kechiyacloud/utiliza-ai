@@ -2,6 +2,15 @@ import api from "./axios";
 
 let dashboardCaches = {};
 
+export const clearDashboardCache = (department) => {
+    if (department) {
+        delete dashboardCaches[department];
+        return;
+    }
+
+    dashboardCaches = {};
+};
+
 export const fetchDashboardData = async (forceUpdate = false, department = 'Overall') => {
     try {
         const cacheKey = department || 'Overall';
@@ -23,7 +32,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
         const executive = mega?.executive || {};
         const skillsGap = Array.isArray(mega?.skills_gap) ? mega.skills_gap : [];
         const transitions = Array.isArray(mega?.transitions) ? mega.transitions : [];
-        const certs = []; 
+        const certs = Array.isArray(mega?.certifications) ? mega.certifications : [];
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
@@ -42,7 +51,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
                 id: idx,
                 name: p?.project_name || "Unknown",
                 resources: p?.resource_count ?? 0,
-                utilization: Math.min(100, Math.round((p?.resource_count || 0 / Math.max(info?.total_employees || 1, 1)) * 100))
+                utilization: Math.min(100, Math.round(((p?.resource_count || 0) / Math.max(info?.total_employees || 1, 1)) * 100))
             })),
             topPerformers: performers.map((p) => ({
                 id: p?.employee_id,
@@ -70,7 +79,9 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
             recentTransitions: transitions.map((t, idx) => ({
                 id: idx,
                 employee: t?.employee || "Unknown",
-                project: t?.project || "Unknown",
+                fromProject: t?.from_project || 'Bench',
+                toProject: t?.to_project || "Unknown",
+                movement: `${t?.from_project || 'Bench'} -> ${t?.to_project || "Unknown"}`,
                 date: t?.date,
                 role: t?.role || "Resource"
             })),
@@ -163,6 +174,16 @@ export const clearTodo = async (todoId) => {
         return response.data;
     } catch (error) {
         console.error("Clear Todo Error:", error);
+        throw error;
+    }
+};
+
+export const updateTodo = async (todoId, payload) => {
+    try {
+        const response = await api.put(`/dashboard/todos/${todoId}`, payload);
+        return response.data;
+    } catch (error) {
+        console.error("Update Todo Error:", error);
         throw error;
     }
 };

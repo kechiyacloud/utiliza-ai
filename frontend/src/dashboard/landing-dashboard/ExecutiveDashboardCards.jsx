@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Briefcase, FolderOpen, Armchair } from 'lucide-react';
+import { Users, Briefcase, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Card = ({ icon: Icon, value, label, subtext, alertCount, onClick, colorTheme = 'blue' }) => {
@@ -39,7 +39,7 @@ const Card = ({ icon: Icon, value, label, subtext, alertCount, onClick, colorThe
     );
 };
 
-const ExecutiveDashboardCards = ({ data }) => {
+const ExecutiveDashboardCards = ({ data, selectedDepartment }) => {
     const navigate = useNavigate();
     if (!data) return null;
 
@@ -53,7 +53,12 @@ const ExecutiveDashboardCards = ({ data }) => {
                 colorTheme="slate"
                 onClick={() => {
                     sessionStorage.setItem('returnToDashboardCards', 'true');
-                    navigate('/info/employees/list', { state: { showBack: true } });
+                    navigate('/info/employees/list', { 
+                        state: { 
+                            showBack: true,
+                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                        } 
+                    });
                 }}
             />
             <Card
@@ -64,7 +69,12 @@ const ExecutiveDashboardCards = ({ data }) => {
                 colorTheme="blue"
                 onClick={() => {
                     sessionStorage.setItem('returnToDashboardCards', 'true');
-                    navigate('/info/client', { state: { showBack: true } });
+                    navigate('/info/client', { 
+                        state: { 
+                            showBack: true,
+                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                        } 
+                    });
                 }}
             />
             <Card
@@ -76,7 +86,12 @@ const ExecutiveDashboardCards = ({ data }) => {
                 colorTheme="amber"
                 onClick={() => {
                     sessionStorage.setItem('returnToDashboardCards', 'true');
-                    navigate('/info/projects', { state: { showBack: true } });
+                    navigate('/info/projects', { 
+                        state: { 
+                            showBack: true,
+                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                        } 
+                    });
                 }}
             />
         </>

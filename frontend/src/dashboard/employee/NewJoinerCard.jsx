@@ -1,30 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus } from 'lucide-react';
-import { getNewJoiners } from '../../api/employeeApi';
 
-const NewJoinerCard = ({ onClick, isActive }) => {
+const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchJoiners = async () => {
-            try {
-                const data = await getNewJoiners();
-                // Safety net: exclude notice period employees regardless of data source
-                const filtered = (data || []).filter(e =>
-                    (e.employee_status || '').toLowerCase() !== 'notice period'
-                );
-                setJoiners(filtered);
-            } catch (error) {
-                console.error('Error fetching new joiners:', error);
-                setJoiners([]);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchJoiners();
-    }, []);
+        const now = new Date();
+        const ninetyDaysAgo = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+
+        const filtered = (employees || []).filter((employee) => {
+            const joinDate = employee.date_of_joining ? new Date(employee.date_of_joining) : null;
+            if (!joinDate || Number.isNaN(joinDate.getTime())) return false;
+
+            return joinDate >= ninetyDaysAgo && (employee.employee_status || '').toLowerCase() !== 'notice period';
+        });
+
+        setJoiners(filtered);
+        setCurrentIndex(0);
+    }, [employees]);
 
     useEffect(() => {
         if (joiners.length <= 1) return; // Don't cycle if only one or none
@@ -34,17 +27,6 @@ const NewJoinerCard = ({ onClick, isActive }) => {
         }, 5000); // 5 seconds per slide
         return () => clearInterval(interval);
     }, [joiners.length]);
-
-    if (loading) {
-        return (
-            <div className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between h-full ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}>
-                <div className="w-full">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">New Joiner</p>
-                    <p className="text-xs text-gray-400">Loading...</p>
-                </div>
-            </div>
-        );
-    }
 
     if (joiners.length === 0) {
         return (

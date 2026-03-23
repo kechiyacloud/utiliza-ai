@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
 from app.database import get_db_connection, release_db_connection
 
 router = APIRouter(prefix="/allocations", tags=["Allocations"])
@@ -300,12 +301,15 @@ def department_allocation_breakdown():
 
 
 @router.get("/forecast-bench")
-def get_forecast_bench():
+def get_forecast_bench(department: Optional[str] = Query(None)):
     """
     Returns employees whose allocation is ending within the next 30 days.
     """
     conn = get_db_connection()
     cur = conn.cursor()
+
+    dept_e_filter = " AND em.department = %s " if department else ""
+    dept_params = (department,) if department else ()
 
     try:
         cur.execute("""
@@ -319,9 +323,10 @@ def get_forecast_bench():
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             JOIN projects p ON pa.project_id = p.project_id
-            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days'
+            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            """ + dept_e_filter + """
             ORDER BY pa.allocation_end_date ASC
-        """)
+        """, dept_params)
         rows = cur.fetchall()
         return [
             {
