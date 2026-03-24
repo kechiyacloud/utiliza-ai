@@ -54,7 +54,9 @@ const Navbar = () => {
 
                 <nav className="flex-1 px-2 space-y-2">
                     {menuItems.map((item, index) => {
-                        const isActive = (item.path === 'dashboard' && (location.pathname === '/info/dashboard' || location.pathname === '/info')) || location.pathname.includes(item.path);
+                        const currentPath = location.pathname.replace(/\/$/, ''); // Remove trailing slash
+                        const isActive = (item.path === 'dashboard' && (currentPath === '/info/dashboard' || currentPath === '/info')) || 
+                                         (currentPath.endsWith('/' + item.path) || currentPath.split('/').pop() === item.path);
 
                         return (
                             <button

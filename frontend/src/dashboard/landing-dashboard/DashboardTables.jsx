@@ -139,7 +139,7 @@ const DashboardTables = ({
 
                 <div className="h-5">
                     {activeTab === 'availability' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Resources rolling off projects in 30 days</p>}
-                    {activeTab === 'skills' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Allocated demand versus available skill coverage</p>}
+                    {activeTab === 'skills' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Allocated effort versus available skill coverage</p>}
                     {activeTab === 'utilization' && (
                         <div className="flex items-center gap-4">
                             <button
@@ -219,7 +219,7 @@ const DashboardTables = ({
                         <thead className="sticky top-0 bg-white z-10">
                             <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Skill</th>
-                                <th className="text-center py-2">Demand / supply</th>
+                                <th className="text-center py-2">Allocated / Availability</th>
                                 <th className="text-right py-2 px-5">Gap</th>
                             </tr>
                         </thead>
@@ -238,10 +238,13 @@ const DashboardTables = ({
                                         </td>
                                         <td className="py-2.5 text-center">
                                             <div className="flex flex-col items-center">
-                                                <div className="flex items-center gap-1 text-[8px] mb-1 font-black uppercase text-slate-400">
-                                                    <span className="text-slate-700">{row.demand}</span> / <span className="text-blue-600">{row.certified}</span>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Allocated / Availability</span>
+                                                    <div className="flex items-baseline gap-1">
+                                                        <span className="text-slate-700">{row.demand}</span> / <span className="text-blue-600">{row.certified}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="w-20 h-0.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                                     <div className={`h-full rounded-full transition-all duration-700 ${skillGapMeta.bar}`} style={{ width: `${Math.min(100, (row.certified / Math.max(row.demand, 1)) * 100)}%` }}></div>
                                                 </div>
                                             </div>

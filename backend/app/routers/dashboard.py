@@ -35,43 +35,37 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
         # ==============================================================
         # BATCH 1: infocards (4 counts combined into ONE query)
         # ==============================================================
+        # BATCH 1: Info Cards (Total Employees, Clients, Projects, Bench)
+        # ==============================================================
         try:
             if department:
                 cur.execute("""
-                    SELECT
-                        (SELECT COUNT(*) FROM employee_master m WHERE m.date_of_resign IS NULL AND m.department = %s),
-                        (SELECT COUNT(DISTINCT p.client_id) FROM projects p
-                         JOIN projects_allocation pa ON p.project_id = pa.project_id
-                         JOIN employee_master m ON pa.employee_id = m.employee_id
-                         WHERE p.client_id IS NOT NULL AND m.department = %s AND m.date_of_resign IS NULL),
-                        (SELECT COUNT(DISTINCT p.project_id) FROM projects p
-                         JOIN projects_allocation pa ON p.project_id = pa.project_id
-                         JOIN employee_master m ON pa.employee_id = m.employee_id
-                         WHERE LOWER(p.project_status) IN ('running','in progress','live','active')
-                           AND m.department = %s AND m.date_of_resign IS NULL),
-                        (SELECT COUNT(DISTINCT m.employee_id)
-                         FROM employee_master m
+                    SELECT 
+                        (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND department = %s),
+                        (SELECT COUNT(*) FROM clients),
+                        (SELECT COUNT(*) FROM projects),
+                        (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
                          LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                         WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
-                           AND m.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
-                           AND m.department = %s)
-                """, (department, department, department, department))
+                         WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
+                         AND m.date_of_resign IS NULL AND COALESCE(p.employee_allocations, 0) <= 0 AND m.department = %s)
+                """, (department, department))
             else:
                 cur.execute("""
-                    SELECT
+                    SELECT 
                         (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL),
                         (SELECT COUNT(*) FROM clients),
-                        (SELECT COUNT(*) FROM projects WHERE LOWER(project_status) IN ('running','in progress','live','active')),
-                        (SELECT COUNT(DISTINCT m.employee_id)
-                         FROM employee_master m
+                        (SELECT COUNT(*) FROM projects),
+                        (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
                          LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                         WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
-                           AND m.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0)
+                         WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
+                         AND m.date_of_resign IS NULL AND COALESCE(p.employee_allocations, 0) <= 0)
                 """)
-            row = cur.fetchone()
+            infocards_row = cur.fetchone()
             infocards = {
-                "total_employees": row[0], "total_clients": row[1],
-                "running_projects": row[2], "bench_employees": row[3]
+                "total_employees": infocards_row[0],
+                "total_clients": infocards_row[1],
+                "running_projects": infocards_row[2],
+                "bench_employees": infocards_row[3]
             }
         except Exception as e:
             conn.rollback()
@@ -513,7 +507,7 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
 
             try:
                 cur.execute("SELECT id, message, type, status, created_at FROM actionable_todos ORDER BY created_at DESC")
-                manual_todos = [{"id": f"manual-{r[0]}","message":r[1],"type":r[2],"status":r[3],
+                manual_todos = [{"id": r[0],"message":r[1],"type":r[2],"status":r[3],
                     "time": r[4].strftime("%I:%M %p") if r[4] else "Just now","isSystemSuggestion":False}
                     for r in cur.fetchall()]
             except Exception:
@@ -528,8 +522,10 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
             risk_insights = dynamic_todos
 
         except Exception as e:
-            conn.rollback()
-            print("Error in Todos:", e)
+            if conn: conn.rollback()
+            import traceback
+            print("CRITICAL ERROR in Todos Batch:", e)
+            print(traceback.format_exc())
             risk_insights = []; todos = []
 
         return {
@@ -551,6 +547,651 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
     finally:
         cur.close()
         release_db_connection(conn)
+
+@router.get("/dashboard/all")
+def get_dashboard_all(department: Optional[str] = None):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            # Pre-initialize variables with defaults
+            infocards = {}
+            allocation_3m = []
+            high_allocation = []
+            top_performers = []
+            availability = []
+            transitions = []
+            certifications = []
+            skills_gap = []
+            executive = {}
+            risk_insights = []
+            todos = []
+
+            # ==============================================================
+            # BATCH 1: Infocards (Total Employees, Clients, Projects, Bench)
+            # ==============================================================
+            try:
+                # ---- Total Employees ----
+                cur.execute("SELECT COUNT(*) FROM employee_master")
+                total_employees = cur.fetchone()[0]
+
+                # ---- Total Clients ----
+                cur.execute("SELECT COUNT(*) FROM clients")
+                total_clients = cur.fetchone()[0]
+
+                # ---- Running Projects (case safe) ----
+                cur.execute("""
+                    SELECT COUNT(*)
+                    FROM projects
+                    WHERE LOWER(project_status) IN ('running', 'in progress', 'live', 'active')
+                """)
+                running_projects = cur.fetchone()[0]
+
+                # ---- Bench Employees
+                cur.execute("""
+                    SELECT COUNT(DISTINCT m.employee_id)
+                    FROM employee_master m
+                    LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+                    WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
+                    AND m.date_of_resign IS NULL
+                    AND COALESCE(p.employee_allocations, 0) <= 0
+                """)
+                bench_employees = cur.fetchone()[0]
+
+                infocards = {
+                    "total_employees": total_employees,
+                    "total_clients": total_clients,
+                    "running_projects": running_projects,
+                    "bench_employees": bench_employees
+                }
+            except Exception as e:
+                conn.rollback()
+                print("Error in Infocards Batch:", e)
+                infocards = {"error": str(e)}
+
+            # ==============================================================
+            # BATCH 2: Allocation 3-month forecast
+            # ==============================================================
+            try:
+                cur.execute("""
+                    WITH months AS (
+                        SELECT generate_series(
+                            DATE_TRUNC('month', CURRENT_DATE),
+                            DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
+                            INTERVAL '1 month'
+                        ) AS month_start
+                    )
+                    SELECT
+                        TO_CHAR(mo.month_start, 'YYYY-MM') AS month,
+                        COUNT(DISTINCT pa.employee_id) AS allocations
+                    FROM months mo
+                    LEFT JOIN projects_allocation pa
+                      ON pa.allocation_start_date <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+                     AND (pa.allocation_end_date >= mo.month_start OR pa.allocation_end_date IS NULL)
+                    LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
+                    WHERE e.date_of_resign IS NULL OR pa.employee_id IS NULL
+                    GROUP BY mo.month_start
+                    ORDER BY mo.month_start
+                """)
+
+                allocation_3m = [
+                    {"month": r[0], "allocations": r[1]}
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Allocation 3-month Batch:", e)
+                allocation_3m = []
+
+            # ==============================================================
+            # BATCH 3: High Allocation Projects
+            # ==============================================================
+            try:
+                cur.execute("""
+                    SELECT p.project_name,
+                           COUNT(pa.employee_id) AS resource_count
+                    FROM projects p
+                    JOIN projects_allocation pa
+                      ON p.project_id = pa.project_id
+                    JOIN employee_master e ON pa.employee_id = e.employee_id
+                    WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                    AND e.date_of_resign IS NULL
+                    AND LOWER(p.project_status) NOT LIKE CHR(37) || 'end' || CHR(37)
+                    GROUP BY p.project_name
+                    ORDER BY resource_count DESC
+                    LIMIT 5
+                """)
+
+                high_allocation = [
+                    {"project_name": r[0], "resource_count": r[1]}
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in High Allocation Projects Batch:", e)
+                high_allocation = []
+
+            # ==============================================================
+            # BATCH 4: Top Performers
+            # ==============================================================
+            try:
+                cur.execute("""
+                    SELECT e.employee_id,
+                           e.employee_name,
+                           e.role_designation AS role,
+                           COALESCE(p.employee_allocations, 0) AS allocation
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p
+                      ON e.employee_id = p.employee_id
+                    WHERE e.date_of_resign IS NULL
+                    AND COALESCE(p.employee_allocations, 0) > 0
+                    ORDER BY p.employee_allocations DESC NULLS LAST
+                    LIMIT 5
+                """)
+
+                top_performers = [
+                    {
+                        "employee_id": r[0],
+                        "employee_name": r[1],
+                        "role": r[2],
+                        "allocation": r[3]
+                    }
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Top Performers Batch:", e)
+                top_performers = []
+
+            # ==============================================================
+            # BATCH 5: Upcoming Availability
+            # ==============================================================
+            try:
+                cur.execute("""
+                    SELECT
+                        e.employee_name,
+                        p.project_name,
+                        pa.allocation_end_date,
+                        pa.allocation_percentage
+                    FROM projects_allocation pa
+                    JOIN employee_master e
+                      ON e.employee_id = pa.employee_id
+                    JOIN projects p
+                      ON p.project_id = pa.project_id
+                    WHERE pa.allocation_end_date BETWEEN
+                          CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+                    ORDER BY pa.allocation_end_date
+                """)
+
+                availability = [
+                    {
+                        "employee": r[0],
+                        "project": r[1],
+                        "release_date": r[2],
+                        "allocation_percent": r[3]
+                    }
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Upcoming Availability Batch:", e)
+                availability = []
+
+            # ==============================================================
+            # BATCH 6: Recent Transitions
+            # ==============================================================
+            try:
+                cur.execute("""
+                    WITH ordered_transitions AS (
+                        SELECT
+                            e.employee_name,
+                            p.project_name AS project_from,
+                            pa.allocation_end_date AS transition_date,
+                            ROW_NUMBER() OVER (PARTITION BY e.employee_id ORDER BY pa.allocation_end_date DESC) as rn
+                        FROM projects_allocation pa
+                        JOIN employee_master e ON pa.employee_id = e.employee_id
+                        JOIN projects p ON pa.project_id = p.project_id
+                        WHERE pa.allocation_end_date IS NOT NULL
+                          AND pa.allocation_end_date BETWEEN CURRENT_DATE - INTERVAL '90 days' AND CURRENT_DATE
+                    )
+                    SELECT
+                        ot.employee_name,
+                        ot.project_from,
+                        (SELECT p2.project_name FROM projects_allocation pa2
+                         JOIN projects p2 ON pa2.project_id = p2.project_id
+                         WHERE pa2.employee_id = e.employee_id AND pa2.allocation_start_date > ot.transition_date
+                         ORDER BY pa2.allocation_start_date LIMIT 1) AS project_to,
+                        ot.transition_date
+                    FROM ordered_transitions ot
+                    JOIN employee_master e ON ot.employee_id = e.employee_id
+                    WHERE ot.rn = 1
+                    ORDER BY ot.transition_date DESC
+                    LIMIT 5
+                """)
+
+                transitions = [
+                    {
+                        "employee": r[0],
+                        "project_from": r[1],
+                        "project_to": r[2] if r[2] else "Bench",
+                        "transition_date": r[3]
+                    }
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Recent Transitions Batch:", e)
+                transitions = []
+
+            # ==============================================================
+            # BATCH 7: Certifications
+            # ==============================================================
+            try:
+                cur.execute("""
+                    SELECT c.certification_name, COUNT(ec.employee_id) AS employee_count
+                    FROM certifications c
+                    JOIN employee_certifications ec ON c.certification_id = ec.certification_id
+                    GROUP BY c.certification_name
+                    ORDER BY employee_count DESC
+                    LIMIT 5
+                """)
+
+                certifications = [
+                    {"certification": r[0], "employee_count": r[1]}
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Certifications Batch:", e)
+                certifications = []
+
+            # ==============================================================
+            # BATCH 8: Skills Gap
+            # ==============================================================
+            try:
+                cur.execute("""
+                    SELECT s.skill_name, COUNT(DISTINCT e.employee_id) AS employees_with_skill
+                    FROM skills s
+                    LEFT JOIN employee_skills es ON s.skill_id = es.skill_id
+                    LEFT JOIN employee_master e ON es.employee_id = e.employee_id
+                    GROUP BY s.skill_name
+                    ORDER BY employees_with_skill ASC
+                    LIMIT 5
+                """)
+
+                skills_gap = [
+                    {"skill": r[0], "employees_with_skill": r[1]}
+                    for r in cur.fetchall()
+                ]
+            except Exception as e:
+                conn.rollback()
+                print("Error in Skills Gap Batch:", e)
+                skills_gap = []
+
+            # ==============================================================
+            # BATCH 9: Executive Summary
+            # ==============================================================
+            # Dynamic filtering for department
+            dept_e_filter = ""
+            dept_m_filter = ""
+            dept_params = []
+            if department:
+                dept_e_filter = " AND e.department = %s "
+                dept_m_filter = " AND m.department = %s "
+                dept_params = [department]
+
+            try:
+                # Total Headcount
+                cur.execute("SELECT COUNT(*) FROM employee_master" + dept_e_filter, dept_params)
+                total_emp = cur.fetchone()[0]
+
+                # Active Headcount (not resigned)
+                cur.execute("SELECT COUNT(*) FROM employee_master e WHERE e.date_of_resign IS NULL" + dept_e_filter, dept_params)
+                active_hc = cur.fetchone()[0]
+
+                # Billable Headcount (active and allocated > 0)
+                cur.execute("""
+                    SELECT COUNT(DISTINCT e.employee_id)
+                    FROM employee_master e
+                    JOIN employee_master_pro p ON e.employee_id = p.employee_id
+                    WHERE e.date_of_resign IS NULL AND COALESCE(p.employee_allocations, 0) > 0
+                """ + dept_e_filter, dept_params)
+                billable_hc = cur.fetchone()[0]
+
+                # Bench Headcount (active and allocated <= 0, not on notice)
+                cur.execute("""
+                    SELECT COUNT(DISTINCT e.employee_id)
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
+                    WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                      AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
+                """ + dept_e_filter, dept_params)
+                bench_hc = cur.fetchone()[0]
+
+                # Notice Period Headcount
+                cur.execute("""
+                    SELECT COUNT(DISTINCT e.employee_id)
+                    FROM employee_master e
+                    JOIN employee_master_pro p ON e.employee_id = p.employee_id
+                    WHERE p.employee_status ILIKE CHR(37)||'notice'||CHR(37)
+                      AND e.date_of_resign IS NULL
+                """ + dept_e_filter, dept_params)
+                notice_p = cur.fetchone()[0]
+
+                # Internal Headcount (not allocated to external projects)
+                cur.execute("""
+                    SELECT COUNT(DISTINCT e.employee_id)
+                    FROM employee_master e
+                    LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
+                    LEFT JOIN projects p ON pa.project_id = p.project_id
+                    WHERE e.date_of_resign IS NULL
+                      AND (p.project_type = 'Internal' OR p.project_type IS NULL)
+                """ + dept_e_filter, dept_params)
+                internal_hc = cur.fetchone()[0]
+
+                # Utilization (Total allocated percentage / Active Headcount)
+                cur.execute("""
+                    SELECT COALESCE(SUM(pa.allocation_percentage), 0)
+                    FROM projects_allocation pa
+                    JOIN employee_master e ON pa.employee_id = e.employee_id
+                    WHERE pa.allocation_start_date <= CURRENT_DATE
+                      AND (pa.allocation_end_date >= CURRENT_DATE OR pa.allocation_end_date IS NULL)
+                      AND e.date_of_resign IS NULL
+                """ + dept_m_filter, dept_params)
+                total_alloc = cur.fetchone()[0]
+
+                utilization = round((total_alloc / (active_hc * 100)) * 100) if active_hc > 0 else 0
+
+                # Bench skills (top 5 skills on bench)
+                cur.execute("""
+                    SELECT s.skill_name, COUNT(es.employee_id) AS skill_count
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
+                    LEFT JOIN employee_skills es ON e.employee_id=es.employee_id
+                    LEFT JOIN skills s ON es.skill_id=s.skill_id
+                    WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                      AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
+                      AND s.skill_name IS NOT NULL
+                    """ + dept_e_filter + """
+                    GROUP BY s.skill_name ORDER BY skill_count DESC LIMIT 5
+                """, dept_params)
+                bench_skills = [{"skill": r[0], "count": r[1]} for r in cur.fetchall()]
+
+                # Upcoming Bench (employees whose allocation ends in next 30 days)
+                cur.execute("""
+                    SELECT e.employee_name, pa.allocation_end_date
+                    FROM projects_allocation pa
+                    JOIN employee_master e ON pa.employee_id = e.employee_id
+                    WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+                      AND e.date_of_resign IS NULL
+                    """ + dept_e_filter + """
+                    ORDER BY pa.allocation_end_date LIMIT 5
+                """, dept_params)
+                upcoming_bench = [{"name": r[0], "release_date": r[1]} for r in cur.fetchall()]
+
+                # Forecast (simple: next 3 months projected utilization)
+                forecast = []
+                for i in range(3):
+                    month_start = f"CURRENT_DATE + INTERVAL '{i} month'"
+                    cur.execute(f"""
+                        SELECT COALESCE(SUM(pa.allocation_percentage), 0)
+                        FROM projects_allocation pa
+                        JOIN employee_master e ON pa.employee_id = e.employee_id
+                        WHERE pa.allocation_start_date <= {month_start} + INTERVAL '1 month' - INTERVAL '1 day'
+                          AND (pa.allocation_end_date >= {month_start} OR pa.allocation_end_date IS NULL)
+                          AND e.date_of_resign IS NULL
+                    """ + dept_m_filter, dept_params)
+                    proj_alloc = cur.fetchone()[0]
+
+                    cur.execute(f"""
+                        SELECT COUNT(*)
+                        FROM employee_master e
+                        WHERE e.date_of_resign IS NULL
+                          AND e.date_of_joining <= {month_start} + INTERVAL '1 month' - INTERVAL '1 day'
+                    """ + dept_e_filter, dept_params)
+                    proj_active_hc = cur.fetchone()[0]
+
+                    proj_util = round((proj_alloc / (proj_active_hc * 100)) * 100) if proj_active_hc > 0 else 0
+                    forecast.append({"month": (datetime.now() + timedelta(days=i*30)).strftime("%b"), "utilization": proj_util})
+
+                # Projects at Risk (e.g., understaffed, overdue)
+                projects_at_risk = []
+                alerts = []
+
+                # Understaffed projects (less than 3 resources)
+                cur.execute("""
+                    SELECT p.project_name, COUNT(pa.employee_id)
+                    FROM projects p
+                    LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
+                    LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
+                    WHERE LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                      AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
+                      AND e.date_of_resign IS NULL
+                    """ + dept_e_filter + """
+                    GROUP BY p.project_name HAVING COUNT(pa.employee_id) < 3 LIMIT 3
+                """, dept_params)
+                for r in cur.fetchall():
+                    projects_at_risk.append({"name": r[0], "reason": f"Understaffed ({r[1]} resources)"})
+                    alerts.append({"id":1,"type":"warning","message": f"Project '{r[0]}' is understaffed ({r[1]} resources).","time":"Recently"})
+
+                # Overdue projects (end_date passed and not completed)
+                cur.execute("""
+                    SELECT project_name FROM projects
+                    WHERE end_date < CURRENT_DATE
+                      AND LOWER(project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                      AND LOWER(project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
+                    LIMIT 3
+                """)
+                for r in cur.fetchall():
+                    projects_at_risk.append({"name": r[0], "reason": "Overdue"})
+                    alerts.append({"id":2,"type":"critical","message": f"Project '{r[0]}' is overdue.","time":"Recently"})
+
+                # High bench count alert
+                bench_threshold = 0.15 * active_hc # 15% of active headcount
+                if bench_hc > bench_threshold:
+                    alerts.append({"id":2,"type":"critical","message": f"High bench count detected ({bench_hc} employees idle).","time":"Recently"})
+                if not alerts:
+                    alerts.append({"id":3,"type":"info","message":"All project allocations appear stable.","time":"Just now"})
+
+                # Bench aging
+                cur.execute("""
+                    SELECT e.employee_name, CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
+                    LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
+                    WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                      AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
+                    """ + dept_e_filter + """
+                    GROUP BY e.employee_name,e.date_of_joining ORDER BY 2 DESC LIMIT 5
+                """, dept_params)
+                bench_aging = [{"name": r[0], "days": r[1]} for r in cur.fetchall()]
+
+                target_util = 85
+                if utilization < target_util:
+                    gap = round(((target_util/100)*active_hc) - (total_alloc/100))
+                    util_prediction = {"tip": f"Deploy {max(1,gap)} more resources to hit your {target_util}% target.","target":target_util,"gap":max(1,gap)}
+                else:
+                    util_prediction = {"tip":"Utilization target achieved. Focus on project health.","target":target_util,"gap":0}
+
+                # Utilization trends (6-month historical)
+                cur.execute("""
+                    WITH months AS (
+                        SELECT generate_series(
+                            DATE_TRUNC('month', CURRENT_DATE)-INTERVAL '5 months',
+                            DATE_TRUNC('month', CURRENT_DATE),
+                            INTERVAL '1 month'
+                        ) AS month_start
+                    )
+                    SELECT TO_CHAR(mo.month_start,'Mon'),
+                        COALESCE((SELECT SUM(pa.allocation_percentage)/100.0
+                         FROM projects_allocation pa LEFT JOIN employee_master m ON pa.employee_id=m.employee_id
+                         WHERE pa.allocation_start_date<=(mo.month_start+INTERVAL '1 month'-INTERVAL '1 day')
+                           AND (pa.allocation_end_date>=mo.month_start OR pa.allocation_end_date IS NULL)
+                         """ + dept_m_filter + """
+                        ), 0) as billable_count
+                    FROM months mo ORDER BY mo.month_start
+                """, dept_params)
+                utilization_trends = [{"month": r[0], "value": r[1]} for r in cur.fetchall()]
+
+                # Bench individual skills
+                cur.execute("""
+                    SELECT e.employee_name, STRING_AGG(s.skill_name,', ')
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
+                    LEFT JOIN employee_skills es ON e.employee_id=es.employee_id
+                    LEFT JOIN skills s ON es.skill_id=s.skill_id
+                    WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                      AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
+                    """ + dept_e_filter + """
+                    GROUP BY e.employee_name ORDER BY e.employee_name LIMIT 15
+                """, dept_params)
+                bench_indiv_skills = [{"name": r[0], "skills": r[1] or "No skills listed"} for r in cur.fetchall()]
+
+                executive = {
+                    "company_utilization": utilization,
+                    "billable_headcount": billable_hc,
+                    "bench_headcount": bench_hc,
+                    "notice_period": notice_p,
+                    "internal_headcount": internal_hc,
+                    "total_employees": total_emp,
+                    "bench_skills": bench_skills,
+                    "bench_individual_skills": bench_indiv_skills,
+                    "upcoming_bench": upcoming_bench,
+                    "forecast": forecast,
+                    "projects_at_risk": projects_at_risk,
+                    "alerts": alerts,
+                    "bench_aging": bench_aging,
+                    "utilization_prediction": util_prediction,
+                    "utilization_trends": utilization_trends
+                }
+            except Exception as e:
+                import traceback
+                conn.rollback()
+                print("Error in Executive Metrics:", e)
+                executive = {"error": traceback.format_exc()}
+
+            # ==============================================================
+            # BATCH 7: Todos (dynamic risk insights + manual todos)
+            # ==============================================================
+            try:
+                dynamic_todos = []
+                todo_counter = 1
+
+                # All 3 todo triggers in one query using UNION ALL
+                if department:
+                    cur.execute("""
+                        SELECT 'understaffed', p.project_name, count(pa.employee_id)::text FROM projects p
+                        LEFT JOIN projects_allocation pa ON pa.project_id=p.project_id
+                        LEFT JOIN employee_master e ON pa.employee_id=e.employee_id
+                        WHERE LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                          AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
+                          AND (e.department=%s OR e.department IS NULL)
+                        GROUP BY p.project_name HAVING count(pa.employee_id)<3 LIMIT 3
+                    UNION ALL
+                        SELECT 'deadline', p.project_name, '' FROM projects p
+                        JOIN projects_allocation pa ON pa.project_id=p.project_id
+                        JOIN employee_master e ON e.employee_id=pa.employee_id
+                        WHERE p.end_date IS NULL
+                          AND LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                          AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
+                          AND e.department=%s LIMIT 3
+                    UNION ALL
+                        SELECT 'bench', e.employee_name,
+                            (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining))::text
+                        FROM employee_master e
+                        LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
+                        LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
+                        WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                          AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0 AND e.department=%s
+                        GROUP BY e.employee_name,e.date_of_joining
+                        HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)>30 LIMIT 3
+                    """, (department, department, department))
+                else:
+                    cur.execute("""
+                        SELECT 'understaffed', p.project_name, count(pa.employee_id)::text FROM projects p
+                        LEFT JOIN projects_allocation pa ON pa.project_id=p.project_id
+                        WHERE LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                          AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
+                        GROUP BY p.project_name HAVING count(pa.employee_id)<3 LIMIT 3
+                    UNION ALL
+                        SELECT 'deadline', project_name, '' FROM projects
+                        WHERE end_date IS NULL
+                          AND LOWER(project_status) NOT LIKE CHR(37)||'end'||CHR(37)
+                          AND LOWER(project_status) NOT LIKE CHR(37)||'complete'||CHR(37) LIMIT 3
+                    UNION ALL
+                        SELECT 'bench', e.employee_name,
+                            (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining))::text
+                        FROM employee_master e
+                        LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
+                        LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
+                        WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                          AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
+                        GROUP BY e.employee_name,e.date_of_joining
+                        HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)>30 LIMIT 3
+                    """)
+                for r in cur.fetchall():
+                    kind, name, extra = r
+                    if kind == 'understaffed':
+                        dynamic_todos.append({"id": f"risk-{todo_counter}","priority":"High","color":"rose","icon":"ShieldAlert",
+                            "title": f"Understaffed: {name}","detail": f"Project has only {extra} resources. Assign min. 3.","actionType":"project"})
+                    elif kind == 'deadline':
+                        dynamic_todos.append({"id": f"risk-{todo_counter}","priority":"Medium","color":"amber","icon":"Clock",
+                            "title": f"Missing deadline: {name}","detail":"Set delivery deadlines on all running projects.","actionType":"project"})
+                    elif kind == 'bench':
+                        dynamic_todos.append({"id": f"risk-{todo_counter}","priority":"High","color":"rose","icon":"AlertCircle",
+                            "title": f"Critical Bench: {name}","detail": f"Resource idle for {extra} days. Redeploy immediately.","actionType":"allocation"})
+                    todo_counter += 1
+
+                if not dynamic_todos:
+                    dynamic_todos.append({"id":"risk-0","priority":"Low","color":"emerald","icon":"CheckCircle2",
+                        "title":"All systems nominal","detail":"No critical risks detected.","actionType":"none"})
+
+                try:
+                    cur.execute("SELECT id, message, type, status, created_at FROM actionable_todos ORDER BY created_at DESC")
+                    manual_todos = [{"id": r[0],"message":r[1],"type":r[2],"status":r[3],
+                        "time": r[4].strftime("%I:%M %p") if r[4] else "Just now","isSystemSuggestion":False}
+                        for r in cur.fetchall()]
+                except Exception:
+                    conn.rollback(); manual_todos = []
+
+                system_suggestions = [{"id": f"sys-{item['id']}","message": f"{item['title']}: {item['detail']}",
+                    "type":"critical" if item['priority']=='High' else "warning","status":"pending","time":"System",
+                    "isSystemSuggestion":True,"actionType":item.get('actionType')}
+                    for item in dynamic_todos if item.get('id') != "risk-0"]
+
+                todos = system_suggestions + manual_todos
+                risk_insights = dynamic_todos
+
+            except Exception as e:
+                if conn: conn.rollback()
+                import traceback
+                print("CRITICAL ERROR in Todos Batch:", e)
+                print(traceback.format_exc())
+                risk_insights = []; todos = []
+
+            return {
+                "infocards": infocards,
+                "allocation_3m": allocation_3m,
+                "high_allocation": high_allocation,
+                "top_performers": top_performers,
+                "availability": availability,
+                "transitions": transitions,
+                "certifications": certifications,
+                "skills_gap": skills_gap,
+                "executive": executive,
+                "risk_insights": risk_insights,
+                "todos": todos
+            }
+        except Exception as e:
+            print("MEGA DASHBOARD ERROR:", e)
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            cur.close()
+            release_db_connection(conn)
+    except Exception as e:
+        print("GLOBAL DASHBOARD ERROR:", e)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while fetching dashboard data.")
+
 
 @router.get("/dashboard/infocards")
 def dashboard_infocards():

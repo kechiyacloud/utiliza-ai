@@ -7,12 +7,14 @@ app = FastAPI()
 
 # -------------------- CORS --------------------
 allowed_origins = [
-    "http://localhost:5173",   # Frontend 5173 without Docker
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:3000",   # Frontend 3000 using Docker
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
     "http://65.0.110.174",
     "http://65.0.110.174:5173",
     "http://65.0.110.174:5174",
@@ -30,7 +32,6 @@ app.add_middleware(
     max_age=86400,
 )
 
-
 # -------------------- Include Routers --------------------
 app.include_router(auth.router)
 app.include_router(employees.router)
@@ -41,7 +42,6 @@ app.include_router(clients.router)
 app.include_router(clients.api_router)
 app.include_router(partner_clients.router)
 app.include_router(availability.router)
-
 
 @app.get("/")
 def root():

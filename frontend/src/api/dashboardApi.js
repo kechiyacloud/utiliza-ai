@@ -39,7 +39,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
             executiveCards: {
                 totalEmployees: { value: info?.total_employees ?? 0, change: "", label: "Total Employees" },
                 activeClients: { value: info?.total_clients ?? 0, change: "", label: "Active Clients" },
-                runningProjects: { value: info?.running_projects ?? 0, change: "", label: "Running Projects", alertCount: 0 },
+                runningProjects: { value: info?.running_projects ?? 0, change: "", label: "Total Projects", alertCount: 0 },
                 benchStrength: { value: info?.bench_employees ?? 0, change: "", label: "Bench Strength" }
             },
             resourceForecast: forecast.map((f) => ({

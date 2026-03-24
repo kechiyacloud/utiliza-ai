@@ -23,7 +23,7 @@ let employeeListCache = null;
 let employeeListCacheTime = 0;
 const clearEmployeeCache = () => {
     employeeListCache = null;
-    employeeListCacheTime = 0;
+    employeeListCacheTime = Date.now();
     filterOptionsCache = null;
     filterCacheTime = 0;
 };
@@ -42,11 +42,6 @@ export const getEmployeeList = async (forceUpdate = false) => {
             const status = (emp.employee_status || '').toLowerCase();
             const allocation = emp.employee_allocations || 0;
 
-            // Derive billable from raw status + allocation
-            // Allocated + allocation > 0 → billable
-            // Allocated + allocation = 0 → non-billable
-            // Bench + any → non-billable (unless tagged shadow billing)
-            // Notice period → non-billable
             let derivedBillable = 'non-billable';
             if (status === 'allocated' && allocation > 0) {
                 derivedBillable = 'billable';
@@ -101,7 +96,6 @@ export const getNewJoiners = async () => {
     try {
         const res = await api.get('/employees/new-joiners');
         if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-            // Filter out notice period employees from real backend data
             return res.data.filter(emp =>
                 (emp.employee_status || '').toLowerCase() !== 'notice period'
             );
@@ -143,6 +137,12 @@ export const getTopPerformers = async () => {
         console.error("Error fetching top performers:", err);
         return [];
     }
+};
+
+// Nominate employee of the month
+export const nominateEmployee = async (nominationData) => {
+    const res = await api.post('/employees/nominate', nominationData);
+    return res.data;
 };
 
 // Create new employee
@@ -191,7 +191,6 @@ export const getFilterOptions = async (forceUpdate = false) => {
 
         const res = await api.get('/employees/filter-options');
         if (res?.data) {
-            // Normalize employee types identically to the list payload
             if (res.data.employee_types && Array.isArray(res.data.employee_types)) {
                 res.data.employee_types = res.data.employee_types.map(t => {
                     let normalized = t || 'Full Time';
@@ -199,7 +198,6 @@ export const getFilterOptions = async (forceUpdate = false) => {
                     if (normalized.toUpperCase() === 'FTE') return 'Full Time';
                     return normalized;
                 });
-                // Remove duplicates after mapping just in case
                 res.data.employee_types = [...new Set(res.data.employee_types)].sort();
             }
             filterOptionsCache = res.data;

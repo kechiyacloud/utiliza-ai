@@ -138,7 +138,7 @@ const FullAnalytics = () => {
     { label: 'Total Workforce', value: executiveMetrics?.total_employees || 0, tone: 'bg-blue-50 text-blue-600 border-blue-100' },
     { label: 'Bench Risk Cases', value: criticalBench.length, tone: 'bg-rose-50 text-rose-600 border-rose-100' },
     { label: 'Recent Moves', value: transitions.length, tone: 'bg-indigo-50 text-indigo-600 border-indigo-100' },
-    { label: 'Top Skill Demand', value: skillsGap[0]?.skill || 'None', tone: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+    { label: 'Top Skill Allocated', value: skillsGap[0]?.skill || 'None', tone: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
   ];
 
   const handleExportAnalytics = async () => {
@@ -227,7 +227,7 @@ const FullAnalytics = () => {
               </p>
               <h1 className="text-3xl font-black text-slate-900 tracking-tight md:text-4xl">Workforce Pulse Analytics</h1>
               <p className="mt-3 max-w-2xl text-sm font-medium text-slate-500">
-                Strategic workforce signals for <span className="font-black text-slate-700">{selectedDept}</span>, with faster visibility into releases, bench pressure, transitions, and demand coverage.
+                Strategic workforce signals for <span className="font-black text-slate-700">{selectedDept}</span>, with faster visibility into releases, bench pressure, transitions, and availability coverage.
               </p>
             </div>
           </div>
@@ -451,7 +451,7 @@ const FullAnalytics = () => {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Demand</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Allocated</p>
                         <p className="text-base font-black text-slate-900">{group.demand}</p>
                       </div>
                       <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right shadow-sm">
@@ -474,7 +474,7 @@ const FullAnalytics = () => {
                               </div>
                               <div className="text-right">
                                 <p className="text-xs font-black text-slate-900">{item.demand} / {item.certified}</p>
-                                <p className="text-[10px] font-medium text-slate-500">Demand / Available</p>
+                                <p className="text-[10px] font-medium text-slate-500">Allocated / Availability</p>
                               </div>
                             </div>
                           </div>
