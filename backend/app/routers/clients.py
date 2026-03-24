@@ -13,7 +13,15 @@ class ClientCreate(BaseModel):
     url: Optional[str] = None
     industry: Optional[str] = "Retail"
     status: Optional[str] = "Stable"
-    budget: Optional[str] = None
+    budget: Optional[float] = None
+
+class ClientSimple(BaseModel):
+    id: str
+    name: str
+
+class EntityNameCreate(BaseModel):
+    name: str
+
 
 
 class ClientUpdate(BaseModel):

@@ -141,8 +141,8 @@ const Client = () => {
             </button>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Client Management</h1>
-            <p className="text-slate-500 text-sm mt-1">Manage client relationships, track budgets, and monitor project health.</p>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Strategic Partners</h1>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Manage client relationships, track budgets, and monitor project health</p>
           </div>
         </div>
 
@@ -150,17 +150,17 @@ const Client = () => {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setIsReportOpen(true)}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
           >
-            <FileText size={16} className="text-[#3BA9FB]" />
-            <span>Report</span>
+            <FileText size={14} className="text-[#3BA9FB]" />
+            <span>Generate Report</span>
           </button>
           <button
             onClick={() => setIsAddClientOpen(true)}
-            className="flex items-center gap-2 bg-[#3BA9FB] hover:bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-blue-500/20"
+            className="flex items-center gap-2 bg-[#3BA9FB] hover:bg-blue-600 text-white px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-500/30 active:scale-95"
           >
-            <Plus size={16} />
-            <span>Add Client</span>
+            <Plus size={14} />
+            <span>Add New Client</span>
           </button>
         </div>
       </div>

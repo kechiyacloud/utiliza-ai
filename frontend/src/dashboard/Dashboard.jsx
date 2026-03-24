@@ -35,6 +35,7 @@ import AddClientModal from './clients/AddClientModal';
 import EmployeeMonthCard from './landing-dashboard/EmployeeMonthCard';
 import DashboardTables from './landing-dashboard/DashboardTables';
 import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
+import NominationModal from './employee/NominationModal';
 
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -65,11 +66,18 @@ function Dashboard() {
   const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isSplitViewOpen, setIsSplitViewOpen] = useState(false);
+  const [isNominationModalOpen, setIsNominationModalOpen] = useState(false);
 
   // Filter States
-  const [selectedDepartment, setSelectedDepartment] = useState('Overall');
+  const [selectedDepartment, setSelectedDepartment] = useState(() => {
+    return localStorage.getItem('dashboard_department_filter') || 'Overall';
+  });
   const [allEmployees, setAllEmployees] = useState([]);
   const [departmentOptions, setDepartmentOptions] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_department_filter', selectedDepartment);
+  }, [selectedDepartment]);
 
   // Actionable Todo States
   const [todos, setTodos] = useState([]);
@@ -324,6 +332,16 @@ function Dashboard() {
           </div>
 
           <div className="flex gap-3">
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="bg-white border text-sm font-bold text-slate-700 border-slate-200 rounded-xl px-4 py-2 shadow-sm hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            >
+              <option value="Overall">All Departments</option>
+              {departmentOptions.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
             <button
               onClick={() => navigate('/info/employee/add')}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
@@ -383,12 +401,15 @@ function Dashboard() {
             <EmployeeMonthCard
               employee={employeeOfMonth}
               selectedDepartment={selectedDepartment}
-              onClick={(emp) => navigate(`/info/employee/${emp.employee_id}`, { state: { employee: emp } })}
+              onClick={(action) => {
+                if (action === 'nominate') setIsNominationModalOpen(true);
+                else navigate(`/info/employee/${action.employee_id}`, { state: { employee: action } });
+              }}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
-            {/* Demand vs Capacity (Span 2) */}
+            {/* Allocated vs Availability (Span 2) */}
             <div
               className="lg:col-span-2 bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
@@ -397,9 +418,9 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Demand vs. Capacity Forecast
+                    Allocated vs. Availability Forecast
                   </h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Monthly allocated FTE vs remaining active capacity</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Monthly allocated FTE vs remaining active availability</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
@@ -529,11 +550,7 @@ function Dashboard() {
             {/* Allocation Distribution */}
             <div
               className={`bg-white border p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-gray-100'}`}
-              onClick={() => {
-                setForcedTab('optimization');
-                const el = document.getElementById('dashboard-operational-insights');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <PieChartIcon size={18} className="text-indigo-500" />
@@ -568,7 +585,7 @@ function Dashboard() {
                 {dynamicAllocationData.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-1.5 text-xs text-slate-500">
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }}></span>
-                    {item.name}
+                    <span className="font-semibold">{item.name}</span> <span className="opacity-75">({item.value})</span>
                   </div>
                 ))}
               </div>
@@ -684,6 +701,16 @@ function Dashboard() {
         onClose={() => setIsSplitViewOpen(false)}
         employees={filteredDashboardEmployees}
       />
+
+      {isNominationModalOpen && (
+        <NominationModal 
+          onClose={() => setIsNominationModalOpen(false)} 
+          onSuccess={() => {
+            // Simplified refresh: reload the page to see new data
+            window.location.reload();
+          }} 
+        />
+      )}
     </div>
   );
 }

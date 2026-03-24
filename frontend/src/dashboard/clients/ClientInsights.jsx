@@ -6,9 +6,18 @@ import {
 import { TrendingUp, Target, Clock, ShieldCheck, DollarSign } from 'lucide-react';
 
 const ClientInsights = ({ client }) => {
-  const budgetValue = parseFloat(client.budget?.replace(/[^0-9.]/g, '') || '0') || 100000;
+  const rawBudget = client.budget?.toString() || '0';
+  const budgetValue = parseFloat(rawBudget.replace(/[^0-9.]/g, '')) || 0;
   
-  // Mock data for Projected vs Actual Revenue (Still mocked as not in DB)
+  // Projects total for comparison
+  const totalSpent = (client.projects || []).reduce((acc, p) => acc + parseFloat(p.budget || 0), 0);
+  const remaining = Math.max(0, budgetValue - totalSpent);
+  const spentPercent = budgetValue > 0 ? (totalSpent / budgetValue) * 100 : 0;
+
+  const budgetData = [
+    { name: 'Spent', value: totalSpent, color: '#3BA9FB' },
+    { name: 'Remaining', value: remaining, color: '#f1f5f9' },
+  ];
   const revenueData = [
     { name: 'Jan', projected: 4000, actual: 3800 },
     { name: 'Feb', projected: 5000, actual: 4800 },

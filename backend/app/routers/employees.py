@@ -35,6 +35,12 @@ class EmployeeCreateUpdate(BaseModel):
     projects: List[ProjectAllocationInput] = []
     certificates: List[CertificateInput] = []
 
+class NominationInput(BaseModel):
+    employee_id: str
+    nominator_role: str
+    feedback_text: str
+    month: str
+
 router = APIRouter()
 
 @router.post("/employee/count")
@@ -78,6 +84,21 @@ def get_notice_employee_count():
     except Exception as e:
         print(f"Error fetching notice period employee count: {e}")
         return 0
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+@router.get("/employees/roles")
+def get_employee_roles():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT DISTINCT role_designation FROM employee_master WHERE role_designation IS NOT NULL ORDER BY role_designation")
+        roles = [r[0] for r in cur.fetchall()]
+        return {"All": roles}
+    except Exception as e:
+        print(f"Error fetching roles: {e}")
+        return []
     finally:
         cur.close()
         release_db_connection(conn)
@@ -239,7 +260,35 @@ def fetch_employee_of_month():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Find an employee with highest allocation. If no one has allocation > 0, return nothing.
+        # Priority 1: Employee with most nominations in current month
+        # Priority 2: Fallback to highest allocation if no nominations
+        
+        from datetime import datetime
+        current_month = datetime.now().strftime("%Y-%m")
+        
+        # Check nominations first
+        cur.execute("""
+            SELECT 
+                m.employee_id,
+                m.employee_name,
+                m.role_designation,
+                m.photo_url,
+                COUNT(n.id) as nomination_count
+            FROM employee_master m
+            JOIN employee_nominations n ON m.employee_id = n.employee_id
+            WHERE n.month = %s
+              AND m.date_of_resign IS NULL
+            GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
+            ORDER BY nomination_count DESC, m.employee_name ASC
+            LIMIT 1
+        """, (current_month,))
+        
+        row = cur.fetchone()
+        if row:
+            columns = [desc[0] for desc in cur.description]
+            return dict(zip(columns, row))
+
+        # Fallback to allocation based
         query = """
             SELECT 
                 m.employee_id,
@@ -265,6 +314,24 @@ def fetch_employee_of_month():
     except Exception as e:
         print(f"Error fetching employee of month: {e}")
         return None
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+@router.post("/employees/nominate")
+def nominate_employee(nom: NominationInput):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO employee_nominations (employee_id, nominator_role, feedback_text, month)
+            VALUES (%s, %s, %s, %s)
+        """, (nom.employee_id, nom.nominator_role, nom.feedback_text, nom.month))
+        conn.commit()
+        return {"detail": "Nomination submitted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         release_db_connection(conn)
@@ -611,7 +678,8 @@ def create_employee(emp: EmployeeCreateUpdate):
             raise HTTPException(status_code=400, detail="Employee ID already exists")
 
         # 1. Insert into employee_master
-        phone_numeric = int(''.join(filter(str.isdigit, str(emp.phone)))) if emp.phone else None
+        phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
+        phone_numeric = int(phone_digits) if phone_digits else None
         cur.execute("""
             INSERT INTO employee_master (
                 employee_id, employee_name, email_id, phone_number, location,
@@ -692,7 +760,8 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
             raise HTTPException(status_code=404, detail="Employee not found")
 
         # 1. Update employee_master
-        phone_numeric = int(''.join(filter(str.isdigit, str(emp.phone)))) if emp.phone else None
+        phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
+        phone_numeric = int(phone_digits) if phone_digits else None
         
         # Don't update photo if it wasn't provided (e.g., partial update or huge base64 wasn't sent)
         photo_update_sql = "photo_url = %s," if emp.photo_url else ""
