@@ -6,6 +6,12 @@ export const fetchSimpleClients = async () => {
     return Array.isArray(res.data) ? res.data : [];
 };
 
+export const fetchAutocompleteClients = async (search = "") => {
+    const params = search ? { search } : undefined;
+    const res = await api.get("/api/clients", { params });
+    return Array.isArray(res.data) ? res.data : [];
+};
+
 export const createSimpleClient = async (name) => {
     const res = await api.post("/clients/simple", { name });
     return res.data;

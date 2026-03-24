@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, TrendingUp, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search } from 'lucide-react';
 import axios from '../../api/axios';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
@@ -54,6 +54,45 @@ function getLast4Weeks() {
         });
     }
     return weeks;
+}
+
+const WEEK_KEYS = ['w1', 'w2', 'w3', 'w4'];
+const WEEK_DEFAULT_HOURS = 40;
+const UTILIZATION_FILTERS = [
+    { key: 'fully', label: 'Fully Utilized', range: '75-100%', color: 'blue', title: 'Resources using 75% to 100% of weekly capacity.' },
+    { key: 'optimal', label: 'Optimally Utilized', range: '40-75%', color: 'indigo', title: 'Resources using 40% to 75% of weekly capacity.' },
+    { key: 'under', label: 'Under Utilized', range: '<40%', color: 'amber', title: 'Resources using less than 40% of weekly capacity.' },
+    { key: 'over', label: 'Over Allocated', range: '>100%', color: 'rose', title: 'Resources using more than 100% of weekly capacity.' },
+];
+
+function normalizeAllocationRow(row = {}) {
+    const normalized = { ...row };
+    WEEK_KEYS.forEach((key) => {
+        const rawValue = normalized[key];
+        if (rawValue === '' || rawValue === null || rawValue === undefined) {
+            normalized[key] = WEEK_DEFAULT_HOURS;
+            return;
+        }
+
+        const parsed = Number(rawValue);
+        normalized[key] = Number.isFinite(parsed) ? parsed : WEEK_DEFAULT_HOURS;
+    });
+    return normalized;
+}
+
+function getAllocationCategory(percentage) {
+    const pct = Number(percentage) || 0;
+    if (pct > 100) return 'over';
+    if (pct >= 75) return 'fully';
+    if (pct >= 40) return 'optimal';
+    return 'under';
+}
+
+function getResourceAllocationPct(row) {
+    const totalHours = WEEK_KEYS.reduce((sum, key) => sum + Number(row?.[key] || 0), 0);
+    const maxCapacity = WEEK_DEFAULT_HOURS * WEEK_KEYS.length;
+    if (maxCapacity <= 0) return 0;
+    return Math.round((totalHours / maxCapacity) * 100);
 }
 
 // ─── AllocationTable Component ────────────────────────────────────────────────
@@ -151,7 +190,7 @@ const W_KEYS = ['w1', 'w2', 'w3', 'w4'];
 
 const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
     const [selectedEmployees, setSelectedEmployees] = useState([]);
-    const [hours, setHours] = useState({ w1: 0, w2: 0, w3: 0, w4: 0 });
+    const [hours, setHours] = useState({ w1: WEEK_DEFAULT_HOURS, w2: WEEK_DEFAULT_HOURS, w3: WEEK_DEFAULT_HOURS, w4: WEEK_DEFAULT_HOURS });
     const [search, setSearch] = useState('');
 
     if (!isOpen) return null;
@@ -172,7 +211,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
     const handleConfirm = () => {
         onConfirm(selectedEmployees, hours);
         setSelectedEmployees([]);
-        setHours({ w1: 0, w2: 0, w3: 0, w4: 0 });
+        setHours({ w1: WEEK_DEFAULT_HOURS, w2: WEEK_DEFAULT_HOURS, w3: WEEK_DEFAULT_HOURS, w4: WEEK_DEFAULT_HOURS });
         onClose();
     };
 
@@ -238,13 +277,16 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                                 {['w1', 'w2', 'w3', 'w4'].map((wk, i) => (
                                     <div key={wk} className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-500">W{i+1} Hours</label>
-                                        <input 
-                                            type="number" 
-                                            min="0" max="168"
-                                            value={hours[wk]}
-                                            onChange={e => setHours({...hours, [wk]: parseInt(e.target.value) || 0})}
-                                            className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-center outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 shadow-sm transition-all"
-                                        />
+                                        <input
+                                                type="number"
+                                                min="0" max="168"
+                                                value={hours[wk]}
+                                                onChange={e => setHours({
+                                                    ...hours,
+                                                    [wk]: e.target.value === '' ? WEEK_DEFAULT_HOURS : (Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : WEEK_DEFAULT_HOURS)
+                                                })}
+                                                className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-center outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 shadow-sm transition-all"
+                                            />
                                     </div>
                                 ))}
                             </div>
@@ -260,7 +302,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                                 disabled={selectedEmployees.length === 0}
                                 className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2"
                             >
-                                <Users size={14} /> Confirm Bulk Add
+                                <Users size={14} /> Import Resources
                             </button>
                         </div>
                     </div>
@@ -270,21 +312,31 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
     );
 };
 
-const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) => {
+const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate, onClearAll, activeUtilizationFilters = [], onResetFilters }) => {
     const navigate = useNavigate();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeletingAll, setIsDeletingAll] = useState(false);
+    const [saveError, setSaveError] = useState('');
+    const [statusMessage, setStatusMessage] = useState('');
     const [localRows, setLocalRows] = useState(rows);
 
-    const HOURS_MAX = 40;
-
     useEffect(() => {
-        setLocalRows(rows);
+        setLocalRows((rows || []).map(normalizeAllocationRow));
     }, [rows]);
 
+    const displayRows = useMemo(() => {
+        const sourceRows = (localRows || []).map((row, index) => ({ ...row, _sourceIndex: index }));
+        if (!activeUtilizationFilters.length) return sourceRows;
+        return sourceRows.filter((row) => activeUtilizationFilters.includes(getAllocationCategory(getResourceAllocationPct(row))));
+    }, [localRows, activeUtilizationFilters]);
+
     const handleAddRow = () => {
-        setLocalRows([...localRows, { name: '', role: '', w1: 0, w2: 0, w3: 0, w4: 0 }]);
+        if (onResetFilters) onResetFilters();
+        setLocalRows([...localRows, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' })]);
     };
 
     const handleRemoveRow = (index) => {
@@ -293,20 +345,28 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
 
     const handleRowChange = (index, field, value) => {
         const newRows = [...localRows];
+        const currentRow = normalizeAllocationRow({ ...(newRows[index] || {}) });
         if (W_KEYS.includes(field)) {
-            newRows[index][field] = parseInt(value) || 0;
+            if (value === '' || value === null || value === undefined) {
+                currentRow[field] = WEEK_DEFAULT_HOURS;
+            } else {
+                const parsed = Number(value);
+                currentRow[field] = Number.isFinite(parsed) ? parsed : WEEK_DEFAULT_HOURS;
+            }
         } else {
-            newRows[index][field] = value;
+            currentRow[field] = value;
         }
+        newRows[index] = currentRow;
         setLocalRows(newRows);
     };
 
     const handleBulkConfirm = (selectedEmployees, bulkHours) => {
+        if (onResetFilters) onResetFilters();
         const newResources = selectedEmployees.map(emp => ({
             employee_id: emp.employee_id,
             name: emp.employee_name,
             role: emp.role_designation,
-            ...bulkHours
+            ...normalizeAllocationRow(bulkHours)
         }));
         setLocalRows([...localRows, ...newResources]);
     };
@@ -370,15 +430,61 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
     };
 
     const handleSave = async () => {
+        setIsSaving(true);
+        setSaveError('');
         try {
-            await axios.put(`/projects/${projectId}/resources`, { resources: localRows });
+            const payload = {
+                resources: localRows.map((row) => ({
+                    ...normalizeAllocationRow(row),
+                    employee_id: row.employee_id || null,
+                    name: (row.name || '').trim(),
+                    role: (row.role || '').trim(),
+                }))
+            };
+
+            await axios.put(`/projects/${projectId}/resources`, payload);
+            if (onUpdate) await onUpdate();
             setIsEditing(false);
-            if (onUpdate) onUpdate();
-        } catch (err) {
-            console.error("Save error:", err);
-            alert("Failed to save resource allocations.");
+        } catch (error) {
+            console.error('Saving allocations failed:', error);
+            const message = error?.response?.data?.detail || 'Failed to save resource allocations.';
+            setSaveError(message);
+            alert(message);
+        } finally {
+            setIsSaving(false);
         }
     };
+
+    const handleDeleteAllResources = async () => {
+        const previousRows = [...localRows];
+        setIsDeletingAll(true);
+        setSaveError('');
+        setStatusMessage('');
+        try {
+            if (onClearAll) onClearAll();
+            await axios.put(`/projects/${projectId}/resources`, { resources: [] });
+            setLocalRows([]);
+            if (onUpdate) await onUpdate();
+            setIsDeleteAllModalOpen(false);
+            setIsEditing(true);
+            setStatusMessage('All resources deleted successfully');
+        } catch (error) {
+            console.error('Deleting all resources failed:', error);
+            setLocalRows(previousRows);
+            if (onClearAll) onClearAll(previousRows);
+            const message = error?.response?.data?.detail || 'Failed to delete all resources.';
+            setSaveError(message);
+            alert(message);
+        } finally {
+            setIsDeletingAll(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!statusMessage) return undefined;
+        const timer = setTimeout(() => setStatusMessage(''), 2500);
+        return () => clearTimeout(timer);
+    }, [statusMessage]);
 
     // The backend stores w1, w2, w3, w4.
     // We map these in order to the last 4 calendar weeks (w1 = 3 weeks ago, w4 = current).
@@ -389,21 +495,14 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
             localRows.reduce((sum, r) => sum + Number(r[key] || 0), 0)
         ), [localRows]);
 
-    const getProjectCount = (row) => {
-        const parsed = Number(row?.project_count ?? row?.projectCount ?? 0);
-        return Number.isFinite(parsed) ? parsed : 0;
-    };
-
     const getAllocationPct = (row) => {
-        const projectCount = getProjectCount(row);
-        if (projectCount <= 0) return 0;
-        return Math.round(100 / projectCount);
+        return getResourceAllocationPct(row);
     };
 
     if (localRows.length === 0 && !isEditing) {
         return (
             <div className="p-8 text-center text-gray-400 italic bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
-                No resources allocated to this project.
+                No resources added yet.
                 <div className="mt-4">
                     <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-shadow shadow-md">
                         Start Allocating
@@ -423,11 +522,14 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                             <button onClick={handleAddRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
                                 <Plus size={14} /> Add Resource
                             </button>
-                            <button onClick={() => setIsBulkModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
-                                <Users size={14} /> Bulk Add
+                            <button onClick={() => navigate(`/info/projects/${projectId}/import`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
+                                <Users size={14} /> Import Resources
                             </button>
-                            <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors">
-                                <Save size={14} /> Save Changes
+                            <button onClick={() => setIsDeleteAllModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors">
+                                <Trash2 size={14} /> Clear All Resources
+                            </button>
+                            <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Changes
                             </button>
                         </div>
                     ) : (
@@ -464,6 +566,18 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                 </div>
             </div>
 
+            {saveError && (
+                <div className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-100 text-rose-700 text-xs font-medium">
+                    {saveError}
+                </div>
+            )}
+
+            {statusMessage && (
+                <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-medium">
+                    {statusMessage}
+                </div>
+            )}
+
             <div className="overflow-x-auto w-full rounded-xl border border-gray-100 shadow-sm bg-white">
                 <table className="min-w-max text-sm">
                     <thead>
@@ -486,7 +600,15 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                         </tr>
                     </thead>
                     <tbody>
-                        {localRows.map((row, ridx) => {
+                        {localRows.length === 0 && isEditing && (
+                            <tr>
+                                <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                    No resources added yet. Click Add Resource or Import Resources to start.
+                                </td>
+                            </tr>
+                        )}
+                        {displayRows.map((row) => {
+                            const ridx = row._sourceIndex;
                             const rowTotal = W_KEYS.reduce((s, k) => s + Number(row[k] || 0), 0);
                             const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
                             return (
@@ -497,9 +619,17 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                                 items={employees}
                                                 selectedId={row.employee_id || row.name}
                                                 onSelect={(emp) => {
-                                                    handleRowChange(ridx, 'employee_id', emp.employee_id);
-                                                    handleRowChange(ridx, 'name', emp.employee_name || '');
-                                                    handleRowChange(ridx, 'role', emp.role_designation || '');
+                                                    const nextRole = emp?.role || emp?.role_designation || 'No role assigned';
+                                                    setLocalRows((current) => current.map((item, index) => (
+                                                        index === ridx
+                                                            ? normalizeAllocationRow({
+                                                                ...item,
+                                                                employee_id: emp?.employee_id || '',
+                                                                name: emp?.employee_name || emp?.name || '',
+                                                                role: nextRole,
+                                                            })
+                                                            : item
+                                                    )));
                                                 }}
                                                 placeholder="Select Employee"
                                                 label="Employee"
@@ -522,13 +652,13 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                             <SearchableDropdown 
                                                 items={rolesList.map(r => ({ id: r, name: r }))}
                                                 selectedId={row.role || ''} 
-                                                onSelect={(roleObj) => handleRowChange(ridx, 'role', roleObj.name)}
+                                                onSelect={(roleObj) => handleRowChange(ridx, 'role', roleObj.name || 'No role assigned')}
                                                 placeholder="Select Role"
                                                 label="Role"
                                             />
                                         ) : (
                                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
-                                                {row.role || 'Team Member'}
+                                                {row.role || 'No role assigned'}
                                             </span>
                                         )}
                                     </td>
@@ -564,7 +694,7 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                     </td>
                                     {W_KEYS.map((key, idx) => {
                                         const hours = Number(row[key] || 0);
-                                        const pct = Math.min(100, Math.round((hours / HOURS_MAX) * 100));
+                                        const pct = Math.min(100, Math.round((hours / WEEK_DEFAULT_HOURS) * 100));
                                         const isCurrentWeek = idx === 3;
                                         const barColor = hours === 0 ? 'bg-gray-200' :
                                             pct >= 100 ? 'bg-green-500' :
@@ -608,6 +738,13 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                                 </tr>
                             );
                         })}
+                        {localRows.length > 0 && displayRows.length === 0 && (
+                            <tr>
+                                <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                    No resources match the selected utilization filters.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                     <tfoot>
                         <tr className="bg-slate-100 border-t-2 border-slate-200">
@@ -634,35 +771,49 @@ const AllocationTable = ({ projectId, rows, employees, rolesList, onUpdate }) =>
                 onConfirm={handleBulkConfirm}
                 employees={employees}
             />
+            <ConfirmDeleteAllModal
+                isOpen={isDeleteAllModalOpen}
+                onCancel={() => setIsDeleteAllModalOpen(false)}
+                onConfirm={handleDeleteAllResources}
+                isDeleting={isDeletingAll}
+            />
         </div>
     );
 };
 
 const OngoingProjectInfoCard = ({ project, resources }) => {
     const headcount = resources.length;
+    const projectName = project?.name || project?.project_name || 'Untitled Project';
+    const projectTypeLabel = (project?.type || '').toLowerCase() === 'internal' ? 'Internal' : 'Client';
+    const projectStatus = project?.status || project?.project_status || 'Not Set';
+    const projectStatusKey = projectStatus.toLowerCase();
+    const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
+    const statusClasses = projectStatusKey === 'completed'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+        : projectStatusKey === 'in progress'
+            ? 'bg-blue-50 text-blue-700 border-blue-100'
+            : projectStatusKey === 'on hold'
+                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                : 'bg-slate-50 text-slate-700 border-slate-200';
+
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center gap-5 w-full md:w-auto">
-                <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-3xl flex-shrink-0 shadow-inner">
-                    {project.icon || project.name?.substring(0, 1).toUpperCase()}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex items-start gap-4 w-full md:w-auto min-w-0">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
+                    {avatarLetter}
                 </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800 leading-tight mb-1">{project.name}</h1>
-                    <div className="flex items-center gap-3">
-                        <span
-                            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border"
-                            style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
-                                backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
-                                color: project.status === 'Completed' ? '#1E40AF' : '#166534',
-                                borderColor: 'transparent'
-                            }}
-                        >
-                            {project.status}
+                <div className="min-w-0">
+                    <h1 className="text-2xl font-black text-slate-800 leading-tight truncate">{projectName}</h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-1 rounded-full text-[11px] font-bold border bg-slate-50 text-slate-700 border-slate-200">
+                            {projectTypeLabel}
                         </span>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                        <span className={`px-2 py-1 rounded-full text-[11px] font-bold border ${statusClasses}`}>
+                            {projectStatus}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
                             <Briefcase size={14} className="text-slate-400" />
-                            {project.client || 'Internal'}
+                            {project.client || 'No client selected'}
                         </span>
                     </div>
                 </div>
@@ -702,6 +853,45 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                     >
                         {project.type} ({project.billable || 'Non-Billable'})
                     </span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ConfirmDeleteAllModal = ({ isOpen, onCancel, onConfirm, isDeleting }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onCancel} />
+            <div className="relative z-[131] w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-rose-50/70">
+                    <h3 className="text-lg font-bold text-slate-800">Clear All Resources</h3>
+                    <p className="text-xs text-slate-500 mt-1">This action will remove every allocated resource from the project.</p>
+                </div>
+                <div className="px-6 py-5">
+                    <p className="text-sm text-slate-600 leading-6">
+                        Are you sure you want to delete all resources? This action cannot be undone.
+                    </p>
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/60">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isDeleting}
+                        className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        Delete All
+                    </button>
                 </div>
             </div>
         </div>
@@ -1040,34 +1230,66 @@ const ScopeSection = ({ project, onUpdate }) => {
 // ─── Main Project Details Page ──────────────────────────────────────────────────
 const ProjectDetailsPage = () => {
     const { id } = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
-    const [project, setProject] = useState(null);
+    const [project, setProject] = useState(() => location.state?.project || null);
     const [loading, setLoading] = useState(true);
     const [resources, setResources] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [rolesList, setRolesList] = useState([]);
+    const [activeUtilizationFilters, setActiveUtilizationFilters] = useState(() =>
+        UTILIZATION_FILTERS.map(filter => filter.key)
+    );
 
     const loadProjectData = async () => {
         try {
-            const [res, resRes, resEmp, resRoles] = await Promise.all([
+            const [detailsResult, resourcesResult, employeesResult, rolesResult] = await Promise.allSettled([
                 axios.get(`/projects/${id}/details`),
                 axios.get(`/projects/${id}/resources`),
                 axios.get('/employees/list'),
-                axios.get('/departments/roles-mapping')
+                axios.get('/employees/departments/roles-mapping')
             ]);
-            
-            setProject(res.data);
-            setResources(resRes.data || []);
-            setEmployees(resEmp.data || []);
-            
-            const allRoles = new Set();
-            Object.values(resRoles.data || {}).forEach(roleList => {
-                roleList.forEach(r => allRoles.add(r));
-            });
-            setRolesList(Array.from(allRoles).sort());
-            
+
+            if (detailsResult.status === 'fulfilled') {
+                setProject(detailsResult.value.data);
+            } else {
+                console.error("Failed to load project details:", detailsResult.reason);
+                setProject((current) => current || location.state?.project || null);
+            }
+
+            if (resourcesResult.status === 'fulfilled') {
+                const apiResources = Array.isArray(resourcesResult.value.data) ? resourcesResult.value.data : [];
+                setResources(apiResources.map(normalizeAllocationRow));
+            } else {
+                console.error("Failed to load project resources:", resourcesResult.reason);
+                setResources((current) => (Array.isArray(current) ? current : []));
+            }
+
+            if (employeesResult.status === 'fulfilled') {
+                const normalizedEmployees = (Array.isArray(employeesResult.value.data) ? employeesResult.value.data : []).map((emp) => ({
+                    ...emp,
+                    role: emp?.role || emp?.role_designation || 'No role assigned',
+                }));
+                setEmployees(normalizedEmployees);
+            } else {
+                console.error("Failed to load employees list:", employeesResult.reason);
+                setEmployees((current) => (Array.isArray(current) ? current : []));
+            }
+
+            if (rolesResult.status === 'fulfilled') {
+                const allRoles = new Set();
+                Object.values(rolesResult.value.data || {}).forEach(roleList => {
+                    (roleList || []).forEach(r => allRoles.add(r));
+                });
+                setRolesList(Array.from(allRoles).sort());
+            } else {
+                console.error("Failed to load roles mapping:", rolesResult.reason);
+                setRolesList((current) => (Array.isArray(current) ? current : []));
+            }
         } catch (err) {
             console.error("Failed to load project details:", err);
+            setResources((current) => (Array.isArray(current) ? current : []));
+            setProject((current) => current || location.state?.project || null);
         } finally {
             setLoading(false);
         }
@@ -1076,6 +1298,25 @@ const ProjectDetailsPage = () => {
     useEffect(() => {
         if (id) loadProjectData();
     }, [id]);
+
+    const utilizationCounts = useMemo(() => {
+        return UTILIZATION_FILTERS.reduce((acc, filter) => {
+            acc[filter.key] = resources.filter((row) => {
+                const pct = getResourceAllocationPct(row);
+                return getAllocationCategory(pct) === filter.key;
+            }).length;
+            return acc;
+        }, {});
+    }, [resources]);
+
+    const toggleUtilizationFilter = (key) => {
+        setActiveUtilizationFilters((current) => {
+            if (current.includes(key)) {
+                return current.filter((item) => item !== key);
+            }
+            return [...current, key];
+        });
+    };
 
     if (loading) {
         return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-full">Loading Project Details...</div>;
@@ -1116,22 +1357,48 @@ const ProjectDetailsPage = () => {
 
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                         {/* Section header */}
-                        <div className="flex items-start justify-between mb-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                     <Users size={18} className="text-blue-500" />
                                     Resource Allocation &amp; Planning
                                 </h3>
                             </div>
-                            {/* Legend */}
-                            <div className="hidden sm:flex flex-col items-start gap-1 text-[10px] text-slate-500 font-medium self-center">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Allocation % Utilization</span>
-                                <div className="flex items-center gap-3">
-                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span> &gt;75% → High utilization</span>
-                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-400"></span> ~40% → Medium utilization</span>
-                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-300"></span> &lt;40% → Low utilization</span>
-                                    <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400"></span> 100%+ → Over allocated</span>
-                                </div>
+                            {/* Filter Chips */}
+                            <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden w-full justify-start md:justify-end pb-1 md:pb-0 min-w-0">
+                                {UTILIZATION_FILTERS.map((filter) => {
+                                    const isActive = activeUtilizationFilters.includes(filter.key);
+                                    const count = utilizationCounts[filter.key] || 0;
+                                    const palette = {
+                                        blue: isActive ? 'bg-blue-500 text-white border-blue-500 shadow-blue-100' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100',
+                                        indigo: isActive ? 'bg-indigo-500 text-white border-indigo-500 shadow-indigo-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100',
+                                        amber: isActive ? 'bg-amber-500 text-white border-amber-500 shadow-amber-100' : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100',
+                                        rose: isActive ? 'bg-rose-500 text-white border-rose-500 shadow-rose-100' : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100',
+                                    }[filter.color];
+
+                                    return (
+                                        <button
+                                            key={filter.key}
+                                            type="button"
+                                            onClick={() => toggleUtilizationFilter(filter.key)}
+                                            title={filter.title}
+                                            className={`group flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold tracking-tight transition-all shadow-sm whitespace-nowrap ${palette}`}
+                                        >
+                                            <span
+                                                className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/90' : (
+                                                    filter.color === 'blue' ? 'bg-blue-500' :
+                                                    filter.color === 'indigo' ? 'bg-indigo-500' :
+                                                    filter.color === 'amber' ? 'bg-amber-500' :
+                                                    'bg-rose-500'
+                                                )}`}
+                                            />
+                                            <span>{filter.label}</span>
+                                            <span className={`px-1 py-0.5 rounded-full text-[9px] font-black leading-none ${isActive ? 'bg-white/20' : 'bg-white/70'} ${isActive ? 'text-white' : 'text-slate-500'}`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -1141,6 +1408,9 @@ const ProjectDetailsPage = () => {
                             employees={employees} 
                             rolesList={rolesList} 
                             onUpdate={loadProjectData} 
+                            onClearAll={(nextRows = []) => setResources(nextRows)}
+                            activeUtilizationFilters={activeUtilizationFilters}
+                            onResetFilters={() => setActiveUtilizationFilters(UTILIZATION_FILTERS.map(filter => filter.key))}
                         />
                     </div>
                 </div>
@@ -1148,5 +1418,4 @@ const ProjectDetailsPage = () => {
         </div>
     );
 };
-
 export default ProjectDetailsPage;

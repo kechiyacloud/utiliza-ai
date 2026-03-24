@@ -38,6 +38,7 @@ app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(allocations.router)
 app.include_router(clients.router)
+app.include_router(clients.api_router)
 app.include_router(partner_clients.router)
 app.include_router(availability.router)
 

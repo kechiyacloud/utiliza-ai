@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
 import axios from '../../api/axios';
 import {
     fetchSimpleClients,
+    fetchAutocompleteClients,
     createSimpleClient,
     updateSimpleClient,
     deleteSimpleClient,
@@ -148,17 +150,50 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
 /* ──────────────────────────────────────────────────────────
    SEARCHABLE DROPDOWN  —  scrollable + filterable
    ────────────────────────────────────────────────────────── */
-const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found' }) => {
+const SearchableDropdown = ({
+    items,
+    selectedId,
+    onSelect,
+    placeholder,
+    label,
+    disabled = false,
+    noResultsText = 'No results found',
+    isLoading = false,
+    onBeforeOpen,
+    onOpenChange,
+    loadOptions,
+}) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
+    const [asyncItems, setAsyncItems] = useState(items || []);
+    const [asyncLoading, setAsyncLoading] = useState(false);
     const containerRef = useRef(null);
+    const menuRef = useRef(null);
+    const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
+    const requestSeqRef = useRef(0);
 
-    const selectedItem = items.find(i => String(i.id) === String(selectedId));
-    const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+    const selectedPool = loadOptions ? [...asyncItems, ...(items || [])] : items;
+    const selectedItem = selectedPool.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
+    const filtered = loadOptions
+        ? asyncItems
+        : items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    const loading = isLoading || asyncLoading;
+
+    const syncMenuPosition = () => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        setMenuStyle({
+            top: rect.bottom + 6,
+            left: rect.left,
+            width: rect.width,
+        });
+    };
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (containerRef.current && !containerRef.current.contains(e.target)) {
+            const clickedInsideTrigger = containerRef.current && containerRef.current.contains(e.target);
+            const clickedInsideMenu = menuRef.current && menuRef.current.contains(e.target);
+            if (!clickedInsideTrigger && !clickedInsideMenu) {
                 setIsOpen(false);
                 setSearch('');
             }
@@ -167,69 +202,157 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (onOpenChange) onOpenChange(isOpen);
+    }, [isOpen, onOpenChange]);
+
+    useEffect(() => {
+        if (!loadOptions) {
+            return;
+        }
+
+        if (!isOpen) {
+            setAsyncItems(items || []);
+            setAsyncLoading(false);
+            requestSeqRef.current += 1;
+            return;
+        }
+
+        let cancelled = false;
+        const requestSeq = ++requestSeqRef.current;
+        const timer = window.setTimeout(async () => {
+            try {
+                setAsyncLoading(true);
+                const result = await loadOptions(search);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems(Array.isArray(result) ? result : []);
+                }
+            } catch (error) {
+                console.error(`[SearchableDropdown:${label}] failed to load options`, error);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems([]);
+                }
+            } finally {
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncLoading(false);
+                }
+            }
+        }, 180);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [loadOptions, isOpen, items, label, search]);
+
+    useEffect(() => {
+        if (!isOpen || !containerRef.current) return;
+        syncMenuPosition();
+        const updatePosition = () => syncMenuPosition();
+        window.addEventListener('resize', updatePosition);
+        window.addEventListener('scroll', updatePosition, true);
+
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+            window.removeEventListener('scroll', updatePosition, true);
+        };
+    }, [isOpen]);
+
     return (
-        <div ref={containerRef} className="relative flex-1">
+        <div ref={containerRef} className="relative flex-1 min-w-0 overflow-visible">
             {/* Trigger */}
             <button
                 type="button"
-                onClick={() => !disabled && setIsOpen(!isOpen)}
+                onClick={async () => {
+                    if (disabled) return;
+                    setSearch('');
+                    if (!isOpen) {
+                        if (loadOptions) {
+                            setAsyncItems(items || []);
+                        }
+                        syncMenuPosition();
+                        setIsOpen(true);
+                        if (onBeforeOpen) {
+                            try {
+                                await onBeforeOpen();
+                            } catch (err) {
+                                console.error(`[SearchableDropdown:${label}] pre-open load failed`, err);
+                            }
+                        }
+                        return;
+                    }
+                    setIsOpen(false);
+                }}
                 disabled={disabled}
-                className={`w-full p-2.5 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2
+                className={`w-full p-2.5 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
                     ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
                     ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
             >
-                <span className={selectedItem ? 'text-gray-800' : 'text-gray-400'}>
+                <span className={`${selectedItem ? 'text-gray-800' : 'text-gray-400'} truncate min-w-0 flex-1`}>
                     {selectedItem ? selectedItem.name : placeholder || `Select ${label}`}
                 </span>
                 <Search size={14} className="text-gray-400 shrink-0" />
             </button>
 
             {/* Dropdown List */}
-            {!disabled && isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                    {/* Search Input */}
-                    <div className="p-2 border-b border-gray-100">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder={`Search ${label}...`}
-                                className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-lg outline-none focus:bg-white focus:border-blue-200 transition-all"
-                                autoFocus
-                            />
+            {!disabled && isOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={menuRef}
+                    className="fixed bg-white border border-gray-200 rounded-2xl shadow-2xl z-[9999] overflow-hidden"
+                    style={{
+                        top: `${menuStyle.top}px`,
+                        left: `${menuStyle.left}px`,
+                        width: `${menuStyle.width}px`,
+                    }}
+                >
+                    <div className="max-h-[240px] overflow-y-auto overflow-x-hidden overscroll-contain">
+                        <div className="sticky top-0 z-10 p-2.5 border-b border-gray-100 bg-white">
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder={`Search ${label}...`}
+                                    className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-xl outline-none focus:bg-white focus:border-blue-200 transition-all"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+
+                        <div className="py-1">
+                            {loading && filtered.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
+                            ) : filtered.length === 0 && search.trim().length > 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
+                            ) : filtered.length === 0 ? (
+                                <div className="px-4 py-4 text-center text-xs text-gray-300">No options available</div>
+                            ) : (
+                                filtered.map((item) => (
+                                    <button
+                                        type="button"
+                                        key={item.id}
+                                        onClick={() => {
+                                            onSelect(item);
+                                            setIsOpen(false);
+                                            setSearch('');
+                                        }}
+                                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2 min-w-0
+                                            ${String(item.id) === String(selectedId) || item.name === selectedId
+                                                ? 'bg-blue-50 text-blue-700 font-semibold'
+                                                : 'text-gray-700 hover:bg-gray-50 font-medium'
+                                            }`}
+                                    >
+                                        {(String(item.id) === String(selectedId) || item.name === selectedId) && <Check size={14} className="text-blue-500 shrink-0" />}
+                                        <span className="truncate min-w-0">{item.name}</span>
+                                    </button>
+                                ))
+                            )}
                         </div>
                     </div>
-
-                    {/* Options */}
-                    <div className="max-h-48 overflow-y-auto">
-                        {filtered.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
-                        ) : (
-                            filtered.map((item) => (
-                                <button
-                                    type="button"
-                                    key={item.id}
-                                    onClick={() => {
-                                        onSelect(item);
-                                        setIsOpen(false);
-                                        setSearch('');
-                                    }}
-                                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2
-                                        ${String(item.id) === String(selectedId)
-                                            ? 'bg-blue-50 text-blue-700 font-semibold'
-                                            : 'text-gray-700 hover:bg-gray-50 font-medium'
-                                        }`}
-                                >
-                                    {String(item.id) === String(selectedId) && <Check size={14} className="text-blue-500" />}
-                                    {item.name}
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -265,6 +388,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     const [partnerClients, setPartnerClients] = useState([]);
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
+    const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
+    const [activeDropdown, setActiveDropdown] = useState('');
+    const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
+    const teamTableRef = useRef(null);
 
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -276,22 +403,57 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
     async function loadEntities() {
         setEntityError('');
+        setIsDirectoryLoading(true);
         try {
-            const [clientData, partnerData, empRes, rolesRes] = await Promise.all([
+            const [clientResult, partnerResult, employeesResult, rolesResult] = await Promise.allSettled([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
                 axios.get('/employees/list'),
-                axios.get('/employees/roles'),
+                axios.get('/employees/departments/roles-mapping'),
             ]);
-            setClients(clientData);
-            setPartnerClients(partnerData);
-            setEmployees(empRes.data || []);
-            // roles API returns { department: [roles] }; flatten into unique sorted list
-            const allRoles = new Set();
-            Object.values(rolesRes.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
-            setRolesList(Array.from(allRoles).sort());
-        } catch {
+
+            if (clientResult.status === 'fulfilled') {
+                setClients(clientResult.value);
+            } else {
+                console.error('[AddProjectPanel] Failed to load clients', clientResult.reason);
+            }
+
+            if (partnerResult.status === 'fulfilled') {
+                setPartnerClients(partnerResult.value);
+            } else {
+                console.error('[AddProjectPanel] Failed to load partner clients', partnerResult.reason);
+            }
+
+            if (employeesResult.status === 'fulfilled') {
+                const employeesFromApi = employeesResult.value?.data || [];
+                setEmployees(employeesFromApi);
+                console.log('[AddProjectPanel] employees/list count:', employeesFromApi.length);
+                console.log('[AddProjectPanel] employees/list sample:', employeesFromApi.slice(0, 3).map((e) => ({
+                    employee_id: e?.employee_id,
+                    employee_name: e?.employee_name,
+                    role_designation: e?.role_designation
+                })));
+            } else {
+                console.error('[AddProjectPanel] Failed to load employees', employeesResult.reason);
+            }
+
+            if (rolesResult.status === 'fulfilled') {
+                // roles API returns { department: [roles] }; flatten into unique sorted list
+                const allRoles = new Set();
+                Object.values(rolesResult.value?.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
+                const flattenedRoles = Array.from(allRoles).sort();
+                setRolesList(flattenedRoles);
+                console.log('[AddProjectPanel] employees/roles count:', flattenedRoles.length);
+                console.log('[AddProjectPanel] employees/roles sample:', flattenedRoles.slice(0, 10));
+            } else {
+                console.error('[AddProjectPanel] Failed to load roles mapping', rolesResult.reason);
+            }
+
+        } catch (error) {
+            console.error('[AddProjectPanel] Failed to load dropdown entities', error);
             setEntityError('Failed to load clients/partner clients.');
+        } finally {
+            setIsDirectoryLoading(false);
         }
     }
 
@@ -396,6 +558,69 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             return String(linkedPartner) === String(formData.partnerId);
         });
     }, [clients, formData.type, formData.clientType, formData.partnerId]);
+
+    const employeeOptions = useMemo(
+        () =>
+            (employees || [])
+                .filter(e => e?.employee_id && e?.employee_name)
+                .map(e => ({ id: e.employee_id, name: e.employee_name, _raw: e })),
+        [employees]
+    );
+
+    const roleOptions = useMemo(() => {
+        const roleSet = new Set();
+
+        const addRole = (value) => {
+            const role = String(value || '').trim();
+            if (role) roleSet.add(role);
+        };
+
+        if (Array.isArray(rolesList)) {
+            rolesList.forEach(addRole);
+        } else if (rolesList && typeof rolesList === 'object') {
+            Object.values(rolesList).forEach((val) => {
+                if (Array.isArray(val)) {
+                    val.forEach(addRole);
+                } else {
+                    addRole(val);
+                }
+            });
+        }
+
+        (employees || []).forEach((emp) => addRole(emp?.role_designation));
+
+        return Array.from(roleSet)
+            .sort((a, b) => a.localeCompare(b))
+            .map(r => ({ id: r, name: r }));
+    }, [rolesList, employees]);
+
+    const ensureTeamDropdownData = async () => {
+        if (isDirectoryLoading) return;
+        if (employeeOptions.length > 0 && roleOptions.length > 0) return;
+        await loadEntities();
+    };
+
+    const handleTeamBlur = () => {
+        window.setTimeout(() => {
+            const activeElement = document.activeElement;
+            if (teamTableRef.current && activeElement && teamTableRef.current.contains(activeElement)) {
+                setIsTeamInputsActive(true);
+            } else {
+                setIsTeamInputsActive(false);
+            }
+        }, 0);
+    };
+
+    useEffect(() => {
+        console.log('[AddProjectPanel] employee options length:', employeeOptions.length);
+    }, [employeeOptions]);
+
+    useEffect(() => {
+        console.log('[AddProjectPanel] role options length:', roleOptions.length);
+    }, [roleOptions]);
+
+    const isDropdownOpen = Boolean(activeDropdown);
+    const hideTeamHorizontalScroll = isDropdownOpen || isTeamInputsActive;
 
     // --- Entity Modal Openers ---
     const openModal = (mode, entityType) => {
@@ -545,6 +770,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             setSubmitError('Please select a client.');
             return;
         }
+        if (formData.type === 'Client' && !formData.clientName.trim()) {
+            setSubmitError('Please select a client name.');
+            return;
+        }
         if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
             setSubmitError('Please select a partner.');
             return;
@@ -557,23 +786,29 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         setIsSubmitting(true);
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
+        const isClientProject = formData.type === 'Client';
         const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
-        const effectiveType = isPartnerClientProject ? 'Partner' : formData.type;
+        const effectiveType = formData.type;
 
         const payload = {
             project_id: projectId,
             project_name: formData.name,
             project_status: formData.status,
             type: effectiveType,
-            client_id: formData.type === 'Client' ? (formData.clientId || null) : null,
-            client: formData.type === 'Client' && !isPartnerClientProject ? (formData.clientName || null) : null,
-            partner_id: isPartnerClientProject ? (formData.partnerId || null) : null,
-            partner: isPartnerClientProject ? (formData.partnerName || null) : null,
             billable: formData.billable,
             start_date: formData.startDate,
             end_date: formData.endDate || null,
             team_members: formData.teamMembers
         };
+
+        if (isClientProject) {
+            payload.client_id = formData.clientId || null;
+            payload.client_name = formData.clientName || null;
+        }
+        if (isPartnerClientProject) {
+            payload.partner_id = formData.partnerId || null;
+            payload.partner = formData.partnerName || null;
+        }
 
         try {
             const response = await axios.post('/projects', payload);
@@ -717,6 +952,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                 label="clients"
                                                 disabled={Boolean(isPartnerClient && hasPartnerMappedClients && !formData.partnerId)}
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
+                                                loadOptions={fetchAutocompleteClients}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'client')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
@@ -813,7 +1049,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                     No team members allocated to this project yet.
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                                <div
+                                    ref={teamTableRef}
+                                    onFocusCapture={() => setIsTeamInputsActive(true)}
+                                    onBlurCapture={handleTeamBlur}
+                                    style={{ overflowX: hideTeamHorizontalScroll ? 'hidden' : 'auto' }}
+                                    className="rounded-xl border border-gray-100 shadow-sm transition-[overflow-x] duration-150 overflow-y-visible"
+                                >
                                     <table className="w-full text-xs min-w-[800px]">
                                         <thead>
                                             <tr className="bg-slate-50 border-b border-slate-100">
@@ -839,21 +1081,27 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                     <td className="px-2 py-2 min-w-[160px]">
                                                         {/* Employee name — searchable dropdown */}
                                                         <SearchableDropdown
-                                                            items={employees.map(e => ({ id: e.employee_id, name: e.employee_name, _raw: e }))}
+                                                            items={employeeOptions}
                                                             selectedId={member.employee_id}
                                                             onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
                                                             placeholder="Select Employee"
                                                             label="employees"
+                                                            isLoading={isDirectoryLoading}
+                                                            onBeforeOpen={ensureTeamDropdownData}
+                                                            onOpenChange={(open) => setActiveDropdown(open ? `employee-${idx}` : '')}
                                                         />
                                                     </td>
                                                     <td className="px-2 py-2 min-w-[150px]">
                                                         {/* Role — searchable dropdown */}
                                                         <SearchableDropdown
-                                                            items={rolesList.map(r => ({ id: r, name: r }))}
+                                                            items={roleOptions}
                                                             selectedId={member.role}
                                                             onSelect={(item) => handleRoleSelect(idx, item.name)}
                                                             placeholder="Select Role"
                                                             label="roles"
+                                                            isLoading={isDirectoryLoading}
+                                                            onBeforeOpen={ensureTeamDropdownData}
+                                                            onOpenChange={(open) => setActiveDropdown(open ? `role-${idx}` : '')}
                                                         />
                                                     </td>
                                                     <td className="px-2 py-2 min-w-[100px]">
