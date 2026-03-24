@@ -4,6 +4,7 @@ import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Ch
 import axios from '../../api/axios';
 import {
     fetchSimpleClients,
+    fetchAutocompleteClients,
     createSimpleClient,
     updateSimpleClient,
     deleteSimpleClient,
@@ -160,15 +161,23 @@ const SearchableDropdown = ({
     isLoading = false,
     onBeforeOpen,
     onOpenChange,
+    loadOptions,
 }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
+    const [asyncItems, setAsyncItems] = useState(items || []);
+    const [asyncLoading, setAsyncLoading] = useState(false);
     const containerRef = useRef(null);
     const menuRef = useRef(null);
     const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
+    const requestSeqRef = useRef(0);
 
-    const selectedItem = items.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
-    const filtered = items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    const selectedPool = loadOptions ? [...asyncItems, ...(items || [])] : items;
+    const selectedItem = selectedPool.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
+    const filtered = loadOptions
+        ? asyncItems
+        : items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    const loading = isLoading || asyncLoading;
 
     const syncMenuPosition = () => {
         if (!containerRef.current) return;
@@ -198,6 +207,45 @@ const SearchableDropdown = ({
     }, [isOpen, onOpenChange]);
 
     useEffect(() => {
+        if (!loadOptions) {
+            return;
+        }
+
+        if (!isOpen) {
+            setAsyncItems(items || []);
+            setAsyncLoading(false);
+            requestSeqRef.current += 1;
+            return;
+        }
+
+        let cancelled = false;
+        const requestSeq = ++requestSeqRef.current;
+        const timer = window.setTimeout(async () => {
+            try {
+                setAsyncLoading(true);
+                const result = await loadOptions(search);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems(Array.isArray(result) ? result : []);
+                }
+            } catch (error) {
+                console.error(`[SearchableDropdown:${label}] failed to load options`, error);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems([]);
+                }
+            } finally {
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncLoading(false);
+                }
+            }
+        }, 180);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [loadOptions, isOpen, items, label, search]);
+
+    useEffect(() => {
         if (!isOpen || !containerRef.current) return;
         syncMenuPosition();
         const updatePosition = () => syncMenuPosition();
@@ -219,6 +267,9 @@ const SearchableDropdown = ({
                     if (disabled) return;
                     setSearch('');
                     if (!isOpen) {
+                        if (loadOptions) {
+                            setAsyncItems(items || []);
+                        }
                         syncMenuPosition();
                         setIsOpen(true);
                         if (onBeforeOpen) {
@@ -271,7 +322,7 @@ const SearchableDropdown = ({
                         </div>
 
                         <div className="py-1">
-                            {isLoading && filtered.length === 0 ? (
+                            {loading && filtered.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
                             ) : filtered.length === 0 && search.trim().length > 0 ? (
                                 <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
@@ -901,6 +952,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                 label="clients"
                                                 disabled={Boolean(isPartnerClient && hasPartnerMappedClients && !formData.partnerId)}
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
+                                                loadOptions={fetchAutocompleteClients}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'client')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">

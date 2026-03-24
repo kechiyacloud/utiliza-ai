@@ -5,6 +5,7 @@ from typing import Optional
 import psycopg2
 
 router = APIRouter(prefix="/clients", tags=["Clients"])
+api_router = APIRouter(prefix="/api", tags=["Clients"])
 
 class ClientCreate(BaseModel):
     id: str
@@ -22,14 +23,95 @@ class ClientUpdate(BaseModel):
     status: Optional[str] = None
     budget: Optional[str] = None
 
+
+def _ensure_clients_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS clients (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+def _detect_clients_schema(cur):
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'clients'
+        """
+    )
+    columns = {row[0] for row in cur.fetchall()}
+    if {"id", "name"}.issubset(columns):
+        return "modern"
+    if {"client_id", "client_name"}.issubset(columns):
+        return "legacy"
+    if "id" in columns and "name" in columns:
+        return "modern"
+    if "client_id" in columns and "client_name" in columns:
+        return "legacy"
+    return "modern"
+
+
+def _fetch_client_rows(cur, search: Optional[str] = None):
+    normalized_search = (search or "").strip()
+    schema = _detect_clients_schema(cur)
+
+    if schema == "legacy":
+        query = "SELECT client_id::text AS id, client_name AS name FROM clients"
+        params = []
+        if normalized_search:
+            query += " WHERE client_name ILIKE %s"
+            params.append(f"%{normalized_search}%")
+        query += " ORDER BY client_name"
+    else:
+        query = "SELECT id::text AS id, name FROM clients"
+        params = []
+        if normalized_search:
+            query += " WHERE name ILIKE %s"
+            params.append(f"%{normalized_search}%")
+        query += " ORDER BY name"
+
+    cur.execute(query, tuple(params))
+    return [{"id": str(row[0]), "name": row[1]} for row in cur.fetchall()]
+
+
 @router.get("")
-def list_clients():
+@api_router.get("/clients")
+def list_clients(search: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+        if schema == "modern":
+            query = "SELECT id::text AS id, name FROM clients"
+            params = []
+            if search:
+                query += " WHERE name ILIKE %s"
+                params.append(f"%{search.strip()}%")
+            query += " ORDER BY name"
+            cur.execute(query, tuple(params))
+            rows = cur.fetchall()
+            return [
+                {
+                    "id": str(r[0]),
+                    "name": r[1],
+                    "url": None,
+                    "industry": None,
+                    "status": None,
+                    "budget": 0.0,
+                    "projects": [],
+                    "stakeholders": [],
+                }
+                for r in rows
+            ]
+
         cur.execute("SELECT client_id, client_name, website_url, industry, status, budget FROM clients ORDER BY client_name")
         rows = cur.fetchall()
-        
+
         # Fetch projects and stakeholders for each client
         client_list = []
         for r in rows:
@@ -42,7 +124,7 @@ def list_clients():
                 WHERE p.client_id = %s
             """, (client_id,))
             proj_rows = cur.fetchall()
-            
+
             projects = []
             stakeholders = []
             seen_stakeholders = set()
@@ -84,7 +166,7 @@ def list_clients():
                 "projects": projects,
                 "stakeholders": stakeholders
             })
-            
+
         return client_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -97,6 +179,15 @@ def create_client(client: ClientCreate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+
+        if schema == "modern":
+            cur.execute("INSERT INTO clients (name) VALUES (%s) RETURNING id, name", (client.name,))
+            row = cur.fetchone()
+            conn.commit()
+            return {"id": str(row[0]), "name": row[1]}
+
         cur.execute("SELECT client_id FROM clients WHERE client_id = %s", (client.id,))
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Client ID already exists")
@@ -172,6 +263,17 @@ def delete_client(client_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+
+        if schema == "modern":
+            cur.execute("SELECT 1 FROM clients WHERE id = %s", (client_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Client not found")
+            cur.execute("DELETE FROM clients WHERE id = %s", (client_id,))
+            conn.commit()
+            return {"detail": "Client deleted successfully"}
+
         cur.execute("SELECT 1 FROM clients WHERE client_id = %s", (client_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Client not found")
@@ -179,6 +281,219 @@ def delete_client(client_id: str):
         cur.execute("DELETE FROM clients WHERE client_id = %s", (client_id,))
         conn.commit()
         return {"detail": "Client deleted successfully"}
+    except HTTPException:
+
+
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.get("/simple")
+def list_simple_clients():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+        if schema == "modern":
+            cur.execute("SELECT id::text, name FROM clients ORDER BY name")
+        else:
+            cur.execute("SELECT client_id, client_name FROM clients ORDER BY client_name")
+        rows = cur.fetchall()
+        return [{"id": str(r[0]), "name": r[1]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.post("/simple")
+def create_simple_client(payload: EntityNameCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Client name is required.")
+        if schema == "modern":
+            cur.execute("INSERT INTO clients (name) VALUES (%s) RETURNING id, name", (name,))
+        else:
+            cur.execute("INSERT INTO clients (client_name) VALUES (%s) RETURNING client_id, client_name", (name,))
+        row = cur.fetchone()
+        conn.commit()
+        return {"id": str(row[0]), "name": row[1]}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Client already exists.")
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.put("/simple/{client_id}")
+def update_simple_client(client_id: str, payload: EntityNameCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Client name is required.")
+        if schema == "modern":
+            cur.execute("UPDATE clients SET name = %s WHERE id = %s RETURNING id, name", (name, client_id))
+        else:
+            cur.execute("UPDATE clients SET client_name = %s WHERE client_id = %s RETURNING client_id, client_name", (name, client_id))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Client not found.")
+        conn.commit()
+        return {"id": str(row[0]), "name": row[1]}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Client already exists.")
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.delete("/simple/{client_id}")
+def delete_simple_client(client_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        _ensure_clients_table(cur)
+        schema = _detect_clients_schema(cur)
+
+        if schema == "modern":
+            cur.execute("SELECT 1 FROM projects WHERE client_id = %s LIMIT 1", (client_id,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="Cannot delete client while projects are linked to it.")
+            cur.execute("DELETE FROM clients WHERE id = %s RETURNING id", (client_id,))
+        else:
+            cur.execute("SELECT 1 FROM projects WHERE client_id = %s LIMIT 1", (client_id,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="Cannot delete client while projects are linked to it.")
+            cur.execute("DELETE FROM clients WHERE client_id = %s RETURNING client_id", (client_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Client not found.")
+        conn.commit()
+        return {"detail": "Client deleted successfully"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.get("/partners")
+def list_partners():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, name FROM partners ORDER BY name")
+        rows = cur.fetchall()
+        return [{"id": r[0], "name": r[1]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.post("/partners")
+def create_partner(payload: EntityNameCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Partner name is required.")
+        cur.execute("INSERT INTO partners (name) VALUES (%s) RETURNING id, name", (name,))
+        row = cur.fetchone()
+        conn.commit()
+        return {"id": row[0], "name": row[1]}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Partner already exists.")
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.put("/partners/{partner_id}")
+def update_partner(partner_id: int, payload: EntityNameCreate):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Partner name is required.")
+        cur.execute("UPDATE partners SET name = %s WHERE id = %s RETURNING id, name", (name, partner_id))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Partner not found.")
+        conn.commit()
+        return {"id": row[0], "name": row[1]}
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Partner already exists.")
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.delete("/partners/{partner_id}")
+def delete_partner(partner_id: int):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM projects WHERE partner_id = %s LIMIT 1", (partner_id,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Cannot delete partner while projects are linked to it.")
+        cur.execute("DELETE FROM partners WHERE id = %s RETURNING id", (partner_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Partner not found.")
+        conn.commit()
+        return {"detail": "Partner deleted successfully"}
     except HTTPException:
         conn.rollback()
         raise
