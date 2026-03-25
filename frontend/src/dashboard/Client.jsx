@@ -202,6 +202,7 @@ const Client = () => {
       <ReportModal
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
+        clients={clientsData}
       />
 
       <EditClientModal

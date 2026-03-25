@@ -12,9 +12,9 @@ const allocationStaticData = {
 };
 
 // ---------- Fetch Allocation Metrics from Backend ----------
-export const fetchAllocationMetrics = async () => {
+export const fetchAllocationMetrics = async (params = {}) => {
     try {
-        const res = await api.get('/allocations/metrics');
+        const res = await api.get('/allocations/metrics', { params });
         return res.data;
     } catch (error) {
         console.error("Allocation Metrics API Error:", error);
@@ -30,9 +30,9 @@ export const fetchAllocationMetrics = async () => {
 };
 
 // ---------- Fetch Project List with Billable/Non-Billable Counts ----------
-export const fetchAllocationProjects = async () => {
+export const fetchAllocationProjects = async (params = {}) => {
     try {
-        const res = await api.get('/allocations/projects');
+        const res = await api.get('/allocations/projects', { params });
         return res.data; // [{ project_id, project_name, billable_count, non_billable_count }]
     } catch (error) {
         console.error("Allocation Projects API Error:", error);
@@ -52,9 +52,9 @@ export const fetchProjectEmployees = async (projectId) => {
 };
 
 // ---------- Fetch Organization Utilization ----------
-export const fetchOrganizationUtilization = async () => {
+export const fetchOrganizationUtilization = async (params = {}) => {
     try {
-        const res = await api.get('/allocations/organization');
+        const res = await api.get('/allocations/organization', { params });
         return res.data; // { used: number, breakdown: [{ label, value, color }] }
     } catch (error) {
         console.error("Organization Utilization API Error:", error);
@@ -65,10 +65,17 @@ export const fetchOrganizationUtilization = async () => {
 // ---------- Fetch full allocation page data ----------
 export const fetchAllocationData = async (filters = {}) => {
     try {
+        // Map frontend filter keys to backend parameter names if necessary
+        const params = {
+            department: filters.department === 'All Departments' ? null : filters.department,
+            resource_type: filters.resourceType === 'All Resources' ? null : filters.resourceType,
+            location: filters.location === 'All Locations' ? null : filters.location
+        };
+
         const [metrics, projects, orgUtilization] = await Promise.all([
-            fetchAllocationMetrics(),
-            fetchAllocationProjects(),
-            fetchOrganizationUtilization()
+            fetchAllocationMetrics(params),
+            fetchAllocationProjects(params),
+            fetchOrganizationUtilization(params)
         ]);
 
         return {
@@ -98,19 +105,22 @@ export const fetchAllocationData = async (filters = {}) => {
     }
 };
 // ---------- Fetch Department Breakdown (Billable vs Non-Billable) ----------
-export const fetchDepartmentBreakdown = async () => {
+export const fetchDepartmentBreakdown = async (params = {}) => {
     try {
-        const res = await api.get('/allocations/department-breakdown');
-        return res.data; // [{ department, billable, nonBillable }]
+        const res = await api.get('/allocations/department-breakdown', { params });
+        return res.data; // [{ department, allocated_billable, ... }]
     } catch (error) {
         console.error("Department Breakdown API Error:", error);
         return [];
     }
 };
 // ---------- Fetch Forecast Bench List ----------
-export const fetchForecastBench = async (department = null) => {
+export const fetchForecastBench = async (department = null, location = null) => {
     try {
-        const params = department && department !== 'All Departments' ? { department } : {};
+        const params = {};
+        if (department && department !== 'All Departments') params.department = department;
+        if (location && location !== 'All Locations') params.location = location;
+        
         const res = await api.get('/allocations/forecast-bench', { params });
         return res.data; // [{ employee_id, employee_name, role, project_name, end_date }]
     } catch (error) {
@@ -127,5 +137,16 @@ export const fetchPossibleProjects = async (employeeId) => {
     } catch (error) {
         console.error("Possible Projects API Error:", error);
         return [];
+    }
+};
+
+// ---------- Fetch Filter Options (Departments, etc.) ----------
+export const fetchFilterOptions = async () => {
+    try {
+        const res = await api.get('/employees/filter-options');
+        return res.data; // { departments: [], locations: [], ... }
+    } catch (error) {
+        console.error("Filter Options API Error:", error);
+        return { departments: [] };
     }
 };

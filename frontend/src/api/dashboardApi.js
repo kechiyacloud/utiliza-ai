@@ -11,6 +11,16 @@ export const clearDashboardCache = (department) => {
     dashboardCaches = {};
 };
 
+export const fetchDepartments = async () => {
+    try {
+        const response = await api.get('/dashboard/departments');
+        return response.data;
+    } catch (error) {
+        console.error("Fetch Departments Error:", error);
+        return [];
+    }
+};
+
 export const fetchDashboardData = async (forceUpdate = false, department = 'Overall') => {
     try {
         const cacheKey = department || 'Overall';
@@ -72,8 +82,8 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
             skillsGap: skillsGap.map((s, idx) => ({
                 id: idx,
                 skill: s?.skill || "Unknown",
-                certified: s?.certified ?? 0,
-                demand: s?.demand ?? 0,
+                availability: s?.availability ?? 0,
+                allocated: s?.allocated ?? 0,
                 gap: s?.gap || "low"
             })),
             recentTransitions: transitions.map((t, idx) => ({

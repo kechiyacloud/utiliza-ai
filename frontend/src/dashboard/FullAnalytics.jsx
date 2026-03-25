@@ -107,18 +107,18 @@ const FullAnalytics = () => {
     if (!acc[topic]) {
       acc[topic] = {
         topic,
-        demand: 0,
-        certified: 0,
+        allocated: 0,
+        availability: 0,
         items: []
       };
     }
 
-    acc[topic].demand += item.demand || 0;
-    acc[topic].certified += item.certified || 0;
+    acc[topic].allocated += item.allocated || 0;
+    acc[topic].availability += item.availability || 0;
     acc[topic].items.push(item);
     return acc;
   }, {})).sort((left, right) => {
-    const delta = (right.demand + right.certified) - (left.demand + left.certified);
+    const delta = (right.allocated + right.availability) - (left.allocated + left.availability);
     if (delta !== 0) return delta;
     return left.topic.localeCompare(right.topic);
   });
@@ -440,48 +440,48 @@ const FullAnalytics = () => {
               const isExpanded = expandedTopic === group.topic;
               return (
                 <div key={group.topic} className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/70">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedTopic((current) => current === group.topic ? null : group.topic)}
-                    className="flex w-full items-center justify-between px-4 py-4 text-left"
-                  >
-                    <div>
-                      <p className="text-sm font-black text-slate-900">{group.topic}</p>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{group.items.length} subskills</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Allocated</p>
-                        <p className="text-base font-black text-slate-900">{group.demand}</p>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedTopic((current) => current === group.topic ? null : group.topic)}
+                      className="flex w-full items-center justify-between px-4 py-4 text-left"
+                    >
+                      <div>
+                        <p className="text-sm font-black text-slate-900">{group.topic}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{group.items.length} subskills</p>
                       </div>
-                      <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right shadow-sm">
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-500">Available</p>
-                        <p className="text-base font-black text-emerald-700">{group.certified}</p>
+                      <div className="flex items-center gap-4">
+                        <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
+                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Allocated</p>
+                          <p className="text-base font-black text-slate-900">{group.allocated}</p>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right shadow-sm">
+                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-500">Availability</p>
+                          <p className="text-base font-black text-emerald-700">{group.availability}</p>
+                        </div>
+                        {isExpanded ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
                       </div>
-                      {isExpanded ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
-                    </div>
-                  </button>
+                    </button>
 
-                  {isExpanded && (
-                    <div className="border-t border-slate-100 bg-white px-4 py-4">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        {group.items.sort((left, right) => right.demand - left.demand).map((item) => (
-                          <div key={`${group.topic}-${item.skill}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-bold text-slate-800">{item.skill}</p>
-                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subskill</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs font-black text-slate-900">{item.demand} / {item.certified}</p>
-                                <p className="text-[10px] font-medium text-slate-500">Allocated / Availability</p>
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 bg-white px-4 py-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {group.items.sort((left, right) => right.allocated - left.allocated).map((item) => (
+                            <div key={`${group.topic}-${item.skill}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800">{item.skill}</p>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subskill</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-black text-slate-900">{item.allocated} / {item.availability}</p>
+                                  <p className="text-[10px] font-medium text-slate-500">Allocated / Availability</p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               );
             }) : (

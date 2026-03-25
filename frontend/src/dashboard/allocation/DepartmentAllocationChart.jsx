@@ -11,19 +11,23 @@ import {
 } from 'recharts';
 import { fetchDepartmentBreakdown } from '../../api/allocationApi';
 
-const DepartmentAllocationChart = () => {
+const DepartmentAllocationChart = ({ filters }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
-            const breakdown = await fetchDepartmentBreakdown();
+            const params = {
+                location: filters?.location === 'All Locations' ? null : filters?.location,
+                resource_type: filters?.resourceType === 'All Resources' ? null : filters?.resourceType
+            };
+            const breakdown = await fetchDepartmentBreakdown(params);
             setData(breakdown);
             setLoading(false);
         };
         loadData();
-    }, []);
+    }, [filters]);
 
     if (loading) {
         return (

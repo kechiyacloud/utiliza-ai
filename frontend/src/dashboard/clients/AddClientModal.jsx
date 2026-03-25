@@ -100,14 +100,15 @@ const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                                 <label className="text-xs font-bold text-gray-400 uppercase">Industry</label>
                                 <select
                                     name="industry"
-                                    className="p-3 bg-gray-800 border border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-300"
+                                    className="p-3 bg-gray-800 border border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-200"
+                                    style={{ colorScheme: 'dark' }}
                                     value={formData.industry}
                                     onChange={handleChange}
                                 >
-                                    <option value="Retail">Retail</option>
-                                    <option value="Finance">Finance</option>
-                                    <option value="Healthcare">Healthcare</option>
-                                    <option value="Technology">Technology</option>
+                                    <option value="Retail" className="bg-gray-800 text-white">Retail</option>
+                                    <option value="Finance" className="bg-gray-800 text-white">Finance</option>
+                                    <option value="Healthcare" className="bg-gray-800 text-white">Healthcare</option>
+                                    <option value="Technology" className="bg-gray-800 text-white">Technology</option>
                                 </select>
                             </div>
 
@@ -131,13 +132,14 @@ const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                                 <label className="text-xs font-bold text-gray-400 uppercase">Status</label>
                                 <select
                                     name="status"
-                                    className="p-3 bg-gray-800 border border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-300"
+                                    className="p-3 bg-gray-800 border border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-200"
+                                    style={{ colorScheme: 'dark' }}
                                     value={formData.status}
                                     onChange={handleChange}
                                 >
-                                    <option value="Stable">Stable</option>
-                                    <option value="At Risk">At Risk</option>
-                                    <option value="Growing">Growing</option>
+                                    <option value="Stable" className="bg-gray-800 text-white">Stable</option>
+                                    <option value="At Risk" className="bg-gray-800 text-white">At Risk</option>
+                                    <option value="Growing" className="bg-gray-800 text-white">Growing</option>
                                 </select>
                             </div>
 
@@ -152,6 +154,24 @@ const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                                     value={formData.budget}
                                     onChange={handleChange}
                                 />
+                            </div>
+
+                            {/* Document Upload */}
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-400 uppercase">Client Documentation (PDF/CSV)</label>
+                                <div className="relative group">
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.csv,.doc,.docx"
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        onChange={(e) => console.log('File selected:', e.target.files[0])}
+                                    />
+                                    <div className="p-3 bg-gray-800 border border-dashed border-gray-600 rounded-xl text-sm text-gray-400 group-hover:border-blue-500 group-hover:text-gray-300 transition-all flex items-center justify-center gap-2">
+                                        <Download size={16} />
+                                        <span>Click to upload client documents</span>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1 italic">Upload relevant project details or client overview files.</p>
                             </div>
 
                             <div className="flex gap-3 mt-4">
