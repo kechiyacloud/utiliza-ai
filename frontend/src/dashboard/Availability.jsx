@@ -52,6 +52,8 @@ const AvailabilityFilterPanel = ({
     onClose,
     pendingDept,
     setPendingDept,
+    pendingLocation,
+    setPendingLocation,
     pendingProjects,
     setPendingProjects,
     pendingStartMonth,
@@ -154,8 +156,21 @@ const AvailabilityFilterPanel = ({
                             onChange={(event) => setPendingDept(event.target.value)}
                         >
                             <option value="">All Departments</option>
-                            {filters.departments.map((dept) => (
+                            {(filters.departments || []).map((dept) => (
                                 <option key={dept} value={dept}>{dept}</option>
+                            ))}
+                        </select>
+                    </Section>
+
+                    <Section id="location" title="Location">
+                        <select
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3BA9FB]"
+                            value={pendingLocation}
+                            onChange={(event) => setPendingLocation(event.target.value)}
+                        >
+                            <option value="">All Locations</option>
+                            {(filters.locations || []).map((loc) => (
+                                <option key={loc} value={loc}>{loc}</option>
                             ))}
                         </select>
                     </Section>
@@ -171,7 +186,7 @@ const AvailabilityFilterPanel = ({
                                 />
                                 <span className="font-semibold">All Projects</span>
                             </label>
-                            {filters.projects.map((project) => (
+                            {(filters.projects || []).map((project) => (
                                 <label key={project} className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm ${pendingProjects.includes(project) ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 text-slate-700'}`}>
                                     <input
                                         type="checkbox"
@@ -188,28 +203,6 @@ const AvailabilityFilterPanel = ({
                         )}
                     </Section>
 
-                    <Section id="date-range" title="Date Range">
-                        <div className="grid grid-cols-1 gap-3">
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold text-slate-500">From</label>
-                                <input
-                                    type="month"
-                                    value={pendingStartMonth}
-                                    onChange={(event) => setPendingStartMonth(event.target.value)}
-                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3BA9FB]"
-                                />
-                            </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-semibold text-slate-500">To</label>
-                                <input
-                                    type="month"
-                                    value={pendingEndMonth}
-                                    onChange={(event) => setPendingEndMonth(event.target.value)}
-                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3BA9FB]"
-                                />
-                            </div>
-                        </div>
-                    </Section>
                 </div>
 
                 <div className="absolute bottom-0 w-full border-t border-slate-100 bg-white p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
@@ -230,10 +223,12 @@ const AvailabilityFilterPanel = ({
 
 const Availability = () => {
     const [data, setData] = useState([]);
-    const [filters, setFilters] = useState({ departments: [], projects: [] });
+    const [filters, setFilters] = useState({ departments: [], projects: [], locations: [] });
     const [pendingDept, setPendingDept] = useState('');
+    const [pendingLocation, setPendingLocation] = useState('');
     const [pendingProjects, setPendingProjects] = useState([]);
     const [appliedDept, setAppliedDept] = useState('');
+    const [appliedLocation, setAppliedLocation] = useState('');
     const [appliedProjects, setAppliedProjects] = useState([]);
     const [pendingStartMonth, setPendingStartMonth] = useState(() => toMonthInputValue(new Date(new Date().getFullYear(), new Date().getMonth() - PAST_MONTHS, 1)));
     const [pendingEndMonth, setPendingEndMonth] = useState(() => toMonthInputValue(new Date(new Date().getFullYear(), new Date().getMonth() + FUTURE_MONTHS, 1)));
@@ -309,17 +304,19 @@ const Availability = () => {
 
         return flatRows.filter((row) => {
             const matchesDept = !pendingDept || row.department === pendingDept;
+            const matchesLocation = !pendingLocation || row.location === pendingLocation;
             const matchesProject = pendingProjects.length === 0 || pendingProjects.includes(row.project_name);
             const matchesDate = overlapsRange(row.start_date, row.end_date, startMonth, endMonthLimit);
 
-            return matchesDept && matchesProject && matchesDate;
+            return matchesDept && matchesLocation && matchesProject && matchesDate;
         });
-    }, [flatRows, pendingDept, pendingEndMonth, pendingProjects, pendingStartMonth]);
+    }, [flatRows, pendingDept, pendingLocation, pendingEndMonth, pendingProjects, pendingStartMonth]);
 
-    const loadAvailabilityData = async (department = appliedDept) => {
+    const loadAvailabilityData = async (department = appliedDept, location = appliedLocation) => {
         try {
             const result = await getAvailabilityData({
-                department: department || undefined
+                department: department || undefined,
+                location: location || undefined
             });
             setData(Array.isArray(result) ? result : []);
         } catch (error) {
@@ -369,6 +366,7 @@ const Availability = () => {
                 employee_id: employee.employee_id,
                 employee_name: employee.employee_name,
                 department: employee.department,
+                location: employee.location, // Added location
                 project_name: allocation.project_name || 'Unassigned',
                 allocation_percentage: allocation.allocation_percentage ?? 0,
                 start_date: allocation.start_date,
@@ -454,17 +452,21 @@ const Availability = () => {
     const handleApplyFilters = async () => {
         setFilterLoading(true);
         setAppliedDept(pendingDept);
+        setAppliedLocation(pendingLocation);
         setAppliedProjects(pendingProjects);
         setAppliedStartMonth(pendingStartMonth);
         setAppliedEndMonth(pendingEndMonth);
-        await loadAvailabilityData(pendingDept);
+        await loadAvailabilityData(pendingDept, pendingLocation);
+        setIsFilterOpen(false); // Close filter panel after applying
         setFilterLoading(false);
     };
 
     const handleResetFilters = async () => {
         setPendingDept('');
+        setPendingLocation('');
         setPendingProjects([]);
         setAppliedDept('');
+        setAppliedLocation('');
         setAppliedProjects([]);
         const defaultStart = toMonthInputValue(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - PAST_MONTHS, 1));
         const defaultEnd = toMonthInputValue(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + FUTURE_MONTHS, 1));
@@ -683,6 +685,7 @@ const Availability = () => {
                         {formatDate(parseMonthInput(appliedStartMonth))} to {formatDate(new Date((parseMonthInput(appliedEndMonth) || new Date()).getFullYear(), (parseMonthInput(appliedEndMonth) || new Date()).getMonth() + 1, 0))}
                     </div>
                     {appliedDept && <div className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{appliedDept}</div>}
+                    {appliedLocation && <div className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">{appliedLocation}</div>}
                     {appliedProjects.length > 0 && <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">{appliedProjects.length} projects selected</div>}
                     <div className="ml-auto text-xs font-semibold text-slate-500">{displayData.length} employees loaded</div>
                 </div>

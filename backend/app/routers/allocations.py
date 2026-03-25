@@ -6,63 +6,117 @@ router = APIRouter(prefix="/allocations", tags=["Allocations"])
 
 
 @router.get("/metrics")
-def allocation_metrics():
+def allocation_metrics(
+    department: Optional[str] = Query(None), 
+    resource_type: Optional[str] = Query(None),
+    location: Optional[str] = Query(None)
+):
     """
-    Returns all 6 info-card metrics for the Allocation page:
-    Total Resources, Billable, Non-Billable, Bench Strength,
-    Avg Utilization, and Overallocated count.
+    Returns all 6 info-card metrics for the Allocation page,
+    filtered by department, resource type, and location.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
-        # 1. Total Resources — all employees
-        cur.execute("SELECT COUNT(*) FROM employee_master")
+        # Build base WHERE clauses for employee filtering
+        where_clauses = []
+        params = []
+        
+        if department and department != 'All Departments':
+            where_clauses.append("em.department = %s")
+            params.append(department)
+        if location and location != 'All Locations':
+            where_clauses.append("em.location = %s")
+            params.append(location)
+
+        # 1. Total Resources
+        tr_query = "SELECT COUNT(*) FROM employee_master em LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id"
+        tr_where = list(where_clauses)
+        if resource_type == 'Billable Only':
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable')")
+        elif resource_type == 'Internal Only':
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable')")
+        elif resource_type == 'Bench Strength':
+            tr_where.append("p.employee_status = 'Bench'")
+            
+        if tr_where:
+            tr_query += " WHERE " + " AND ".join(tr_where)
+        cur.execute(tr_query, tuple(params))
         total_resources = cur.fetchone()[0]
 
-        # 2. Billable Count — distinct employees tagged 'Allocated - Billable'
-        cur.execute("""
-            SELECT COUNT(DISTINCT employee_id)
-            FROM projects_allocation
-            WHERE LOWER(project_tags) = 'billable'
-        """)
+        # 2. Billable Count
+        billable_query = """
+            SELECT COUNT(DISTINCT pa.employee_id)
+            FROM projects_allocation pa
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            WHERE LOWER(pa.project_tags) = 'billable'
+        """
+        b_where = list(where_clauses)
+        if resource_type == 'Bench Strength':
+             b_where.append("1=0")
+        if b_where:
+            billable_query += " AND " + " AND ".join(b_where)
+        cur.execute(billable_query, tuple(params))
         billable_count = cur.fetchone()[0]
 
-        # 3. Non-Billable Count — distinct employees tagged 'Allocated - Non-Billable'
-        cur.execute("""
-            SELECT COUNT(DISTINCT employee_id)
-            FROM projects_allocation
-            WHERE LOWER(project_tags) = 'non-billable'
-        """)
+        # 3. Non-Billable Count
+        non_billable_query = """
+            SELECT COUNT(DISTINCT pa.employee_id)
+            FROM projects_allocation pa
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            WHERE LOWER(pa.project_tags) = 'non-billable'
+        """
+        nb_where = list(where_clauses)
+        if resource_type == 'Bench Strength':
+             nb_where.append("1=0")
+        if nb_where:
+            non_billable_query += " AND " + " AND ".join(nb_where)
+        cur.execute(non_billable_query, tuple(params))
         non_billable_count = cur.fetchone()[0]
 
         # 4. Bench Strength
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM employee_master_pro
-            WHERE employee_status = 'Bench'
-        """)
+        bench_query = "SELECT COUNT(*) FROM employee_master_pro p JOIN employee_master em ON p.employee_id = em.employee_id WHERE p.employee_status = 'Bench'"
+        ben_where = list(where_clauses)
+        if resource_type == 'Billable Only' or resource_type == 'Internal Only':
+             ben_where.append("1=0")
+        if ben_where:
+            bench_query += " AND " + " AND ".join(ben_where)
+        cur.execute(bench_query, tuple(params))
         bench_strength = cur.fetchone()[0]
 
-        # 5. Avg Utilization (Total Allocation % / Total Resources)
-        cur.execute("""
-            SELECT COALESCE(SUM(allocation_percentage), 0) / (SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE COUNT(*) END FROM employee_master)
-            FROM projects_allocation
-        """)
-        avg_utilization = round(float(cur.fetchone()[0]), 2)
+        # 5. Avg Utilization
+        if resource_type == 'Bench Strength':
+             avg_utilization = 0
+        else:
+            util_query = """
+                SELECT COALESCE(SUM(pa.allocation_percentage), 0) / NULLIF((SELECT COUNT(*) FROM employee_master em {0}), 0)
+                FROM projects_allocation pa
+                JOIN employee_master em ON pa.employee_id = em.employee_id
+            """.format(" WHERE " + " AND ".join(where_clauses) if where_clauses else "")
+            
+            # Need params twice for SUM and for NULLIF subquery
+            cur.execute(util_query, tuple(params + params))
+            avg_utilization_val = cur.fetchone()[0]
+            avg_utilization = round(float(avg_utilization_val or 0), 2)
 
-        # 6. Overallocated — employees in multiple projects, all billable
-        cur.execute("""
-            SELECT COUNT(*) FROM (
-                SELECT employee_id
-                FROM projects_allocation
-                WHERE LOWER(project_tags) = 'billable'
-                GROUP BY employee_id
-                HAVING COUNT(DISTINCT project_id) > 1
-                   AND COUNT(*) = COUNT(CASE WHEN LOWER(project_tags) = 'billable' THEN 1 END)
-            ) overalloc
-        """)
-        overallocated = cur.fetchone()[0]
+        # 6. Overallocated
+        if resource_type == 'Bench Strength' or resource_type == 'Internal Only':
+             overallocated = 0
+        else:
+            overalloc_query = """
+                SELECT COUNT(*) FROM (
+                    SELECT pa.employee_id
+                    FROM projects_allocation pa
+                    JOIN employee_master em ON pa.employee_id = em.employee_id
+                    WHERE LOWER(pa.project_tags) = 'billable'
+                    {0}
+                    GROUP BY pa.employee_id
+                    HAVING COUNT(DISTINCT pa.project_id) > 1
+                ) overalloc
+            """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
+            cur.execute(overalloc_query, tuple(params))
+            overallocated = cur.fetchone()[0]
 
         return {
             "totalResources": {"value": total_resources, "label": "Total Resources"},
@@ -76,22 +130,26 @@ def allocation_metrics():
     except Exception as e:
         print("Allocation metrics DB error:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
     finally:
         cur.close()
         release_db_connection(conn)
 
 
 @router.get("/projects")
-def allocation_projects():
+def allocation_projects(
+    department: Optional[str] = Query(None), 
+    resource_type: Optional[str] = Query(None),
+    location: Optional[str] = Query(None)
+):
     """
-    Returns all projects with their billable and non-billable employee counts.
+    Returns all projects with their billable and non-billable employee counts,
+    optionally filtered by department, resource type, and location.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
-        cur.execute("""
+        query = """
             SELECT
                 pa.project_id,
                 p.project_name,
@@ -99,10 +157,33 @@ def allocation_projects():
                 COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'non-billable' THEN pa.employee_id END) AS non_billable_count
             FROM projects_allocation pa
             JOIN projects p ON pa.project_id = p.project_id
-            GROUP BY pa.project_id, p.project_name
-            ORDER BY p.project_name
-        """)
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
+        """
+        where_clauses = []
+        params = []
+        
+        if department and department != 'All Departments':
+            where_clauses.append("em.department = %s")
+            params.append(department)
+        if location and location != 'All Locations':
+            where_clauses.append("em.location = %s")
+            params.append(location)
+            
+        if resource_type == 'Billable Only':
+            where_clauses.append("LOWER(pa.project_tags) = 'billable'")
+        elif resource_type == 'Internal Only':
+            where_clauses.append("LOWER(pa.project_tags) = 'non-billable'")
+        elif resource_type == 'Bench Strength':
+            where_clauses.append("ppro.employee_status = 'Bench'")
 
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+            
+        query += " GROUP BY pa.project_id, p.project_name"
+        query += " ORDER BY p.project_name"
+        
+        cur.execute(query, tuple(params))
         rows = cur.fetchall()
 
         return [
@@ -167,27 +248,79 @@ def project_employees(project_id: str):
 
 
 @router.get("/organization")
-def organization_utilization():
+def organization_utilization(
+    department: Optional[str] = Query(None), 
+    resource_type: Optional[str] = Query(None),
+    location: Optional[str] = Query(None)
+):
     """
-    Returns organization-wide utilization and breakdown.
+    Returns organization-wide utilization and breakdown, 
+    optionally filtered by department, resource type, and location.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
         # 1. Avg Utilization
-        cur.execute("SELECT COALESCE(AVG(allocation_percentage), 0) FROM projects_allocation")
+        util_query = """
+            SELECT COALESCE(AVG(pa.allocation_percentage), 0) 
+            FROM projects_allocation pa
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
+        """
+        where_clauses = []
+        params = []
+        if department and department != 'All Departments':
+            where_clauses.append("em.department = %s")
+            params.append(department)
+        if location and location != 'All Locations':
+            where_clauses.append("em.location = %s")
+            params.append(location)
+        
+        if resource_type == 'Billable Only':
+            where_clauses.append("LOWER(pa.project_tags) = 'billable'")
+        elif resource_type == 'Internal Only':
+            where_clauses.append("LOWER(pa.project_tags) = 'non-billable'")
+        elif resource_type == 'Bench Strength':
+             # Utilization is 0 for bench by definition, but let's check if the query returns 0
+             where_clauses.append("ppro.employee_status = 'Bench'")
+        
+        if where_clauses:
+            util_query += " WHERE " + " AND ".join(where_clauses)
+        
+        cur.execute(util_query, tuple(params))
         avg_util = float(cur.fetchone()[0])
 
         # 2. Breakdown by employee status
-        cur.execute("""
-            SELECT employee_status, COUNT(*) 
-            FROM employee_master_pro 
-            GROUP BY employee_status
-        """)
+        breakdown_query = """
+            SELECT p.employee_status, COUNT(*) 
+            FROM employee_master_pro p
+            JOIN employee_master em ON p.employee_id = em.employee_id
+        """
+        where_clauses_b = []
+        params_b = []
+        if department and department != 'All Departments':
+            where_clauses_b.append("em.department = %s")
+            params_b.append(department)
+        if location and location != 'All Locations':
+            where_clauses_b.append("em.location = %s")
+            params_b.append(location)
+            
+        if resource_type == 'Billable Only':
+            where_clauses_b.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable')")
+        elif resource_type == 'Internal Only':
+            where_clauses_b.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable')")
+        elif resource_type == 'Bench Strength':
+            where_clauses_b.append("p.employee_status = 'Bench'")
+
+        if where_clauses_b:
+            breakdown_query += " WHERE " + " AND ".join(where_clauses_b)
+        
+        breakdown_query += " GROUP BY p.employee_status"
+        cur.execute(breakdown_query, tuple(params_b))
+        
         rows = cur.fetchall()
         
-        # Mapping statuses to colors (matching OrganizationUtilization.jsx)
         color_map = {
             "Bench": "#94a3b8",
             "Billable": "#60a5fa",
@@ -197,11 +330,11 @@ def organization_utilization():
         
         breakdown = []
         for status, count in rows:
-            if status: # Avoid empty status
+            if status:
                 breakdown.append({
                     "label": status,
                     "value": count,
-                    "color": color_map.get(status, "#cbd5e1") # default gray-300
+                    "color": color_map.get(status, "#cbd5e1")
                 })
 
         return {
@@ -218,67 +351,58 @@ def organization_utilization():
 
 
 @router.get("/department-breakdown")
-def department_allocation_breakdown():
+def department_allocation_breakdown(
+    location: Optional[str] = Query(None),
+    resource_type: Optional[str] = Query(None)
+):
     """
-    Returns billable and non-billable employee counts per department with 3 categories:
-    1. Allocated and Billable (Green)
-    2. Allocated and Non-Billable (Blue)
-    3. Not Allocated and Billable (Orange)
+    Returns billable and non-billable employee counts per department.
+    Filtered by location and resource type.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
-        # Hierarchy:
-        # 1: Allocated & Billable (>0% and 'billable' not 'non')
-        # 2: Allocated & Non-Billable (>0% and 'nonbillable')
-        # 3: Not Allocated & Billable (0% and 'billable' not 'non')
-        cur.execute("""
+        where_clauses = ["em.date_of_resign IS NULL"]
+        params = []
+        
+        if location and location != 'All Locations':
+            where_clauses.append("em.location = %s")
+            params.append(location)
+            
+        if resource_type == 'Billable Only':
+            where_clauses.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable')")
+        elif resource_type == 'Internal Only':
+            where_clauses.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable')")
+        elif resource_type == 'Bench Strength':
+            where_clauses.append("ppro.employee_status = 'Bench'")
+
+        query = """
             WITH EmpStatus AS (
                 SELECT 
                     em.employee_id,
                     em.department,
                     CASE 
-                        WHEN (pa.allocation_percentage > 0 
-                            AND LOWER(pa.project_tags) LIKE '%billable%' 
-                            AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 1
-
-                        WHEN (pa.allocation_percentage > 0 
-                            AND LOWER(pa.project_tags) LIKE '%nonbillable%') THEN 2
-
-                        WHEN (pa.allocation_percentage = 0 
-                            AND LOWER(pa.project_tags) LIKE '%billable%' 
-                            AND LOWER(pa.project_tags) NOT LIKE '%non%') THEN 3
-
-                        WHEN pa.employee_id IS NULL THEN 4   -- 👈 handles pure bench
-
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%')) THEN 1
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%nonbillable%')) THEN 2
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%')) THEN 3
                         ELSE 4
                     END as status_rank
                 FROM employee_master em
-                LEFT JOIN projects_allocation pa 
-                    ON em.employee_id = pa.employee_id
-            ),
-
-            BestStatus AS (
-                SELECT 
-                    employee_id,
-                    department,
-                    MIN(status_rank) as top_rank
-                FROM EmpStatus
-                GROUP BY employee_id, department
+                JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
+                WHERE {0}
             )
-
             SELECT 
                 department,
-                COUNT(CASE WHEN top_rank = 1 THEN 1 END) as allocated_billable,
-                COUNT(CASE WHEN top_rank = 2 THEN 1 END) as allocated_non_billable,
-                COUNT(CASE WHEN top_rank = 3 THEN 1 END) as not_allocated_billable,
-                COUNT(CASE WHEN top_rank = 4 THEN 1 END) as bench   -- 👈 optional but recommended
-            FROM BestStatus
+                COUNT(CASE WHEN status_rank = 1 THEN 1 END) as allocated_billable,
+                COUNT(CASE WHEN status_rank = 2 THEN 1 END) as allocated_non_billable,
+                COUNT(CASE WHEN status_rank = 3 THEN 1 END) as not_allocated_billable
+            FROM EmpStatus
             GROUP BY department
             ORDER BY department
-        """)
+        """.format(" AND ".join(where_clauses))
 
+        cur.execute(query, tuple(params))
         rows = cur.fetchall()
 
         return [
@@ -301,18 +425,18 @@ def department_allocation_breakdown():
 
 
 @router.get("/forecast-bench")
-def get_forecast_bench(department: Optional[str] = Query(None)):
+def get_forecast_bench(
+    department: Optional[str] = Query(None),
+    location: Optional[str] = Query(None)
+):
     """
     Returns employees whose allocation is ending within the next 30 days.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
-    dept_e_filter = " AND em.department = %s " if department else ""
-    dept_params = (department,) if department else ()
-
     try:
-        cur.execute("""
+        query = """
             SELECT 
                 em.employee_id,
                 em.employee_name,
@@ -324,9 +448,18 @@ def get_forecast_bench(department: Optional[str] = Query(None)):
             JOIN employee_master em ON pa.employee_id = em.employee_id
             JOIN projects p ON pa.project_id = p.project_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-            """ + dept_e_filter + """
-            ORDER BY pa.allocation_end_date ASC
-        """, dept_params)
+        """
+        params = []
+        if department and department != 'All Departments':
+            query += " AND em.department = %s"
+            params.append(department)
+        if location and location != 'All Locations':
+            query += " AND em.location = %s"
+            params.append(location)
+
+        query += " ORDER BY pa.allocation_end_date ASC"
+
+        cur.execute(query, tuple(params))
         rows = cur.fetchall()
         return [
             {

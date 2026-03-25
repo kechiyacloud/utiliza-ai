@@ -7,7 +7,8 @@ router = APIRouter(prefix="/availability", tags=["Availability"])
 @router.get("/all")
 def get_all_availability(
     department: Optional[str] = Query(None),
-    project: Optional[str] = Query(None)
+    project: Optional[str] = Query(None),
+    location: Optional[str] = Query(None)
 ):
     """
     Returns allocation data for all employees with filtering options.
@@ -38,6 +39,9 @@ def get_all_availability(
         if project:
             query += " AND p.project_name = %s"
             params.append(project)
+        if location:
+            query += " AND em.location = %s"
+            params.append(location)
 
         query += " ORDER BY em.employee_name"
 
@@ -77,23 +81,28 @@ def get_all_availability(
 @router.get("/filters")
 def get_availability_filters():
     """
-    Returns unique departments and projects for filtering.
+    Returns unique departments, projects, and locations for filtering.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
         # Get departments
-        cur.execute("SELECT DISTINCT department FROM employee_master WHERE date_of_resign IS NULL AND department IS NOT NULL ORDER BY department")
+        cur.execute("SELECT DISTINCT department FROM employee_master WHERE date_of_resign IS NULL AND department IS NOT NULL AND department != '' ORDER BY department")
         departments = [row[0] for row in cur.fetchall()]
 
         # Get projects
-        cur.execute("SELECT DISTINCT project_name FROM projects WHERE project_name IS NOT NULL ORDER BY project_name")
+        cur.execute("SELECT DISTINCT project_name FROM projects WHERE project_name IS NOT NULL AND project_name != '' ORDER BY project_name")
         projects = [row[0] for row in cur.fetchall()]
+
+        # Get locations
+        cur.execute("SELECT DISTINCT location FROM employee_master WHERE date_of_resign IS NULL AND location IS NOT NULL AND location != '' ORDER BY location")
+        locations = [row[0] for row in cur.fetchall()]
 
         return {
             "departments": departments,
-            "projects": projects
+            "projects": projects,
+            "locations": locations
         }
 
     except Exception as e:

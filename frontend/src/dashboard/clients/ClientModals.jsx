@@ -185,22 +185,49 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }) => {
     );
 };
 
-export const ReportModal = ({ isOpen, onClose }) => {
+export const ReportModal = ({ isOpen, onClose, clients }) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportType, setReportType] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
 
     if (!isOpen) return null;
 
-    const handleGenerate = (type) => {
+    const handleGenerate = (type, format) => {
         setIsGenerating(true);
         setReportType(type);
+        
         setTimeout(() => {
+            if (format === 'CSV' && clients) {
+                let csvContent = "data:text/csv;charset=utf-8,";
+                csvContent += "Client Name,Industry,Budget,Status,Projects Count\n";
+                
+                clients.forEach(c => {
+                    const row = [
+                        c.name,
+                        c.industry,
+                        c.budget,
+                        c.status,
+                        c.projects?.length || 0
+                    ].join(",");
+                    csvContent += row + "\n";
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `${type.toLowerCase().replace(/\s+/g, '_')}_report.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                console.log(`Generating ${format} for ${type}`);
+            }
+
             setIsGenerating(false);
             setReportType(null);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
-        }, 2000);
+        }, 1500);
     };
 
     return (
@@ -219,7 +246,7 @@ export const ReportModal = ({ isOpen, onClose }) => {
                     {['Strategic Project Health', 'Resource Allocation Matrix', 'Commercial Budget Burn'].map((type, idx) => (
                         <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center justify-between hover:bg-white/10 cursor-pointer transition-all group relative overflow-hidden">
                             {isGenerating && reportType === type && (
-                                <div className="absolute inset-0 bg-[#3BA9FB]/10 flex items-center justify-center backdrop-blur-sm">
+                                <div className="absolute inset-0 bg-[#3BA9FB]/10 flex items-center justify-center backdrop-blur-sm z-20">
                                     <div className="flex items-center gap-3">
                                         <div className="w-5 h-5 border-2 border-[#3BA9FB] border-t-transparent rounded-full animate-spin"></div>
                                         <span className="text-[10px] font-black text-[#3BA9FB] uppercase tracking-[0.2em]">Compiling Data...</span>
@@ -235,14 +262,14 @@ export const ReportModal = ({ isOpen, onClose }) => {
                             <div className="flex gap-2">
                                 <button
                                     disabled={isGenerating}
-                                    onClick={() => handleGenerate(type)}
+                                    onClick={() => handleGenerate(type, 'CSV')}
                                     className="px-3 py-1.5 bg-white/5 hover:bg-[#3BA9FB] rounded-lg text-[9px] text-white/60 hover:text-white font-black uppercase tracking-widest transition-all"
                                 >
                                     CSV
                                 </button>
                                 <button
                                     disabled={isGenerating}
-                                    onClick={() => handleGenerate(type)}
+                                    onClick={() => handleGenerate(type, 'PDF')}
                                     className="px-3 py-1.5 bg-white/5 hover:bg-[#3BA9FB] rounded-lg text-[9px] text-white/60 hover:text-white font-black uppercase tracking-widest transition-all"
                                 >
                                     PDF

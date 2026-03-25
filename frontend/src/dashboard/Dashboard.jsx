@@ -20,7 +20,8 @@ import {
   clearTodo, 
   exportRiskBoard, 
   updateTodo, 
-  clearDashboardCache 
+  clearDashboardCache,
+  fetchDepartments 
 } from '../api/dashboardApi';
 import { getEmployeeList } from '../api/employeeApi';
 import { createProject } from '../api/projectsApi';
@@ -91,19 +92,29 @@ function Dashboard() {
     const loadData = async () => {
       try {
         // Parallel fetch for all initial dashboard requirements
-        const [dashRes, empListRes] = await Promise.allSettled([
+        const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
           fetchDashboardData(false, selectedDepartment),
-          getEmployeeList()
+          getEmployeeList(),
+          fetchTodos(),
+          fetchDepartments()
         ]);
 
         if (dashRes.status === 'fulfilled') {
           setData(dashRes.value.data);
-          if (dashRes.value.todos) setTodos(dashRes.value.todos);
+          // The todos from dashRes are dynamic suggestions, we combine them with manual todos
+          // if (dashRes.value.todos) setTodos(prev => [...dashRes.value.todos, ...prev.filter(t => !t.isSystemSuggestion)]);
         }
 
         if (empListRes.status === 'fulfilled') {
           setAllEmployees(empListRes.value);
-          setDepartmentOptions([...new Set((empListRes.value || []).map(employee => employee.department).filter(Boolean))].sort());
+        }
+        
+        if (todosRes.status === 'fulfilled') {
+          setTodos(todosRes.value);
+        }
+
+        if (deptsRes.status === 'fulfilled') {
+          setDepartmentOptions(deptsRes.value);
         }
       } catch (error) {
         console.error("Failed to load dashboard data", error);
@@ -431,8 +442,8 @@ function Dashboard() {
                     <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="available" name="Available Resources" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocated Resources" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="availability" name="Availability" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="allocated" name="Allocated" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
