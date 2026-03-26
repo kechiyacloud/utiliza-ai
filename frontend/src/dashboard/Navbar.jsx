@@ -21,7 +21,7 @@ const Navbar = () => {
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
         { icon: Briefcase, label: 'Client', path: 'client' },
         { icon: Network, label: 'Organization', path: 'workstatus' },
-        { icon: Settings, label: 'Settings', path: 'workstatus' },
+        { icon: Settings, label: 'Settings', path: 'settings' },
     ];
 
     const handleLogout = () => {

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, TrendingUp, TrendingDown, CalendarClock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import AddProjectPanel from './AddProjectPanel';
 
 const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, trendUp, onClick, active, customColors }) => {
     return (
@@ -54,15 +53,8 @@ const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, tr
 const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
 
     if (!stats) return null;
-
-    const handleAddProject = () => {
-        if (onProjectAdded) {
-            onProjectAdded();
-        }
-    };
 
     return (
         <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -83,7 +75,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     </div>
                 </div>
                 <button
-                    onClick={() => setIsAddPanelOpen(true)}
+                    onClick={() => navigate('/info/projects/add')}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
                 >
                     + Add New Project
@@ -150,11 +142,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                 />
             </div>
 
-            <AddProjectPanel
-                isOpen={isAddPanelOpen}
-                onClose={() => setIsAddPanelOpen(false)}
-                onAdd={handleAddProject}
-            />
         </div>
     );
 };

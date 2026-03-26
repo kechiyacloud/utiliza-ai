@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   ArrowLeft, 
   Download, 
@@ -143,65 +145,54 @@ const FullAnalytics = () => {
 
   const handleExportAnalytics = async () => {
     try {
-      const printWindow = window.open('', '_blank', 'width=1200,height=900');
-      if (!printWindow) {
-        throw new Error('Popup blocked');
-      }
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-      const html = `
-        <html>
-          <head>
-            <title>workforce-pulse-analytics-${selectedDept}</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; }
-              h1 { margin: 0 0 8px; font-size: 28px; }
-              p { margin: 0 0 16px; color: #475569; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; font-size: 12px; }
-              th { background: #f8fafc; text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; }
-              .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
-              .card { border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; }
-              .label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; }
-              .value { font-size: 24px; font-weight: 800; margin-top: 8px; }
-            </style>
-          </head>
-          <body>
-            <h1>Workforce Pulse Analytics</h1>
-            <p>Department: ${selectedDept}</p>
-            <div class="grid">
-              ${analyticsHighlights.map((item) => `<div class="card"><div class="label">${item.label}</div><div class="value">${item.value}</div></div>`).join('')}
-            </div>
-            <h2>Transitions Table</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Role</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${transitions.map((transition) => `
-                  <tr>
-                    <td>${transition.employee}</td>
-                    <td>${transition.role}</td>
-                    <td>${transition.fromProject}</td>
-                    <td>${transition.toProject}</td>
-                    <td>${transition.date ? new Date(transition.date).toLocaleDateString('en-GB') : 'TBD'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `;
+      doc.setFontSize(20);
+      doc.setTextColor(40);
+      doc.text('Workforce Pulse Analytics', 14, 20);
 
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Department: ${selectedDept} | Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+      // Highlights summary
+      let y = 38;
+      doc.setFontSize(11);
+      doc.setTextColor(40);
+      doc.text('Highlights', 14, y);
+      y += 7;
+      analyticsHighlights.forEach((item, i) => {
+        const x = 14 + (i % 4) * 70;
+        if (i > 0 && i % 4 === 0) y += 18;
+        doc.setFontSize(7);
+        doc.setTextColor(100);
+        doc.text(item.label.toUpperCase(), x, y);
+        doc.setFontSize(13);
+        doc.setTextColor(40);
+        doc.text(String(item.value), x, y + 7);
+      });
+      y += 22;
+
+      // Transitions table
+      const tableRows = transitions.map((t) => [
+        t.employee || '',
+        t.role || '',
+        t.fromProject || '',
+        t.toProject || '',
+        t.date ? new Date(t.date).toLocaleDateString('en-GB') : 'TBD',
+      ]);
+
+      autoTable(doc, {
+        head: [['Employee', 'Role', 'From', 'To', 'Date']],
+        body: tableRows,
+        startY: y,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+      });
+
+      doc.save(`workforce-pulse-analytics-${selectedDept}.pdf`);
     } catch (error) {
       console.error('Failed to export analytics PDF', error);
       alert('Failed to export analytics PDF.');

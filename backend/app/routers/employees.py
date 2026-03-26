@@ -260,35 +260,7 @@ def fetch_employee_of_month():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Priority 1: Employee with most nominations in current month
-        # Priority 2: Fallback to highest allocation if no nominations
-        
-        from datetime import datetime
-        current_month = datetime.now().strftime("%Y-%m")
-        
-        # Check nominations first
-        cur.execute("""
-            SELECT 
-                m.employee_id,
-                m.employee_name,
-                m.role_designation,
-                m.photo_url,
-                COUNT(n.id) as nomination_count
-            FROM employee_master m
-            JOIN employee_nominations n ON m.employee_id = n.employee_id
-            WHERE n.month = %s
-              AND m.date_of_resign IS NULL
-            GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
-            ORDER BY nomination_count DESC, m.employee_name ASC
-            LIMIT 1
-        """, (current_month,))
-        
-        row = cur.fetchone()
-        if row:
-            columns = [desc[0] for desc in cur.description]
-            return dict(zip(columns, row))
-
-        # Fallback to allocation based
+        # Highest allocation employee
         query = """
             SELECT 
                 m.employee_id,
@@ -320,21 +292,7 @@ def fetch_employee_of_month():
 
 @router.post("/employees/nominate")
 def nominate_employee(nom: NominationInput):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO employee_nominations (employee_id, nominator_role, feedback_text, month)
-            VALUES (%s, %s, %s, %s)
-        """, (nom.employee_id, nom.nominator_role, nom.feedback_text, nom.month))
-        conn.commit()
-        return {"detail": "Nomination submitted successfully"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
+    return {"detail": "Nominations are not supported in the current schema version."}
 
 @router.get("/employees/action-inbox")
 def fetch_action_inbox():

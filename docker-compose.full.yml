@@ -1,54 +1,62 @@
 services:
 
-  database:
+  postgres:
     image: postgres:16-alpine
-    container_name: postgres_db
-    env_file: ./database/.env
+    container_name: project-postgres-full
+    restart: always
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localpass
+      POSTGRES_DB: migration_db
     ports:
-      - "5440:5432"
+      - "5433:5432"
     volumes:
-      - ./database/backup_v6.sql:/docker-entrypoint-initdb.d/1_backup_v6.sql
-      - ./database/backup_v7.sql:/docker-entrypoint-initdb.d/2_backup_v7.sql
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_full:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   backend:
     restart: always
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: project-backend-dev
+    container_name: project-backend-full
     env_file: ./backend/.env
     environment:
-      - DB_HOST=database
+      - DB_HOST=postgres
       - DB_PORT=5432
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
     depends_on:
-      - database
+      - postgres
+      - redis
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: project-frontend-dev
+    container_name: project-frontend-full
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
 
+  redis:
+    image: redis:7-alpine
+    container_name: project-redis-full
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_full:/data
+
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: project-ngrok-tunnel
+    container_name: project-ngrok-tunnel-full
     restart: always
     environment:
-      # You can put NGROK_AUTHTOKEN inside a .env file or export it locally
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     command:
       - "http"
@@ -59,6 +67,8 @@ services:
     depends_on:
       - frontend
       - backend
+      - redis
 
 volumes:
-  postgres_data:
+  postgres_data_full:
+  redis_data_full:

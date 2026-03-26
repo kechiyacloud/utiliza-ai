@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 /**
  * Exports data to CSV
@@ -28,6 +28,7 @@ export const exportToCSV = (data, fileName = 'export') => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
 
 /**
@@ -38,43 +39,13 @@ export const exportToCSV = (data, fileName = 'export') => {
 export const exportToExcel = (data, fileName = 'export') => {
     if (!data) return;
     const sheets = Array.isArray(data) ? { Data: data } : data;
-    const workbookHtml = Object.entries(sheets)
-        .map(([sheetName, rows]) => {
-            const safeRows = Array.isArray(rows) ? rows : [];
-            const headers = Object.keys(safeRows[0] || {});
-            const headerHtml = headers.map((header) => `<th>${header}</th>`).join('');
-            const rowHtml = safeRows
-                .map((row) => {
-                    const cells = headers.map((header) => `<td>${String(row[header] ?? '')}</td>`).join('');
-                    return `<tr>${cells}</tr>`;
-                })
-                .join('');
-
-            return `
-                <table>
-                    <caption>${sheetName}</caption>
-                    <thead><tr>${headerHtml}</tr></thead>
-                    <tbody>${rowHtml}</tbody>
-                </table>
-                <br/>
-            `;
-        })
-        .join('');
-
-    const blob = new Blob(
-        [
-            `<html><head><meta charset="UTF-8"></head><body>${workbookHtml}</body></html>`
-        ],
-        { type: 'application/vnd.ms-excel' }
-    );
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${fileName}.xls`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const wb = XLSX.utils.book_new();
+    Object.entries(sheets).forEach(([sheetName, rows]) => {
+        const safeRows = Array.isArray(rows) ? rows : [];
+        const ws = XLSX.utils.json_to_sheet(safeRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
 };
 
 /**
@@ -87,12 +58,12 @@ export const exportToExcel = (data, fileName = 'export') => {
 export const exportToPDF = (data, columns, title = 'Export', fileName = 'export') => {
     if (!data || !columns) return;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    
+
     // Add Title
     doc.setFontSize(18);
     doc.setTextColor(40);
     doc.text(title, 14, 22);
-    
+
     // Add Date
     doc.setFontSize(10);
     doc.setTextColor(100);
@@ -101,7 +72,7 @@ export const exportToPDF = (data, columns, title = 'Export', fileName = 'export'
     const tableRows = data.map(item => columns.map(col => item[col.dataKey] || ''));
     const tableHeaders = [columns.map(col => col.header)];
 
-    doc.autoTable({
+    autoTable(doc, {
         head: tableHeaders,
         body: tableRows,
         startY: 35,

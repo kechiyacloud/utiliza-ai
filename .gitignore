@@ -2,3 +2,17 @@
 docker_build_output*.txt
 status*.txt
 *.log
+*.txt
+
+
+.claude/
+
+# Migration working files
+
+
+*_report.md
+*_logs*
+
+
+
+

@@ -1,0 +1,57 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: project-postgres-local
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localpass
+      POSTGRES_DB: migration_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  backend:
+    restart: always
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: project-backend-local
+    env_file: ./backend/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: project-frontend-local
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  redis:
+    image: redis:7-alpine
+    container_name: project-redis-local
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_local:/data
+
+volumes:
+  postgres_data_local:
+  redis_data_local:

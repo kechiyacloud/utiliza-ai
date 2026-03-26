@@ -1,0 +1,48 @@
+Features / components / card,Pages
+"Executive KPIs (Utilization, Billable, Bench, Upcoming)",Dashboard
+ExecutiveDashboardCards,Dashboard
+EmployeeMonthCard,Dashboard
+"Demand vs Capacity Forecast (Interactive BarChart)",Dashboard
+"Actionable Todo List (Live Task Manager)",Dashboard
+"Workforce Allocation (Interactive PieChart)",Dashboard
+"Top Skills on Bench (Table)",Dashboard
+"Operational Insights Tables (Bench Aging, Skills Gap, Transitions)",Dashboard
+"High Utilization Employees & Projects Tables",Dashboard
+AddProjectPanel,Dashboard
+"WorkforceSplitView (Employee Distribution Modal)",Dashboard
+"ProjectsOverview (Summary Stats Cards)",Projects
+"ProjectList (Table/Grid View)",Projects
+"ProjectStatusChart (Visual Health Tracking)",Projects
+"ProjectTypeChart (Client vs Internal Split)",Projects
+"FilterPanel (Project Search & Metadata)",Projects
+"AddProjectModal / EditProjectPanel",Projects
+"ProjectDetailsPanel (Scope & Timeline Overview)",ProjectDetailsPage
+"AllocationMetrics (Utilization KPI Cards)",Allocations
+"ProjectUtilization (Detailed Resource Load List)",Allocations
+"ProjectEmployeeAllocation (Specific Project Drilldown)",Allocations
+"DepartmentAllocationChart (Cross-Dept Visualization)",Allocations
+"DepartmentUtilization (Team-level Metrics)",Allocations
+"EmployeeAllocationList (Individual Load Tracking)",Allocations
+"AllocationFilters (Date & Resource Scoping)","Allocations / Availability"
+"ForecastBenchList (Rolling off in 30 days)",Allocations
+"PossibleProjectMatches (AI/Heuristic Recommendations)",Allocations
+"StatCards (Total, Bench, Notice, Skills Summary)",Employee
+"NewJoinerCard (Recent Onboarding Tracking)",Employee
+"EmployeeTable (Master Data & Action Grid)","Employee / EmployeeMasterList"
+"FilterOverlay (Advanced Skill & Location Search)",Employee
+"SkillsOverview (Drawer/Modal Analytics)",Employee
+"UtilizationTrend (Historical Resource Chart)",Employee
+"EmployeeProfile (Details & Career Path)",EmployeeDetails
+"AddEmployee Form (Data Entry & Management)",AddEmployee
+"ClientKPIs (Revenue, Budget & Account Health)",Client
+"ClientList (Accounts Directory)",Client
+"ClientDetails (Project Portfolio & Account Management)",Client
+"Client Management Modals (Add, Edit, Delete, Report)",Client
+"Resource Availability Timeline (Gantt-style Grid)",Availability
+"Availability Filter Panel (Project & Dept Scoping)",Availability
+"Export Toolset (PDF, Excel, CSV Export functionality)",Availability
+"Organization Map (Interactive Hierarchy Tree)",Organization
+"Organization Insights (Structural Analytics)",Organization
+CalendarWidget,Dashboard (page-components)
+"Navbar (Primary Navigation Sidebar)",All Pages (MainDashboard)
+"ConfirmDeleteModal (Global Safety Check)",Multiple Pages (Common)

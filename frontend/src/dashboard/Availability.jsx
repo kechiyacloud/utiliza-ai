@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, Filter, RotateCcw, X } from 'lucide-react';
 import { getAvailabilityData, getAvailabilityFilters } from '../api/availabilityApi';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const MONTH_WIDTH = 180;
 const STICKY_COLUMNS_WIDTH = 432;
@@ -506,97 +509,57 @@ const Availability = () => {
     };
 
     const handleExportExcel = () => {
-        const tableRows = exportRows.map((row) => `
-            <tr>
-                <td>${row.employee_id || ''}</td>
-                <td>${row.employee_name || ''}</td>
-                <td>${row.department || ''}</td>
-                <td>${row.project_name || ''}</td>
-                <td>${row.allocation_percentage ?? 0}</td>
-                <td>${formatDate(row.start_date)}</td>
-                <td>${formatDate(row.end_date)}</td>
-                <td>${row.project_tags || ''}</td>
-            </tr>
-        `).join('');
-
-        const html = `
-            <html>
-                <head><meta charset="UTF-8" /></head>
-                <body>
-                    <table border="1">
-                        <thead>
-                            <tr>
-                                <th>Employee ID</th>
-                                <th>Employee Name</th>
-                                <th>Department</th>
-                                <th>Project</th>
-                                <th>Allocation %</th>
-                                <th>Start Date</th>
-                                <th>End Date</th>
-                                <th>Billing</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </body>
-            </html>
-        `;
-
-        downloadBlob(html, 'availability-report.xls', 'application/vnd.ms-excel');
+        const rows = exportRows.map((row) => ({
+            'Employee ID': row.employee_id || '',
+            'Employee Name': row.employee_name || '',
+            'Department': row.department || '',
+            'Project': row.project_name || '',
+            'Allocation %': row.allocation_percentage ?? 0,
+            'Start Date': formatDate(row.start_date),
+            'End Date': formatDate(row.end_date),
+            'Billing': row.project_tags || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Availability');
+        XLSX.writeFile(wb, 'availability-report.xlsx');
     };
 
     const handleExportPdf = () => {
-        const popup = window.open('', '_blank', 'width=1200,height=900');
-        if (!popup) return;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-        const tableRows = exportRows.map((row) => `
-            <tr>
-                <td>${row.employee_name || ''}</td>
-                <td>${row.department || ''}</td>
-                <td>${row.project_name || ''}</td>
-                <td>${row.allocation_percentage ?? 0}%</td>
-                <td>${formatDate(row.start_date)}</td>
-                <td>${formatDate(row.end_date)}</td>
-                <td>${row.project_tags || ''}</td>
-            </tr>
-        `).join('');
+        doc.setFontSize(16);
+        doc.setTextColor(40);
+        doc.text('Availability Report', 14, 18);
 
-        popup.document.write(`
-            <html>
-                <head>
-                    <title>Availability Report</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-                        h1 { margin: 0 0 8px; }
-                        p { margin: 0 0 16px; color: #475569; }
-                        table { width: 100%; border-collapse: collapse; }
-                        th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 12px; }
-                        th { background: #eff6ff; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Availability Report</h1>
-                    <p>Department: ${appliedDept || 'All'} | Projects: ${appliedProjects.length > 0 ? appliedProjects.join(', ') : 'All'} | Generated: ${new Date().toLocaleString('en-GB')}</p>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Employee</th>
-                                <th>Department</th>
-                                <th>Project</th>
-                                <th>Allocation</th>
-                                <th>Start Date</th>
-                                <th>End Date</th>
-                                <th>Billing</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </body>
-            </html>
-        `);
-        popup.document.close();
-        popup.focus();
-        popup.print();
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(
+            `Department: ${appliedDept || 'All'} | Projects: ${appliedProjects.length > 0 ? appliedProjects.join(', ') : 'All'} | Generated: ${new Date().toLocaleString('en-GB')}`,
+            14, 26
+        );
+
+        const tableRows = exportRows.map((row) => [
+            row.employee_name || '',
+            row.department || '',
+            row.project_name || '',
+            `${row.allocation_percentage ?? 0}%`,
+            formatDate(row.start_date),
+            formatDate(row.end_date),
+            row.project_tags || '',
+        ]);
+
+        autoTable(doc, {
+            head: [['Employee', 'Department', 'Project', 'Allocation', 'Start Date', 'End Date', 'Billing']],
+            body: tableRows,
+            startY: 32,
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 2 },
+            alternateRowStyles: { fillColor: [245, 247, 250] },
+        });
+
+        doc.save('availability-report.pdf');
     };
 
     if (loading) {

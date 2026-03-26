@@ -379,20 +379,20 @@ def department_allocation_breakdown(
 
         query = """
             WITH EmpStatus AS (
-                SELECT 
+                SELECT
                     em.employee_id,
                     em.department,
-                    CASE 
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%')) THEN 1
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%nonbillable%')) THEN 2
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND LOWER(pa.project_tags) LIKE '%billable%' AND LOWER(pa.project_tags) NOT LIKE '%non%')) THEN 3
+                    CASE
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%%billable%%' AND LOWER(pa.project_tags) NOT LIKE '%%non%%')) THEN 1
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%%nonbillable%%')) THEN 2
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND LOWER(pa.project_tags) LIKE '%%billable%%' AND LOWER(pa.project_tags) NOT LIKE '%%non%%')) THEN 3
                         ELSE 4
                     END as status_rank
                 FROM employee_master em
                 JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
                 WHERE {0}
             )
-            SELECT 
+            SELECT
                 department,
                 COUNT(CASE WHEN status_rank = 1 THEN 1 END) as allocated_billable,
                 COUNT(CASE WHEN status_rank = 2 THEN 1 END) as allocated_non_billable,
