@@ -1,8 +1,8 @@
 import React from 'react';
-import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, TrendingUp, TrendingDown, CalendarClock } from 'lucide-react';
+import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, CalendarClock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, trendUp, onClick, active, customColors }) => {
+const StatCard = ({ label, value, description, icon: Icon, colorClass, onClick, active, customColors }) => {
     return (
         <div
             onClick={onClick}
@@ -25,12 +25,7 @@ const StatCard = ({ label, value, description, icon: Icon, colorClass, trend, tr
                     <Icon size={18} />
                 </div>
 
-                {trend && (
-                    <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                        {trendUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {trend}%
-                    </div>
-                )}
+                <div></div>
             </div>
 
             <div className="flex flex-col relative z-10">
@@ -90,8 +85,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="All-time tracked projects"
                     icon={Briefcase}
                     customColors={{ bg: '#EFF6FF', text: '#2563EB' }}
-                    trend="12"
-                    trendUp={true}
                     active={activeFilter === null}
                     onClick={() => onFilterChange(null)}
                 />
@@ -101,8 +94,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="Billable external work"
                     icon={Globe}
                     customColors={{ bg: '#F5F3FF', text: '#7C3AED' }}
-                    trend="5"
-                    trendUp={true}
                     active={activeFilter === 'Client'}
                     onClick={() => onFilterChange(activeFilter === 'Client' ? null : 'Client')}
                 />
@@ -112,8 +103,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="Non-billable initiatives & POCs"
                     icon={Radio}
                     customColors={{ bg: '#F3F4F6', text: '#374151' }}
-                    trend="2"
-                    trendUp={false}
                     active={activeFilter === 'Internal'}
                     onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
                 />
@@ -124,8 +113,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="Not yet started"
                     icon={CalendarClock}
                     customColors={{ bg: '#FFFBEB', text: '#F59E0B' }}
-                    trend="4"
-                    trendUp={true}
                     active={activeFilter === 'Upcoming'}
                     onClick={() => onFilterChange(activeFilter === 'Upcoming' ? null : 'Upcoming')}
                 />
@@ -135,8 +122,6 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="Successfully delivered"
                     icon={CheckCircle}
                     customColors={{ bg: '#ECFDF5', text: '#10B981' }}
-                    trend="24"
-                    trendUp={true}
                     active={activeFilter === 'Completed'}
                     onClick={() => onFilterChange(activeFilter === 'Completed' ? null : 'Completed')}
                 />

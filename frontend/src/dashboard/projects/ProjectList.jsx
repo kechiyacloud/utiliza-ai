@@ -36,29 +36,63 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     // Filter States
     const [filters, setFilters] = useState({
         name: '',
-        type: '',
+        resourceName: '',
+        monthWeek: '',
         status: '',
-        minResources: '',
-        startDate: '',
-        endDate: ''
+        allocation: '',
+        resourceType: ''
     });
 
     if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = projects.filter(project => {
-        if (!project || !project.name) return false; // Safety guard
+        if (!project || !project.name) return false;
 
-        // Search Bar logic (Quick search)
+        // Search Bar logic (Quick searches name/client from top bar)
         const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        // Panel Filter logic
-        const matchesNameFilter = filters.name ? (project.name || '').toLowerCase().includes(filters.name.toLowerCase()) : true;
-        const matchesType = filters.type ? project.type === filters.type : true;
-        const matchesStatus = filters.status ? project.status === filters.status : true;
-        const matchesResources = filters.minResources ? project.resources >= parseInt(filters.minResources) : true;
+        // Side Panel Filter Logic (AND condition)
+        const matchesName = !filters.name || (project.name || '').toLowerCase().includes(filters.name.toLowerCase());
+        
+        const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
-        // Quick Card Filter logic
+        const matchesStatus = !filters.status || project.status === filters.status;
+        
+        const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
+
+        const matchesAllocation = !filters.allocation || (project.allocation_pct || project.total_allocation || 0) >= parseInt(filters.allocation);
+
+        // Time-based filtering (Month/Week)
+        const matchesTimeRange = () => {
+            if (!filters.monthWeek) return true;
+            if (!project.startDate || project.startDate === 'Not Set') return false;
+            
+            const start = new Date(project.startDate);
+            const end = project.endDate && project.endDate !== 'TBD' ? new Date(project.endDate) : new Date('2099-12-31');
+            const today = new Date();
+            
+            if (filters.monthWeek === 'this-month') {
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                return start <= lastDay && end >= firstDay;
+            }
+            if (filters.monthWeek === 'next-month') {
+                const firstDay = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                return start <= lastDay && end >= firstDay;
+            }
+            if (filters.monthWeek === 'this-week') {
+                const day = today.getDay();
+                const sunday = new Date(today.getTime() - day * 24*60*60*1000); sunday.setHours(0,0,0,0);
+                const saturday = new Date(today.getTime() + (6-day)*24*60*60*1000); saturday.setHours(23,59,59,999);
+                return start <= saturday && end >= sunday;
+            }
+            return true;
+        };
+        const matchesTime = matchesTimeRange();
+
+        // Quick Card Filter logic (Categories)
         let matchesCardFilter = true;
         if (activeCardFilter === 'Internal') {
             matchesCardFilter = ['Internal', 'POC'].includes(project.type);
@@ -75,7 +109,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
         }
 
-        return matchesSearchTerm && matchesNameFilter && matchesType && matchesStatus && matchesResources && matchesCardFilter;
+        return matchesSearchTerm && matchesName && matchesResource && matchesStatus && 
+               matchesResourceType && matchesAllocation && matchesTime && matchesCardFilter;
     });
 
     // Compute dynamic table heading
@@ -248,8 +283,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                     <th className="text-left py-4 pl-4">Project Name</th>
                                     <th className="text-center py-4">Status</th>
                                     <th className="text-center py-4">Billable</th>
-                                    <th className="text-center py-4">Start Date</th>
-                                    <th className="text-center py-4">End Date</th>
                                     <th className="text-center py-4">Resources</th>
                                     <th className="w-10"></th>
                                 </tr>
@@ -295,8 +328,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                 {project.billable || 'Unknown'}
                                             </span>
                                         </td>
-                                        <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.start_date || project.startDate || '-'}</td>
-                                        <td className="py-4 text-center text-gray-500 text-sm font-mono">{project.end_date || project.endDate || '-'}</td>
                                         <td className="py-4 text-center">
                                             <div className="flex flex-col items-center">
                                                 <span className="text-sm font-extrabold text-blue-600">{project.resource_count || project.resources || 0}</span>

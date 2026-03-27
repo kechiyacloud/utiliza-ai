@@ -48,16 +48,16 @@ class TeamMemberCreate(BaseModel):
     allocation_start_date: Optional[str] = None
     allocation_end_date: Optional[str] = None
     billable_shadow: Optional[str] = "Billable"   # 'Billable' | 'Shadow'
-    weekly_hours: Optional[Dict[int, int]] = {}   # {week_number: hours}
+    weekly_hours: Optional[Dict[str, float]] = {} # e.g., {"2025-10": 40, "45": 20}
     # Backward-compat fields (used by PDF export and existing callers)
     project_count: Optional[float] = None
     department: Optional[str] = None
     company: Optional[str] = "Cloud Destinations"
     company_type: Optional[str] = "Internal"
-    w1: int = 0
-    w2: int = 0
-    w3: int = 0
-    w4: int = 0
+    w1: float = 0
+    w2: float = 0
+    w3: float = 0
+    w4: float = 0
 
 
 class ResourceAllocationUpdate(BaseModel):
@@ -330,14 +330,23 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
 
     alloc_year = alloc_start.year if alloc_start else date.today().year
     if tm.weekly_hours:
-        for week_num, hours in tm.weekly_hours.items():
+        for year_week_key, hours in tm.weekly_hours.items():
             if hours > 0:
+                try:
+                    if "-" in str(year_week_key):
+                        y_str, w_str = str(year_week_key).split("-")
+                        w_year, w_num = int(y_str), int(w_str)
+                    else:
+                        w_year = alloc_year
+                        w_num = int(year_week_key)
+                except ValueError:
+                    continue
                 cur.execute("""
                     INSERT INTO weekly_allocations (allocation_id, allocation_year, week_number, allocated_hours)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (allocation_id, allocation_year, week_number)
                     DO UPDATE SET allocated_hours = EXCLUDED.allocated_hours
-                """, (allocation_id, alloc_year, week_num, hours))
+                """, (allocation_id, w_year, w_num, hours))
     else:
         # Backward compat: fall back to w1-w4
         real_week_nums = _get_project_week_numbers()
@@ -626,13 +635,14 @@ def project_resources(project_id: str):
                 pa.allocation_start_date,
                 pa.allocation_end_date,
                 pa.allocation_percentage,
+                wa.allocation_year,
                 wa.week_number,
                 COALESCE(wa.allocated_hours, 0)
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
             WHERE pa.project_id = %s
-            ORDER BY em.employee_name, wa.week_number
+            ORDER BY em.employee_name, wa.allocation_year, wa.week_number
         """, (project_id,))
         rows = cur.fetchall()
         
@@ -666,13 +676,25 @@ def project_resources(project_id: str):
                     "allocation_end_date": str(r[6]) if r[6] else None,
                     "allocation_percentage": r[7] or 0,
                     "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
+                    "weekly_hours": {},
                     "_has_weekly_data": False,
                 }
 
-            week_num = r[8]
-            hours = float(r[9]) if (r[9] is not None) else 0.0
-            if week_num is not None and week_num in week_to_slot and hours > 0:
-                resources_dict[emp_id][week_to_slot[week_num]] = hours
+            year_num = r[8]
+            week_num = r[9]
+            hours = float(r[10]) if (r[10] is not None) else 0.0
+            
+            if week_num is not None and hours > 0:
+                if year_num is None:
+                    year_num = today.year
+                
+                # Full dynamic dict mapping
+                resources_dict[emp_id]["weekly_hours"][f"{year_num}-{week_num}"] = hours
+                
+                # Backwards compatibility w1-w4 (current 4-week window)
+                if week_num in week_to_slot:
+                    resources_dict[emp_id][week_to_slot[week_num]] = hours
+
                 resources_dict[emp_id]["_has_weekly_data"] = True
 
         # ── Dynamic calculation for employees with no stored weekly data ────

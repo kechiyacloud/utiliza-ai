@@ -5,11 +5,11 @@ import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
     const [filters, setFilters] = useState({
         name: '',
-        type: '',
+        resourceName: '',
+        monthWeek: '',
         status: '',
-        minResources: '',
-        startDate: '',
-        endDate: ''
+        allocation: '',
+        resourceType: ''
     });
 
     if (!isOpen) return null;
@@ -24,38 +24,28 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
         onClose();
     };
 
-    const handleReset = () => {
-        const resetFilters = {
-            name: '',
-            type: '',
-            status: '',
-            minResources: '',
-            startDate: '',
-            endDate: ''
-        };
-        setFilters(resetFilters);
-        onApplyFilters(resetFilters); // Optional: Apply reset immediately or wait for "Apply"
-    };
-
     return (
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity"
+                className="fixed inset-0 bg-black/10 z-40 backdrop-blur-[2px] transition-opacity"
                 onClick={onClose}
             />
 
             {/* Side Panel */}
-            <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
+            <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-gray-100">
                 <div className="h-full flex flex-col">
 
                     {/* Header */}
-                    <div className="flex justify-between items-center p-6 border-b border-gray-100">
+                    <div className="flex justify-between items-center p-6 border-b border-gray-50 bg-white">
                         <div>
-                            <h2 className="text-xl font-bold text-gray-800">Filter Projects</h2>
-                            <p className="text-xs text-gray-400">Refine your project list</p>
+                            <h2 className="text-xl font-bold text-slate-800 tracking-tight">Filter Projects</h2>
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Refine List</p>
                         </div>
-                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
+                        <button 
+                            onClick={onClose} 
+                            className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all border border-transparent hover:border-slate-100"
+                        >
                             <X size={20} />
                         </button>
                     </div>
@@ -65,86 +55,93 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                         <div className="flex flex-col gap-6">
 
                             {/* Project Name */}
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Project Name</label>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Project Name</label>
                                 <input
                                     type="text"
                                     name="name"
-                                    placeholder="Search by name..."
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-800"
+                                    placeholder="Enter project name..."
+                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
                                     value={filters.name}
                                     onChange={handleChange}
                                 />
                             </div>
 
-                            {/* Type */}
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Type</label>
-                                <select
-                                    name="type"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                    value={filters.type}
+                            {/* Resource Name */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Resource Name</label>
+                                <input
+                                    type="text"
+                                    name="resourceName"
+                                    placeholder="Search by team member..."
+                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
+                                    value={filters.resourceName}
                                     onChange={handleChange}
-                                >
-                                    <option value="">All Types</option>
-                                    <option value="Client">Client</option>
-                                    <option value="Internal">Internal</option>
-                                    <option value="Partner">Partner</option>
-                                    <option value="POC">POC</option>
-                                </select>
+                                />
                             </div>
 
                             {/* Status */}
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Project Status</label>
                                 <select
                                     name="status"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
                                     value={filters.status}
                                     onChange={handleChange}
                                 >
-                                    <option value="">All Status</option>
+                                    <option value="">All Statuses</option>
                                     {PROJECT_STATUS_OPTIONS.map((status) => (
                                         <option key={status} value={status}>{status}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Resource Count */}
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Min Employees</label>
-                                <input
-                                    type="number"
-                                    name="minResources"
-                                    placeholder="0"
-                                    min="0"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                    value={filters.minResources}
+                            {/* Month / Week Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Time Period</label>
+                                <select
+                                    name="monthWeek"
+                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                    value={filters.monthWeek}
                                     onChange={handleChange}
-                                />
+                                >
+                                    <option value="">Any Time</option>
+                                    <option value="this-month">This Month</option>
+                                    <option value="next-month">Next Month</option>
+                                    <option value="this-week">This Week</option>
+                                </select>
                             </div>
 
-                            {/* Dates */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Start Date (After)</label>
+                                {/* Allocation % */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Min. Allocation %</label>
                                     <input
-                                        type="date"
-                                        name="startDate"
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                        value={filters.startDate}
+                                        type="number"
+                                        name="allocation"
+                                        placeholder="0"
+                                        min="0"
+                                        max="100"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                        value={filters.allocation}
                                         onChange={handleChange}
                                     />
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">End Date (Before)</label>
-                                    <input
-                                        type="date"
-                                        name="endDate"
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                        value={filters.endDate}
+
+                                {/* Resource Type */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Resource Type</label>
+                                    <select
+                                        name="resourceType"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                        value={filters.resourceType}
                                         onChange={handleChange}
-                                    />
+                                    >
+                                        <option value="">All Types</option>
+                                        <option value="Billable">Billable</option>
+                                        <option value="Non-Billable">Non-Billable</option>
+                                        <option value="Shadow">Shadow</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -152,19 +149,12 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                     </div>
 
                     {/* Footer */}
-                    <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-                        <button
-                            onClick={handleReset}
-                            className="px-6 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-white transition-all shadow-sm flex items-center gap-2"
-                        >
-                            <RotateCcw size={16} />
-                            Reset
-                        </button>
+                    <div className="p-6 border-t border-gray-50 bg-white">
                         <button
                             onClick={handleApply}
-                            className="px-6 py-2.5 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+                            className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                         >
-                            <Filter size={16} />
+                            <Filter size={18} />
                             Apply Filters
                         </button>
                     </div>

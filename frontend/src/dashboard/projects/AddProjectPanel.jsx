@@ -632,7 +632,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         () => getProjectWeeks(formData.startDate, formData.endDate),
         [formData.startDate, formData.endDate]
     );
-    const visibleWeeks = showAllWeeks ? projectWeeks : projectWeeks.slice(0, VISIBLE_WEEKS);
+    const visibleWeeks = useMemo(() => {
+        if (projectWeeks.length > 0) {
+            return showAllWeeks ? projectWeeks : projectWeeks.slice(0, VISIBLE_WEEKS);
+        }
+        // Placeholder weeks if no dates are set yet
+        return Array.from({ length: VISIBLE_WEEKS }).map((_, i) => ({
+            weekNum: `tmp-${i}`,
+            year: new Date().getFullYear(),
+            label: i === 0 ? 'This Week' : `Week ${i + 1}`,
+            dateRange: 'Dates not set'
+        }));
+    }, [projectWeeks, showAllWeeks]);
     const hasMoreWeeks = projectWeeks.length > VISIBLE_WEEKS;
 
     const ensureTeamDropdownData = async () => {
@@ -729,14 +740,21 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setEntityError('');
             closeModal();
         } catch (error) {
-            const msg = error?.response?.data?.detail || `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
+            const detail = error?.response?.data?.detail;
+            let msg = `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
+            if (typeof detail === 'string') {
+                msg = detail;
+            } else if (Array.isArray(detail)) {
+                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+            } else if (detail && typeof detail === 'object') {
+                msg = detail.msg || JSON.stringify(detail);
+            }
             setModal(prev => ({ ...prev, error: msg }));
         }
     };
 
     const handleAddTeamMember = () => {
         setFormData(prev => ({
-            ...prev,
             teamMembers: [
                 ...prev.teamMembers,
                 {
@@ -744,8 +762,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                     name: '',
                     role: '',
                     location: 'Remote',
-                    allocation_pct: 100,
-                    full_allocation: false,
+                    allocation_pct: '',
                     allocation_start_date: '',
                     allocation_end_date: '',
                     billable_shadow: 'Billable',
@@ -756,14 +773,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleEmployeeSelect = (index, emp) => {
+        // Prevent duplicates
+        const isDuplicate = formData.teamMembers.some((m, i) => i !== index && m.employee_id === emp.employee_id);
+        if (isDuplicate) {
+            alert(`${emp.employee_name} is already added to this project.`);
+            return;
+        }
+
         const newTeam = [...formData.teamMembers];
         newTeam[index] = {
             ...newTeam[index],
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            // Auto-fill role from employee designation if role is empty
             role: newTeam[index].role || emp.role_designation || '',
-            // Auto-fill location from employee master if available
             location: newTeam[index].location !== 'Remote' ? newTeam[index].location : (emp.location || emp.mode_of_work || 'Remote'),
         };
         setFormData({ ...formData, teamMembers: newTeam });
@@ -789,7 +811,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         const hours = Math.round((pct / 100) * 40);
 
         let targetWeeks = projectWeeks;
-        if (!updatedMember.full_allocation && (updatedMember.allocation_start_date || updatedMember.allocation_end_date)) {
+        if (updatedMember.allocation_start_date || updatedMember.allocation_end_date) {
             targetWeeks = getProjectWeeks(
                 updatedMember.allocation_start_date || formData.startDate,
                 updatedMember.allocation_end_date || formData.endDate
@@ -809,22 +831,35 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         let updated = { ...newTeam[index], [field]: value };
 
         if (field === 'allocation_pct') {
-            updated.allocation_pct = Math.min(100, Math.max(0, parseInt(value) || 0));
-        }
-        if (field === 'full_allocation') {
-            updated.full_allocation = value; // boolean
-            if (value) {
-                updated.allocation_start_date = '';
-                updated.allocation_end_date = '';
+            const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
+            updated.allocation_pct = pct;
+            
+            // Dynamic Proportional Allocation (100% = 40h)
+            if (pct !== '') {
+                const hours = Math.round((pct / 100) * 40);
+                const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
+                
+                let targetWeeks = projectWeeks;
+                if (updated.allocation_start_date || updated.allocation_end_date) {
+                    targetWeeks = getProjectWeeks(
+                        updated.allocation_start_date || formData.startDate,
+                        updated.allocation_end_date || formData.endDate
+                    );
+                }
+
+                const newWeeklyHours = { ...updated.weekly_hours };
+                targetWeeks.forEach(w => {
+                    newWeeklyHours[w.weekNum] = hours;
+                });
+                updated.weekly_hours = newWeeklyHours;
             }
         }
 
         newTeam[index] = updated;
         setFormData(prev => ({ ...prev, teamMembers: newTeam }));
 
-        // Auto-fill weeks when allocation controls change
-        if (['allocation_pct', 'full_allocation', 'allocation_start_date', 'allocation_end_date'].includes(field)) {
-            // Use setTimeout to read updated formData.startDate/endDate
+        // Auto-fill weeks when dates change (keep logic for date shifts)
+        if (['allocation_start_date', 'allocation_end_date'].includes(field)) {
             setTimeout(() => autoFillWeeks(index, updated), 0);
         }
     };
@@ -911,7 +946,16 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             onClose();
         } catch (err) {
             console.error(err);
-            setSubmitError(err.response?.data?.detail || "Failed to create project.");
+            const detail = err.response?.data?.detail;
+            let msg = 'Failed to create project.';
+            if (typeof detail === 'string') {
+                msg = detail;
+            } else if (Array.isArray(detail)) {
+                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+            } else if (detail && typeof detail === 'object') {
+                msg = detail.msg || JSON.stringify(detail);
+            }
+            setSubmitError(msg);
             setIsSubmitting(false);
         }
     };
@@ -1152,39 +1196,41 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         ref={teamTableRef}
                                         onFocusCapture={() => setIsTeamInputsActive(true)}
                                         onBlurCapture={handleTeamBlur}
-                                        style={{ overflowX: hideTeamHorizontalScroll ? 'hidden' : 'auto' }}
-                                        className="rounded-xl border border-gray-100 shadow-sm transition-[overflow-x] duration-150 overflow-y-visible"
+                                        className="rounded-xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible"
                                     >
-                                        <table className="w-full text-xs min-w-[1000px]">
+                                        <table className="w-full text-xs min-w-[1200px]">
                                             <thead>
                                                 <tr className="bg-slate-50 border-b border-slate-100">
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider w-8">S.No</th>
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[160px]">Name</th>
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[140px]">Role</th>
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[90px]">Location</th>
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[200px]">
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-8 tracking-tight">S.No</th>
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[160px]">Name</th>
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[140px]">Role</th>
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[90px]">Location</th>
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[260px]">
                                                         Allocation
-                                                        <span className="ml-1 font-normal text-slate-300 normal-case">(40h=100%)</span>
+                                                        <span className="ml-1 font-normal text-slate-400 normal-case">(100% = 40h)</span>
                                                     </th>
-                                                    <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider min-w-[100px]">Billable / Shadow</th>
-                                                    {visibleWeeks.map((wk, wIdx) => (
-                                                        <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px]">
-                                                            <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-tight">{wk.label}</div>
+                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[100px]">Resource Type</th>
+                                                    {visibleWeeks.map((wk, wIdx) => {
+                                                        const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                        return (
+                                                        <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50/50 border-l border-slate-100">
+                                                            <div className="text-xs font-bold text-gray-600 uppercase tracking-tight">{weekLabel}</div>
                                                             <div className="text-[9px] font-medium text-slate-400 whitespace-nowrap">{wk.dateRange}</div>
                                                         </th>
-                                                    ))}
+                                                        );
+                                                    })}
                                                     {hasMoreWeeks && (
                                                         <th className="px-2 py-3 text-center min-w-[80px]">
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setShowAllWeeks(v => !v)}
-                                                                className="text-[10px] font-bold text-blue-500 hover:text-blue-700 underline whitespace-nowrap"
+                                                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                                                             >
                                                                 {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
                                                             </button>
                                                         </th>
                                                     )}
-                                                    <th className="px-3 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider w-8"></th>
+                                                    <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 uppercase tracking-wider w-8"></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1226,47 +1272,32 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <option value="Hybrid">Hybrid</option>
                                                             </select>
                                                         </td>
-                                                        {/* Allocation column */}
-                                                        <td className="px-2 py-2 min-w-[200px]">
-                                                            <div className="flex flex-col gap-1">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <input
-                                                                        type="number" min="0" max="100"
-                                                                        value={member.allocation_pct}
-                                                                        onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
-                                                                        className="w-14 px-1.5 py-1 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold"
-                                                                    />
-                                                                    <span className="text-[10px] text-slate-500 font-bold">%</span>
-                                                                    <label className="flex items-center gap-1 cursor-pointer ml-1">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={member.full_allocation}
-                                                                            onChange={(e) => handleTeamMemberChange(idx, 'full_allocation', e.target.checked)}
-                                                                            className="accent-blue-500 w-3 h-3"
-                                                                        />
-                                                                        <span className="text-[10px] text-slate-500 font-semibold">Full</span>
-                                                                    </label>
-                                                                </div>
-                                                                <div className="flex items-center gap-1">
-                                                                    <input
-                                                                        type="date"
-                                                                        value={member.allocation_start_date}
-                                                                        disabled={member.full_allocation}
-                                                                        onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
-                                                                        className="flex-1 px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400 min-w-0"
-                                                                    />
-                                                                    <span className="text-[10px] text-slate-400">→</span>
-                                                                    <input
-                                                                        type="date"
-                                                                        value={member.allocation_end_date}
-                                                                        disabled={member.full_allocation}
-                                                                        onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
-                                                                        className="flex-1 px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400 min-w-0"
-                                                                    />
-                                                                </div>
+                                                        {/* Allocation column — single line: % | Full | Start → End */}
+                                                        <td className="px-2 py-2 min-w-[260px]">
+                                                            <div className="flex items-center gap-1.5 flex-nowrap">
+                                                                <input
+                                                                    type="number" min="0" max="100"
+                                                                    placeholder="0"
+                                                                    value={member.allocation_pct}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
+                                                                    className="w-12 px-1.5 py-1 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                />
+                                                                <input
+                                                                    type="date"
+                                                                    value={member.allocation_start_date}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
+                                                                    className="w-[100px] px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                />
+                                                                <span className="text-[10px] text-slate-400 shrink-0">→</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={member.allocation_end_date}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
+                                                                    className="w-[100px] px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                />
                                                             </div>
                                                         </td>
-                                                        {/* Billable / Shadow column */}
+                                                        {/* Resource Type column */}
                                                         <td className="px-2 py-2 min-w-[100px]">
                                                             <select
                                                                 value={member.billable_shadow}
@@ -1274,24 +1305,32 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 className={`w-full px-2 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
                                                                     ${member.billable_shadow === 'Billable'
                                                                         ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                                        : member.billable_shadow === 'Non-billable'
+                                                                        ? 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
                                                                         : 'border-slate-200 text-slate-500 focus:border-slate-400 focus:ring-slate-100'
                                                                     }`}
                                                             >
                                                                 <option value="Billable">Billable</option>
+                                                                <option value="Non-billable">Non-billable</option>
                                                                 <option value="Shadow">Shadow</option>
                                                             </select>
                                                         </td>
-                                                        {/* Dynamic week columns */}
-                                                        {visibleWeeks.map((wk) => (
-                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px]">
+                                                        {/* Dynamic week columns — Excel-style */}
+                                                        {visibleWeeks.map((wk, wIdx) => {
+                                                            const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                            return (
+                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/20">
                                                                 <input
                                                                     type="number" min="0" max="40"
-                                                                    value={member.weekly_hours[wk.weekNum] ?? 0}
+                                                                    placeholder="0h"
+                                                                    value={member.weekly_hours[wk.weekNum] ?? ''}
                                                                     onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
-                                                                    className="w-full px-1 py-1.5 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                                    title={weekLabel}
+                                                                    className="w-full px-1 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
                                                                 />
                                                             </td>
-                                                        ))}
+                                                            );
+                                                        })}
                                                         {/* Empty cell under "See more" header */}
                                                         {hasMoreWeeks && <td />}
                                                         <td className="px-3 py-2 text-center">

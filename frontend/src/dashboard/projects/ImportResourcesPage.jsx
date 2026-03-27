@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, Loader2, Save, Search, Users, Briefcase, CalendarDays, AlertTriangle, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader2, Save, Search, Users, Briefcase, CalendarDays, AlertTriangle, RefreshCw, Plus, Trash2, X } from 'lucide-react';
 import axios from '../../api/axios';
 
 const WEEK_KEYS = ['w1', 'w2', 'w3', 'w4'];
