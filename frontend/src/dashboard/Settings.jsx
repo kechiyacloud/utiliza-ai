@@ -381,12 +381,13 @@ function Settings() {
                 if (!email) { setEmpNotLinked(true); return; }
 
                 const idRes = await api.get(`/employee/by-email/${email}`);
-                const { employee_id } = idRes.data;
+                const { employee_id, linked } = idRes.data;
+
+                if (!linked || !employee_id) { setEmpNotLinked(true); return; }
 
                 const empRes = await api.get(`/employees/${employee_id}`);
                 setEmployeeData(empRes.data);
             } catch (err) {
-                // 404 means the email simply isn't in employee_master — not a real error
                 setEmpNotLinked(true);
             } finally {
                 setEmpLoading(false);

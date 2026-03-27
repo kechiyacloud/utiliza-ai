@@ -158,7 +158,11 @@ function upsertTableData(conn, sheet, tableName, pkColumns) {
   try {
     // 2. Begin Transaction
     conn.setAutoCommit(false);
-    
+
+    // Pre-delete rows that would violate non-PK unique constraints (e.g. unique email)
+    // This handles cases where a unique value moves from one primary key to another in the sheet.
+    deleteConflictingUniqueRows(conn, tableName, pkColumns, headers, rows);
+
     // 3. Construct the dynamic UPSERT Query string
     // Example target: 
     // INSERT INTO "users" ("id", "name") VALUES (?, ?) 
@@ -276,7 +280,79 @@ function logSystemEvent(status, tableName, columnName, action, message) {
 }
 
 /**
- * Automatically calculates the correct insertion order for tables 
+ * Before upserting, removes rows from the DB that would violate non-PK unique constraints.
+ * Handles the case where a unique column value (e.g. email_id) moves from one PK to another.
+ * Must be called inside an open transaction.
+ *
+ * @param {JdbcConnection} conn
+ * @param {string} tableName
+ * @param {string[]} pkColumns
+ * @param {string[]} headers
+ * @param {Array[]} rows
+ */
+function deleteConflictingUniqueRows(conn, tableName, pkColumns, headers, rows) {
+  let qStmt = null, dStmt = null, rs = null;
+  try {
+    // 1. Fetch all non-PK unique constraint columns for this table
+    qStmt = conn.createStatement();
+    const query = `
+      SELECT kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      WHERE tc.constraint_type = 'UNIQUE'
+        AND tc.table_schema = 'public'
+        AND tc.table_name = '${tableName}'
+    `;
+    rs = qStmt.executeQuery(query);
+    const uniqueCols = [];
+    while (rs.next()) {
+      const col = rs.getString('column_name');
+      if (!pkColumns.includes(col)) uniqueCols.push(col);
+    }
+    if (rs)    { try { rs.close();    } catch(e){} rs    = null; }
+    if (qStmt) { try { qStmt.close(); } catch(e){} qStmt = null; }
+
+    if (uniqueCols.length === 0) return;
+
+    // 2. For each unique column, delete any DB row that has the same value
+    //    but a different primary key (i.e. the value was reassigned in the sheet).
+    for (const uniqueCol of uniqueCols) {
+      const colIdx = headers.indexOf(uniqueCol);
+      if (colIdx === -1) continue;
+
+      // DELETE FROM table WHERE unique_col = ? AND NOT (pk1 = ? AND pk2 = ? ...)
+      const pkMatchCondition = pkColumns.map(pk => `"${pk}" = ?`).join(' AND ');
+      const deleteSql = `DELETE FROM "${tableName}" WHERE "${uniqueCol}" = ? AND NOT (${pkMatchCondition})`;
+      dStmt = conn.prepareStatement(deleteSql);
+
+      for (const row of rows) {
+        const uniqueVal = row[colIdx];
+        if (uniqueVal === '' || uniqueVal === null || uniqueVal === undefined || uniqueVal === '-') continue;
+
+        dStmt.setObject(1, uniqueVal);
+        for (let p = 0; p < pkColumns.length; p++) {
+          const pkColIdx = headers.indexOf(pkColumns[p]);
+          dStmt.setObject(p + 2, pkColIdx !== -1 ? row[pkColIdx] : null);
+        }
+        dStmt.addBatch();
+      }
+      dStmt.executeBatch();
+      if (dStmt) { try { dStmt.close(); } catch(e){} dStmt = null; }
+    }
+  } catch(e) {
+    console.warn(`Could not pre-delete unique conflicts for ${tableName}:`, e.message);
+    // Non-fatal: if we can't clean up, the subsequent UPSERT will throw a descriptive error.
+  } finally {
+    if (rs)    try { rs.close();    } catch(e){}
+    if (qStmt) try { qStmt.close(); } catch(e){}
+    if (dStmt) try { dStmt.close(); } catch(e){}
+  }
+}
+
+/**
+ * Automatically calculates the correct insertion order for tables
  * based on Foreign Key dependencies (Parents must be inserted before Children).
  * 
  * @param {JdbcConnection} conn 

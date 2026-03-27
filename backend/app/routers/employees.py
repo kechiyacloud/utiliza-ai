@@ -428,8 +428,8 @@ def get_employee_id_by_email(email_id: str):
         cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s)", (email_id,))
         row = cur.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Employee not found with this email")
-        return {"employee_id": row[0]}
+            return {"employee_id": None, "linked": False}
+        return {"employee_id": row[0], "linked": True}
     except HTTPException as he:
         raise he
     except Exception as e:

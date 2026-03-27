@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const ProjectContext = createContext();
 
@@ -6,33 +6,33 @@ export const ProjectProvider = ({ children }) => {
     const [projects, setProjects] = useState([]);
 
     // CRUD Operations
-    const addProject = (project) => {
+    const addProject = useCallback((project) => {
         setProjects(prev => [...prev, { ...project, id: Date.now() }]);
-    };
+    }, []);
 
-    const updateProject = (id, updates) => {
+    const updateProject = useCallback((id, updates) => {
         setProjects(prev =>
             prev.map(proj => proj.id === id ? { ...proj, ...updates } : proj)
         );
-    };
+    }, []);
 
-    const deleteProject = (id) => {
+    const deleteProject = useCallback((id) => {
         setProjects(prev => prev.filter(proj => proj.id !== id));
-    };
+    }, []);
 
-    const getProjectById = (id) => {
+    const getProjectById = useCallback((id) => {
         return projects.find(proj => proj.id === id);
-    };
+    }, [projects]);
 
-    const getProjectsByClient = (clientId) => {
+    const getProjectsByClient = useCallback((clientId) => {
         return projects.filter(proj => proj.clientId === clientId);
-    };
+    }, [projects]);
 
-    const getProjectsByStatus = (status) => {
+    const getProjectsByStatus = useCallback((status) => {
         return projects.filter(proj => proj.status === status);
-    };
+    }, [projects]);
 
-    const value = {
+    const value = useMemo(() => ({
         projects,
         setProjects,
         addProject,
@@ -41,7 +41,7 @@ export const ProjectProvider = ({ children }) => {
         getProjectById,
         getProjectsByClient,
         getProjectsByStatus
-    };
+    }), [projects, addProject, updateProject, deleteProject, getProjectById, getProjectsByClient, getProjectsByStatus]);
 
     return (
         <ProjectContext.Provider value={value}>

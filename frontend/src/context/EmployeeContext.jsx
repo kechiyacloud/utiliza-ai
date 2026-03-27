@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const EmployeeContext = createContext();
 
@@ -6,33 +6,33 @@ export const EmployeeProvider = ({ children }) => {
     const [employees, setEmployees] = useState([]);
 
     // CRUD Operations
-    const addEmployee = (employee) => {
+    const addEmployee = useCallback((employee) => {
         setEmployees(prev => [...prev, { ...employee, id: Date.now() }]);
-    };
+    }, []);
 
-    const updateEmployee = (id, updates) => {
+    const updateEmployee = useCallback((id, updates) => {
         setEmployees(prev =>
             prev.map(emp => emp.id === id ? { ...emp, ...updates } : emp)
         );
-    };
+    }, []);
 
-    const deleteEmployee = (id) => {
+    const deleteEmployee = useCallback((id) => {
         setEmployees(prev => prev.filter(emp => emp.id !== id));
-    };
+    }, []);
 
-    const getEmployeeById = (id) => {
+    const getEmployeeById = useCallback((id) => {
         return employees.find(emp => emp.id === id);
-    };
+    }, [employees]);
 
-    const getEmployeesByDepartment = (department) => {
+    const getEmployeesByDepartment = useCallback((department) => {
         return employees.filter(emp => emp.department === department);
-    };
+    }, [employees]);
 
-    const getEmployeesByStatus = (status) => {
+    const getEmployeesByStatus = useCallback((status) => {
         return employees.filter(emp => emp.employee_status === status);
-    };
+    }, [employees]);
 
-    const value = {
+    const value = useMemo(() => ({
         employees,
         setEmployees,
         addEmployee,
@@ -41,7 +41,7 @@ export const EmployeeProvider = ({ children }) => {
         getEmployeeById,
         getEmployeesByDepartment,
         getEmployeesByStatus
-    };
+    }), [employees, addEmployee, updateEmployee, deleteEmployee, getEmployeeById, getEmployeesByDepartment, getEmployeesByStatus]);
 
     return (
         <EmployeeContext.Provider value={value}>

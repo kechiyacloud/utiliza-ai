@@ -84,13 +84,14 @@ def submit_feedback(data: FeedbackRequest):
     try:
         smtp_user = os.getenv("SMTP_USER")
         smtp_password = os.getenv("SMTP_PASSWORD")
-        admin_email = os.getenv("ADMIN_EMAIL")
+        team_emails_raw = os.getenv("TEAM_EMAILS", "")
+        recipients = [e.strip() for e in team_emails_raw.split(",") if e.strip()]
 
-        if smtp_user and smtp_password and admin_email:
+        if smtp_user and smtp_password and recipients:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = f"[{data.priority}] New Feedback #{ticket_id}: {data.subject}"
             msg["From"] = smtp_user
-            msg["To"] = admin_email
+            msg["To"] = ", ".join(recipients)
 
             html = f"""
             <h2>New Feedback Ticket #{ticket_id}</h2>
@@ -110,7 +111,7 @@ def submit_feedback(data: FeedbackRequest):
             ) as server:
                 server.starttls()
                 server.login(smtp_user, smtp_password)
-                server.sendmail(smtp_user, [admin_email], msg.as_string())
+                server.sendmail(smtp_user, recipients, msg.as_string())
     except Exception as mail_err:
         print(f"[SMTP] Failed to send email: {mail_err}")
 
