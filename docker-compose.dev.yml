@@ -7,16 +7,10 @@ services:
       dockerfile: Dockerfile.dev
     container_name: project-backend-full
     env_file: ./backend/.env
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    depends_on:
-      - postgres
-      - redis
 
   frontend:
     restart: always
@@ -25,7 +19,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: project-frontend-full
     ports:
-      - "5173:5173"
+      - "443:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
