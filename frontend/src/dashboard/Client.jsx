@@ -141,8 +141,8 @@ const Client = () => {
             </button>
           )}
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Strategic Partners</h1>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Manage client relationships, track budgets, and monitor project health</p>
+            <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Strategic Partners</h1>
+            <p className="text-slate-400 text-sm font-normal mt-1">Manage client relationships, track budgets, and monitor project health</p>
           </div>
         </div>
 
@@ -150,14 +150,14 @@ const Client = () => {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setIsReportOpen(true)}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
           >
             <FileText size={14} className="text-[#3BA9FB]" />
             <span>Generate Report</span>
           </button>
           <button
             onClick={() => setIsAddClientOpen(true)}
-            className="flex items-center gap-2 bg-[#3BA9FB] hover:bg-blue-600 text-white px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-500/30 active:scale-95"
+            className="flex items-center gap-2 bg-[#3BA9FB] hover:bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-md shadow-blue-500/20 active:scale-95"
           >
             <Plus size={14} />
             <span>Add New Client</span>

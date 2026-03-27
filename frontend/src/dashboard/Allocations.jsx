@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Upload } from 'lucide-react';
+import ImportAllocationModal from './allocation/ImportAllocationModal';
 import AllocationMetrics from './allocation/AllocationMetrics';
 import ProjectUtilization from './allocation/ProjectUtilization';
 import ProjectEmployeeAllocation from './allocation/ProjectEmployeeAllocation';
@@ -31,6 +32,7 @@ function Allocations() {
   const [selectedEmpForProjects, setSelectedEmpForProjects] = useState(null);
   const [possibleProjects, setPossibleProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Fetch Logic
   useEffect(() => {
@@ -189,7 +191,16 @@ function Allocations() {
             <p className="text-gray-500 text-sm">Monitor organization-wide utilization and availability.</p>
           </div>
         </div>
-        <AllocationFilters filters={filters} setFilters={setFilters} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-sm"
+          >
+            <Upload size={15} />
+            Import Allocations
+          </button>
+          <AllocationFilters filters={filters} setFilters={setFilters} />
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -232,6 +243,12 @@ function Allocations() {
         )}
       </div>
 
+      {showImportModal && (
+        <ImportAllocationModal
+          onClose={() => setShowImportModal(false)}
+          onImportSuccess={() => setFilters(f => ({ ...f }))}
+        />
+      )}
     </div>
   )
 }

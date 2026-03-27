@@ -33,6 +33,7 @@ services:
       - redis
 
   frontend:
+    restart: always
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev

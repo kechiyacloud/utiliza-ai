@@ -29,18 +29,18 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
             {/* Header */}
             <div className="p-8 border-b border-slate-100 flex justify-between items-start bg-slate-50/30">
                 <div className="flex items-center gap-6">
-                    <div className="w-20 h-20 bg-gradient-to-br from-[#3BA9FB] to-blue-600 rounded-3xl flex items-center justify-center text-2xl font-black text-white shadow-2xl shadow-blue-500/30 border-4 border-white">
+                    <div className="w-16 h-16 bg-gradient-to-br from-[#3BA9FB] to-blue-600 rounded-2xl flex items-center justify-center text-xl font-semibold text-white shadow-lg shadow-blue-500/20 border-2 border-white">
                         {client.logo || (client.name ? client.name.charAt(0) : '?')}
                     </div>
                     <div>
                         <div className="flex items-center gap-3 mb-1">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{client.name}</h2>
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${healthColor}`}>
+                            <h2 className="text-xl font-semibold text-slate-900">{client.name}</h2>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${healthColor}`}>
                                 {healthStatus}
                             </span>
                         </div>
                         <div className="flex items-center gap-4 text-slate-400 text-sm font-medium">
-                            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-slate-600 text-[10px] font-bold uppercase tracking-wider">
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-slate-600 text-xs font-medium">
                                 {client.industry}
                             </span>
                             <span className="w-1 h-1 rounded-full bg-slate-300"></span>
@@ -72,14 +72,14 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
             <div className="px-8 py-0 border-b border-slate-100 flex gap-8 bg-white sticky top-0 z-10 shadow-sm shadow-slate-50">
                 <button 
                     onClick={() => setActiveTab('overview')}
-                    className={`flex items-center gap-2 py-4 border-b-4 transition-all text-xs font-black uppercase tracking-widest ${activeTab === 'overview' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    className={`flex items-center gap-2 py-4 border-b-2 transition-all text-sm font-medium ${activeTab === 'overview' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <LayoutDashboard size={14} />
                     <span>Overview</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('insights')}
-                    className={`flex items-center gap-2 py-4 border-b-4 transition-all text-xs font-black uppercase tracking-widest ${activeTab === 'insights' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    className={`flex items-center gap-2 py-4 border-b-2 transition-all text-sm font-medium ${activeTab === 'insights' ? 'border-[#3BA9FB] text-[#3BA9FB]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <BarChart3 size={14} />
                     <span>Insights</span>
@@ -96,9 +96,9 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-[#3BA9FB]/30 transition-all">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Revenue Consumption</p>
-                                    <h4 className="text-xl font-black text-slate-800 tracking-tight">
-                                        ${totalProjectBudget.toLocaleString()} <span className="text-xs text-slate-400 font-bold">/ ${parseFloat(client.budget || 0).toLocaleString()}</span>
+                                    <p className="text-xs font-medium text-slate-400 mb-1">Revenue Consumption</p>
+                                    <h4 className="text-xl font-semibold text-slate-800">
+                                        ${totalProjectBudget.toLocaleString()} <span className="text-xs text-slate-400 font-normal">/ ${parseFloat(client.budget || 0).toLocaleString()}</span>
                                     </h4>
                                 </div>
                                 <div className="p-2 bg-blue-50 text-[#3BA9FB] rounded-xl group-hover:scale-110 transition-transform">
@@ -106,7 +106,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <div className="flex justify-between text-[10px] font-black uppercase tracking-wider">
+                                <div className="flex justify-between text-xs font-medium">
                                     <span className="text-slate-400">Utilization</span>
                                     <span className={budgetUtilization > 100 ? 'text-red-500' : 'text-blue-500'}>{budgetUtilization.toFixed(1)}%</span>
                                 </div>
@@ -123,9 +123,9 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-purple-300/30 transition-all">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Team Size</p>
-                                    <h4 className="text-3xl font-black text-slate-800 tracking-tight">{client.stakeholders?.length || 0}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold mt-1">Allocated across all projects</p>
+                                    <p className="text-xs font-medium text-slate-400 mb-1">Active Team Size</p>
+                                    <h4 className="text-3xl font-bold text-slate-800">{client.stakeholders?.length || 0}</h4>
+                                    <p className="text-xs text-slate-400 font-normal mt-1">Allocated across all projects</p>
                                 </div>
                                 <div className="p-2 bg-purple-50 text-purple-500 rounded-xl group-hover:scale-110 transition-transform">
                                     <Users size={16} />
@@ -137,11 +137,11 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-emerald-300/30 transition-all">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Project Portfolio</p>
-                                    <h4 className="text-3xl font-black text-slate-800 tracking-tight">{client.projects?.length || 0}</h4>
+                                    <p className="text-xs font-medium text-slate-400 mb-1">Project Portfolio</p>
+                                    <h4 className="text-3xl font-bold text-slate-800">{client.projects?.length || 0}</h4>
                                     <div className="flex items-center gap-1.5 mt-2">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                                        <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{client.projects?.filter(p => p.status === 'On Track').length || 0} Healthy</p>
+                                        <p className="text-xs text-emerald-600 font-medium">{client.projects?.filter(p => p.status === 'On Track').length || 0} Healthy</p>
                                     </div>
                                 </div>
                                 <div className="p-2 bg-emerald-50 text-emerald-500 rounded-xl group-hover:scale-110 transition-transform">
@@ -154,8 +154,8 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                     {/* Strategic Health Trend (Suggestion) */}
                     <div className="bg-gradient-to-r from-[#0B1423] to-[#121D2D] p-6 rounded-3xl border border-white/5 shadow-xl flex items-center justify-between">
                         <div>
-                            <h3 className="text-white text-xs font-black uppercase tracking-widest mb-1">Strategic Health Trend</h3>
-                            <p className="text-white/40 text-[9px] font-bold uppercase">Consistency index across last 6 months</p>
+                            <h3 className="text-white text-sm font-semibold mb-1">Strategic Health Trend</h3>
+                            <p className="text-white/40 text-xs font-normal">Consistency index across last 6 months</p>
                         </div>
                         <div className="flex items-center gap-6">
                             <div className="h-10 w-32">
@@ -172,8 +172,8 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                 </svg>
                             </div>
                             <div className="text-right">
-                                <div className="text-[#3BA9FB] text-sm font-black tracking-tight">+14.2%</div>
-                                <div className="text-emerald-500 text-[8px] font-black uppercase tracking-widest">Growth</div>
+                                <div className="text-[#3BA9FB] text-sm font-semibold">+14.2%</div>
+                                <div className="text-emerald-500 text-xs font-medium">Growth</div>
                             </div>
                         </div>
                     </div>
@@ -181,7 +181,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                     {/* Active Projects Table */}
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="flex items-center justify-between p-6 border-b border-slate-50">
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-3">
+                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-3">
                                 <div className="w-2 h-2 rounded-full bg-[#3BA9FB]"></div>
                                 Project Performance
                             </h3>
@@ -189,7 +189,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
 
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-100">
+                                <thead className="bg-slate-50 text-slate-400 text-xs font-medium border-b border-slate-100">
                                     <tr>
                                         <th className="px-6 py-4">Project</th>
                                         <th className="px-6 py-4">Lead</th>
@@ -202,15 +202,15 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                     {client.projects && client.projects.map((project, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
                                             <td className="px-6 py-5">
-                                                <div className="font-black text-slate-800 tracking-tight">{project.name}</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">${parseFloat(project.budget || 0).toLocaleString()} Budget</div>
+                                                <div className="font-medium text-slate-800">{project.name}</div>
+                                                <div className="text-xs text-slate-400 font-normal mt-0.5">${parseFloat(project.budget || 0).toLocaleString()} Budget</div>
                                             </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-2.5">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-black border border-slate-200 uppercase tracking-tighter">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-medium border border-slate-200">
                                                         {project.lead ? project.lead.split(' ').map(n => n[0]).slice(0, 2).join('') : '?'}
                                                     </div>
-                                                    <span className="text-slate-600 font-bold text-xs">{project.lead || 'Unassigned'}</span>
+                                                    <span className="text-slate-600 font-normal text-sm">{project.lead || 'Unassigned'}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5">
@@ -219,7 +219,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-right">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border
                                                     ${project.status === 'On Track' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                         project.status === 'At Risk' ? 'bg-red-50 text-red-600 border-red-100' :
                                                             'bg-orange-50 text-orange-600 border-orange-100'}
@@ -257,11 +257,11 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                     {/* Key Stakeholders Grid */}
                     <div className="space-y-6">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-[0.2em] flex items-center gap-3">
+                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-3">
                                 <div className="w-2 h-2 rounded-full bg-purple-500"></div>
                                 Team Members & Stakeholders
                             </h3>
-                            <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-purple-100">
+                            <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-xs font-medium border border-purple-100">
                                 {client.stakeholders?.length || 0} Members
                             </span>
                         </div>
@@ -272,12 +272,12 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                     <div className="absolute -top-6 -right-6 w-16 h-16 bg-purple-50 rounded-full opacity-0 group-hover:opacity-50 transition-all duration-500"></div>
                                     
                                     <div className="flex items-center gap-4 relative z-10">
-                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-sm font-black text-white uppercase shadow-lg shadow-purple-200 group-hover:scale-110 transition-transform">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-sm font-medium text-white shadow-md shadow-purple-200 group-hover:scale-110 transition-transform">
                                             {s.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
                                         </div>
                                         <div className="min-w-0 pr-2">
-                                            <div className="text-slate-800 text-sm font-black truncate tracking-tight uppercase">{s.name}</div>
-                                            <div className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-0.5">{s.role || 'Contributor'}</div>
+                                            <div className="text-slate-800 text-sm font-semibold truncate">{s.name}</div>
+                                            <div className="text-slate-400 text-xs font-normal mt-0.5">{s.role || 'Contributor'}</div>
                                         </div>
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between relative z-10">
@@ -286,7 +286,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                                                 <Phone size={8} className="text-slate-400" />
                                             </div>
                                         </div>
-                                        <button className="text-[10px] font-black text-purple-600 uppercase tracking-widest hover:text-purple-800 transition-colors">
+                                        <button className="text-xs font-medium text-purple-600 hover:text-purple-800 transition-colors">
                                             View Profile
                                         </button>
                                     </div>
@@ -295,7 +295,7 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                             {(!client.stakeholders || client.stakeholders.length === 0) && (
                                 <div className="col-span-full py-12 text-center bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
                                     <Users size={32} className="text-slate-200 mx-auto mb-3" />
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No team members identified</p>
+                                    <p className="text-xs font-normal text-slate-400">No team members identified</p>
                                 </div>
                             )}
                         </div>

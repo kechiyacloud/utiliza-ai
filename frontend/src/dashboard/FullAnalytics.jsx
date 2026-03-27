@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
+import cdBlueLogo from '../assets/CD-Blue.svg';
 import { 
   ArrowLeft, 
   Download, 
@@ -146,32 +148,42 @@ const FullAnalytics = () => {
   const handleExportAnalytics = async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const BRAND_BLUE = [59, 169, 251];
 
-      doc.setFontSize(20);
-      doc.setTextColor(40);
-      doc.text('Workforce Pulse Analytics', 14, 20);
+      const logoBase64 = await loadLogoAsBase64(cdBlueLogo);
+      const subtitle = `Department: ${selectedDept}  |  Generated: ${new Date().toLocaleString('en-GB')}`;
+      let y = buildPDFHeader(doc, logoBase64, 'Workforce Pulse Analytics', subtitle);
 
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Department: ${selectedDept} | Generated: ${new Date().toLocaleString()}`, 14, 28);
+      // Highlights summary section
+      const pageW = doc.internal.pageSize.getWidth();
+      const cardW = (pageW - 28 - 9) / 4; // 4 cards with gaps
 
-      // Highlights summary
-      let y = 38;
-      doc.setFontSize(11);
-      doc.setTextColor(40);
-      doc.text('Highlights', 14, y);
-      y += 7;
       analyticsHighlights.forEach((item, i) => {
-        const x = 14 + (i % 4) * 70;
-        if (i > 0 && i % 4 === 0) y += 18;
+        const x = 14 + i * (cardW + 3);
+        doc.setFillColor(245, 250, 255);
+        doc.setDrawColor(...BRAND_BLUE);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardW, 16, 2, 2, 'FD');
+
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
-        doc.setTextColor(100);
-        doc.text(item.label.toUpperCase(), x, y);
-        doc.setFontSize(13);
-        doc.setTextColor(40);
-        doc.text(String(item.value), x, y + 7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(item.label.toUpperCase(), x + cardW / 2, y + 5.5, { align: 'center' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(item.value), x + cardW / 2, y + 13, { align: 'center' });
       });
+
       y += 22;
+
+      // Section title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text('Employee Transitions', 14, y);
+      y += 5;
 
       // Transitions table
       const tableRows = transitions.map((t) => [
@@ -183,15 +195,17 @@ const FullAnalytics = () => {
       ]);
 
       autoTable(doc, {
-        head: [['Employee', 'Role', 'From', 'To', 'Date']],
+        head: [['Employee', 'Role', 'From Project', 'To Project', 'Date']],
         body: tableRows,
         startY: y,
         theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 2 },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
+        headStyles: { fillColor: BRAND_BLUE, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        styles: { fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [240, 249, 255] },
+        margin: { left: 14, right: 14, bottom: 18 },
       });
 
+      addPDFFooter(doc, logoBase64);
       doc.save(`workforce-pulse-analytics-${selectedDept}.pdf`);
     } catch (error) {
       console.error('Failed to export analytics PDF', error);

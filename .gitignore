@@ -4,6 +4,12 @@ status*.txt
 *.log
 *.txt
 
+# Postgres dumps (data files — never commit)
+dumps/
+
+# Sheets sync credentials
+.env.sheets
+
 
 .claude/
 

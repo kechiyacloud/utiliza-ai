@@ -1,6 +1,99 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import cdBlueLogo from '../assets/CD-Blue.svg';
+
+const BRAND_BLUE = [59, 169, 251];
+const HEADING_DARK = [15, 23, 42];
+const TEXT_MUTED = [100, 116, 139];
+
+export const loadLogoAsBase64 = (src) =>
+    new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || 326;
+            canvas.height = img.naturalHeight || 326;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+
+/**
+ * Adds a branded header to a jsPDF document.
+ * Returns the Y position where content should start.
+ */
+export const buildPDFHeader = (doc, logoBase64, title, subtitle = '') => {
+    const pageW = doc.internal.pageSize.getWidth();
+
+    // Blue accent bar
+    doc.setFillColor(...BRAND_BLUE);
+    doc.rect(0, 0, pageW, 18, 'F');
+
+    // Logo in header bar
+    if (logoBase64) {
+        doc.addImage(logoBase64, 'PNG', 12, 3, 12, 12);
+    }
+
+    // Company name
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    doc.text('Cloud Destinations', logoBase64 ? 27 : 14, 12);
+
+    // Report title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...HEADING_DARK);
+    doc.text(title, 14, 32);
+
+    let separatorY = 40;
+
+    if (subtitle) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(...TEXT_MUTED);
+        doc.text(subtitle, 14, 40);
+        separatorY = 47;
+    }
+
+    // Separator line
+    doc.setDrawColor(...BRAND_BLUE);
+    doc.setLineWidth(0.4);
+    doc.line(14, separatorY, pageW - 14, separatorY);
+
+    return separatorY + 5;
+};
+
+/**
+ * Adds a branded footer (line + page numbers + logo) to every page.
+ */
+export const addPDFFooter = (doc, logoBase64) => {
+    const pageCount = doc.internal.getNumberOfPages();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+
+        doc.setDrawColor(...BRAND_BLUE);
+        doc.setLineWidth(0.3);
+        doc.line(14, pageH - 12, pageW - 14, pageH - 12);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...TEXT_MUTED);
+        doc.text('Cloud Destinations — Confidential', 14, pageH - 6);
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 14, pageH - 6, { align: 'right' });
+
+        if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', pageW / 2 - 4, pageH - 12, 8, 8);
+        }
+    }
+};
 
 /**
  * Exports data to CSV
@@ -49,25 +142,19 @@ export const exportToExcel = (data, fileName = 'export') => {
 };
 
 /**
- * Exports data to PDF
+ * Exports data to PDF with branded header, footer, and logo
  * @param {Array} data - Array of objects
  * @param {Array} columns - Array of column definitions { header: string, dataKey: string }
  * @param {string} title - PDF Title
  * @param {string} fileName - Base filename
  */
-export const exportToPDF = (data, columns, title = 'Export', fileName = 'export') => {
+export const exportToPDF = async (data, columns, title = 'Export', fileName = 'export') => {
     if (!data || !columns) return;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-    // Add Title
-    doc.setFontSize(18);
-    doc.setTextColor(40);
-    doc.text(title, 14, 22);
-
-    // Add Date
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+    const logoBase64 = await loadLogoAsBase64(cdBlueLogo);
+    const subtitle = `Generated on: ${new Date().toLocaleString('en-GB')}`;
+    const startY = buildPDFHeader(doc, logoBase64, title, subtitle);
 
     const tableRows = data.map(item => columns.map(col => item[col.dataKey] || ''));
     const tableHeaders = [columns.map(col => col.header)];
@@ -75,12 +162,14 @@ export const exportToPDF = (data, columns, title = 'Export', fileName = 'export'
     autoTable(doc, {
         head: tableHeaders,
         body: tableRows,
-        startY: 35,
+        startY,
         theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 2 },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
+        headStyles: { fillColor: BRAND_BLUE, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        styles: { fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [240, 249, 255] },
+        margin: { left: 14, right: 14, bottom: 18 },
     });
 
+    addPDFFooter(doc, logoBase64);
     doc.save(`${fileName}.pdf`);
 };

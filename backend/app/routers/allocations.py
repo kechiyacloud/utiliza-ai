@@ -1,6 +1,29 @@
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+import calendar
+from datetime import date
 from app.database import get_db_connection, release_db_connection
+
+
+# ── Import Allocation Pydantic models ────────────────────────────────────────
+
+class AllocationImportRecord(BaseModel):
+    employee_id: str
+    project_id: Optional[str] = None
+    allocation_percentage: int
+    role_in_project: Optional[str] = None
+    project_tags: Optional[str] = "billable"
+    allocation_start_date: Optional[str] = None
+    allocation_end_date: Optional[str] = None
+
+class AllocationImportRequest(BaseModel):
+    records: List[AllocationImportRecord]
+    dry_run: bool = True
+    import_mode: str            # "monthly" | "bulk"
+    import_scope: str           # "department" | "project"
+    selected_month: Optional[str] = None   # "YYYY-MM"
+    scope_value: Optional[str] = None      # dept name or project_id
 
 router = APIRouter(prefix="/allocations", tags=["Allocations"])
 
@@ -586,6 +609,244 @@ def get_possible_projects(employee_id: str):
 
     except Exception as e:
         print("Possible projects matching error:", e)
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.post("/import")
+def import_allocations(body: AllocationImportRequest):
+    """
+    Dry-run or commit import of bulk allocation records.
+    dry_run=True  → validate + classify, no DB writes.
+    dry_run=False → upsert all valid records in a transaction.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        records = body.records
+        dry_run = body.dry_run
+        import_mode = body.import_mode
+        import_scope = body.import_scope
+        selected_month = body.selected_month
+        scope_value = body.scope_value
+
+        # ── 1. Monthly date range ────────────────────────────────────────────
+        month_start = None
+        month_end = None
+        if import_mode == "monthly" and selected_month:
+            year, month = int(selected_month[:4]), int(selected_month[5:7])
+            month_start = date(year, month, 1)
+            last_day = calendar.monthrange(year, month)[1]
+            month_end = date(year, month, last_day)
+
+        # ── 2. Inject project_id for project-wise scope ──────────────────────
+        if import_scope == "project" and scope_value:
+            for rec in records:
+                if not rec.project_id:
+                    rec.project_id = scope_value
+
+        # ── 3. Build lookup caches (4 batch queries — no N+1) ────────────────
+        employee_ids = list({r.employee_id for r in records if r.employee_id})
+        project_ids  = list({r.project_id  for r in records if r.project_id})
+
+        emp_map: Dict[str, str] = {}
+        if employee_ids:
+            cur.execute(
+                "SELECT employee_id, employee_name FROM employee_master WHERE employee_id = ANY(%s)",
+                (employee_ids,)
+            )
+            emp_map = {row[0]: row[1] for row in cur.fetchall()}
+
+        proj_map: Dict[str, str] = {}
+        if project_ids:
+            cur.execute(
+                "SELECT project_id, project_name FROM projects WHERE project_id = ANY(%s)",
+                (project_ids,)
+            )
+            proj_map = {row[0]: row[1] for row in cur.fetchall()}
+
+        # existing allocation keyed by (employee_id, project_id)
+        existing_map: Dict[tuple, Dict] = {}
+        if employee_ids and project_ids:
+            cur.execute(
+                """
+                SELECT employee_id, project_id, allocation_id, allocation_percentage
+                FROM projects_allocation
+                WHERE employee_id = ANY(%s) AND project_id = ANY(%s)
+                """,
+                (employee_ids, project_ids)
+            )
+            for row in cur.fetchall():
+                existing_map[(row[0], row[1])] = {"allocation_id": row[2], "old_pct": row[3]}
+
+        # current total allocation per employee (sum of all active allocations)
+        emp_current_total: Dict[str, int] = {}
+        if employee_ids:
+            cur.execute(
+                """
+                SELECT employee_id, COALESCE(SUM(allocation_percentage), 0)
+                FROM projects_allocation
+                WHERE employee_id = ANY(%s)
+                  AND (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
+                GROUP BY employee_id
+                """,
+                (employee_ids,)
+            )
+            emp_current_total = {row[0]: int(row[1]) for row in cur.fetchall()}
+
+        # ── 4. Classify records ──────────────────────────────────────────────
+        new_records:     List[Dict[str, Any]] = []
+        updated_records: List[Dict[str, Any]] = []
+        invalid_records: List[Dict[str, Any]] = []
+        over_alloc_map:  Dict[str, Dict] = {}
+
+        for rec in records:
+            row_data = rec.dict()
+
+            if not rec.employee_id or rec.employee_id not in emp_map:
+                invalid_records.append({"row_data": row_data, "error": f"Employee '{rec.employee_id}' not found"})
+                continue
+
+            if not rec.project_id or rec.project_id not in proj_map:
+                invalid_records.append({"row_data": row_data, "error": f"Project '{rec.project_id}' not found"})
+                continue
+
+            pct = rec.allocation_percentage
+            if not (0 <= pct <= 100):
+                invalid_records.append({"row_data": row_data, "error": f"allocation_percentage {pct} out of range (0-100)"})
+                continue
+
+            # Resolve dates
+            if import_mode == "monthly":
+                start_date_val = month_start
+                end_date_val   = month_end
+            else:
+                try:
+                    start_date_val = date.fromisoformat(rec.allocation_start_date) if rec.allocation_start_date else None
+                    end_date_val   = date.fromisoformat(rec.allocation_end_date)   if rec.allocation_end_date   else None
+                except ValueError:
+                    invalid_records.append({"row_data": row_data, "error": "Invalid date format — use YYYY-MM-DD"})
+                    continue
+
+            emp_name  = emp_map[rec.employee_id]
+            proj_name = proj_map[rec.project_id]
+            key = (rec.employee_id, rec.project_id)
+
+            enriched = {
+                "employee_id":           rec.employee_id,
+                "employee_name":         emp_name,
+                "project_id":            rec.project_id,
+                "project_name":          proj_name,
+                "allocation_percentage": pct,
+                "role_in_project":       rec.role_in_project,
+                "project_tags":          rec.project_tags or "billable",
+                "allocation_start_date": str(start_date_val) if start_date_val else None,
+                "allocation_end_date":   str(end_date_val)   if end_date_val   else None,
+            }
+
+            if key in existing_map:
+                old_pct = existing_map[key]["old_pct"]
+                enriched["old_allocation_percentage"] = old_pct
+                enriched["allocation_id"] = existing_map[key]["allocation_id"]
+                updated_records.append(enriched)
+                delta = pct - old_pct
+            else:
+                new_records.append(enriched)
+                delta = pct
+
+            # Accumulate over-allocation per employee
+            current_total = emp_current_total.get(rec.employee_id, 0)
+            if rec.employee_id not in over_alloc_map:
+                over_alloc_map[rec.employee_id] = {
+                    "employee_id":   rec.employee_id,
+                    "employee_name": emp_name,
+                    "current_total": current_total,
+                    "additional":    0,
+                    "combined":      current_total,
+                }
+            over_alloc_map[rec.employee_id]["additional"] += delta
+            over_alloc_map[rec.employee_id]["combined"] = (
+                over_alloc_map[rec.employee_id]["current_total"] +
+                over_alloc_map[rec.employee_id]["additional"]
+            )
+
+        over_allocated = [v for v in over_alloc_map.values() if v["combined"] > 100]
+        can_save = len(invalid_records) == 0
+
+        # ── 5. Dry-run — return without touching DB ──────────────────────────
+        if dry_run:
+            return {
+                "new_records":     new_records,
+                "updated_records": updated_records,
+                "over_allocated":  over_allocated,
+                "invalid_records": invalid_records,
+                "can_save":        can_save,
+            }
+
+        # ── 6. Commit — upsert each valid record ─────────────────────────────
+        if not can_save:
+            raise HTTPException(status_code=400, detail="Cannot save: fix invalid records first.")
+
+        valid_records = new_records + updated_records
+
+        for rec_dict in valid_records:
+            emp_id  = rec_dict["employee_id"]
+            proj_id = rec_dict["project_id"]
+
+            if (emp_id, proj_id) not in existing_map:
+                cur.execute("SELECT 'PA-' || LPAD(nextval('alloc_id_seq')::TEXT, 5, '0')")
+                alloc_id = cur.fetchone()[0]
+            else:
+                alloc_id = existing_map[(emp_id, proj_id)]["allocation_id"]
+
+            cur.execute(
+                """
+                INSERT INTO projects_allocation (
+                    allocation_id, employee_id, project_id, role_in_project,
+                    allocation_percentage, allocation_start_date, allocation_end_date,
+                    project_tags, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (employee_id, project_id) DO UPDATE SET
+                    role_in_project       = EXCLUDED.role_in_project,
+                    allocation_percentage = EXCLUDED.allocation_percentage,
+                    allocation_start_date = EXCLUDED.allocation_start_date,
+                    allocation_end_date   = EXCLUDED.allocation_end_date,
+                    project_tags          = EXCLUDED.project_tags,
+                    updated_at            = NOW()
+                """,
+                (
+                    alloc_id,
+                    emp_id,
+                    proj_id,
+                    rec_dict.get("role_in_project"),
+                    rec_dict["allocation_percentage"],
+                    rec_dict.get("allocation_start_date"),
+                    rec_dict.get("allocation_end_date"),
+                    rec_dict.get("project_tags", "billable"),
+                )
+            )
+
+        conn.commit()
+        return {
+            "new_records":     new_records,
+            "updated_records": updated_records,
+            "over_allocated":  over_allocated,
+            "invalid_records": [],
+            "can_save":        True,
+            "saved":           True,
+            "upserted_count":  len(valid_records),
+        }
+
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

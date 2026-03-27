@@ -150,3 +150,10 @@ export const fetchFilterOptions = async () => {
         return { departments: [] };
     }
 };
+
+// ---------- Import Allocations (dry-run or commit) ----------
+// payload: { records, dry_run, import_mode, import_scope, selected_month, scope_value }
+export const importAllocations = async (payload) => {
+    const res = await api.post('/allocations/import', payload);
+    return res.data;
+};

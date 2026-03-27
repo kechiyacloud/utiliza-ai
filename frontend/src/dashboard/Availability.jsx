@@ -4,6 +4,8 @@ import { getAvailabilityData, getAvailabilityFilters } from '../api/availability
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
+import cdBlueLogo from '../assets/CD-Blue.svg';
 
 const MONTH_WIDTH = 180;
 const STICKY_COLUMNS_WIDTH = 432;
@@ -403,7 +405,7 @@ const Availability = () => {
 
         const currentMonthIndex = timelineMonths.findIndex((month) => month.isCurrent);
         const targetMonthIndex = currentMonthIndex >= 0 ? currentMonthIndex : 0;
-        const targetScrollLeft = Math.max(0, STICKY_COLUMNS_WIDTH + (targetMonthIndex * MONTH_WIDTH) - 24);
+        const targetScrollLeft = Math.max(0, (targetMonthIndex * MONTH_WIDTH) - 24);
 
         requestAnimationFrame(() => {
             if (timelineRef.current) {
@@ -525,19 +527,12 @@ const Availability = () => {
         XLSX.writeFile(wb, 'availability-report.xlsx');
     };
 
-    const handleExportPdf = () => {
+    const handleExportPdf = async () => {
         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-        doc.setFontSize(16);
-        doc.setTextColor(40);
-        doc.text('Availability Report', 14, 18);
-
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        doc.text(
-            `Department: ${appliedDept || 'All'} | Projects: ${appliedProjects.length > 0 ? appliedProjects.join(', ') : 'All'} | Generated: ${new Date().toLocaleString('en-GB')}`,
-            14, 26
-        );
+        const logoBase64 = await loadLogoAsBase64(cdBlueLogo);
+        const subtitle = `Department: ${appliedDept || 'All'}  |  Projects: ${appliedProjects.length > 0 ? appliedProjects.join(', ') : 'All'}  |  Generated: ${new Date().toLocaleString('en-GB')}`;
+        const startY = buildPDFHeader(doc, logoBase64, 'Resource Availability Report', subtitle);
 
         const tableRows = exportRows.map((row) => [
             row.employee_name || '',
@@ -550,15 +545,26 @@ const Availability = () => {
         ]);
 
         autoTable(doc, {
-            head: [['Employee', 'Department', 'Project', 'Allocation', 'Start Date', 'End Date', 'Billing']],
+            head: [['Employee', 'Department', 'Project', 'Allocation %', 'Start Date', 'End Date', 'Billing']],
             body: tableRows,
-            startY: 32,
+            startY,
             theme: 'striped',
-            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-            styles: { fontSize: 8, cellPadding: 2 },
-            alternateRowStyles: { fillColor: [245, 247, 250] },
+            headStyles: { fillColor: [59, 169, 251], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+            styles: { fontSize: 8, cellPadding: 3 },
+            alternateRowStyles: { fillColor: [240, 249, 255] },
+            margin: { left: 14, right: 14, bottom: 18 },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 35 },
+                2: { cellWidth: 50 },
+                3: { cellWidth: 22, halign: 'center' },
+                4: { cellWidth: 28 },
+                5: { cellWidth: 28 },
+                6: { cellWidth: 25 },
+            },
         });
 
+        addPDFFooter(doc, logoBase64);
         doc.save('availability-report.pdf');
     };
 
@@ -654,20 +660,20 @@ const Availability = () => {
                 </div>
             </div>
 
-            <div ref={timelineRef} className="custom-scrollbar relative flex-1 overflow-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
-                <table className="border-collapse table-fixed" style={{ minWidth: `${STICKY_COLUMNS_WIDTH + (timelineMonths.length * MONTH_WIDTH)}px` }}>
+            <div ref={timelineRef} className="custom-scrollbar relative flex-1 overflow-x-auto overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <table className="border-separate border-spacing-0 table-fixed" style={{ minWidth: `${STICKY_COLUMNS_WIDTH + (timelineMonths.length * MONTH_WIDTH)}px` }}>
                     <thead>
-                        <tr className="sticky top-0 z-30 bg-white">
-                            <th className="sticky left-0 z-40 h-14 w-44 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
+                        <tr>
+                            <th className="sticky top-0 left-0 z-40 h-14 w-44 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
                                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Employee</span>
                             </th>
-                            <th className="sticky left-44 z-40 h-14 w-64 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
+                            <th className="sticky top-0 left-44 z-40 h-14 w-64 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
                                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Project / Allocation</span>
                             </th>
                             {timelineMonths.map((month, index) => (
                                 <th
                                     key={month.key}
-                                    className={`border-b border-r border-slate-100 p-0 ${month.isCurrent ? 'bg-blue-50' : index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}
+                                    className={`sticky top-0 z-30 border-b border-r border-slate-100 p-0 ${month.isCurrent ? 'bg-blue-50' : index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}
                                     style={{ width: `${MONTH_WIDTH}px` }}
                                 >
                                     <div className={`flex h-8 items-center justify-center border-b border-slate-100 text-[13px] font-bold ${month.isCurrent ? 'text-blue-700' : 'text-slate-700'}`}>
@@ -699,16 +705,16 @@ const Availability = () => {
                                         const rowBackground = employeeIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
 
                                         return (
-                                            <tr key={`${employee.employee_id}-${allocationIndex}`} className={`h-12 border-b border-slate-100 ${rowBackground}`}>
+                                            <tr key={`${employee.employee_id}-${allocationIndex}`} className={`h-12 ${rowBackground}`}>
                                                 {allocationIndex === 0 && (
-                                                    <td className={`sticky left-0 z-20 border-r border-slate-100 px-4 py-2 ${rowBackground}`} rowSpan={allocations.length} style={{ width: '176px', minWidth: '176px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
+                                                    <td className={`sticky left-0 z-20 border-b border-r border-slate-100 px-4 py-2 ${rowBackground}`} rowSpan={allocations.length} style={{ width: '176px', minWidth: '176px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
                                                         <div className="font-bold text-[13px] leading-tight text-slate-800">{employee.employee_name}</div>
                                                         <div className="text-[10px] text-slate-400">ID: {employee.employee_id}</div>
                                                         <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{employee.department || 'No Department'}</div>
                                                     </td>
                                                 )}
 
-                                                <td className={`sticky left-44 z-20 overflow-hidden border-r border-slate-100 px-4 py-2 ${rowBackground}`} style={{ width: '256px', minWidth: '256px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
+                                                <td className={`sticky left-44 z-20 overflow-hidden border-b border-r border-slate-100 px-4 py-2 ${rowBackground}`} style={{ width: '256px', minWidth: '256px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
                                                     <div className="flex flex-col overflow-hidden">
                                                         <div className="flex flex-wrap items-center gap-1.5">
                                                             <span className="max-w-[180px] truncate text-xs font-semibold text-slate-700" title={allocation.project_name}>
@@ -731,7 +737,7 @@ const Availability = () => {
                                                     </div>
                                                 </td>
 
-                                                <td colSpan={timelineMonths.length} className="relative h-12 overflow-hidden p-0">
+                                                <td colSpan={timelineMonths.length} className="relative h-12 overflow-hidden border-b border-slate-100 p-0">
                                                     <div className="absolute inset-0 flex">
                                                         {timelineMonths.map((month, monthIndex) => (
                                                             <div
