@@ -43,7 +43,7 @@ function Projects() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto">
+    <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto">
       {/* Overview Section */}
       <ProjectsOverview
         stats={data?.stats}

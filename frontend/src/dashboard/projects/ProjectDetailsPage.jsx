@@ -6,6 +6,21 @@ import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+const toMessage = (val, fallback = 'Something went wrong') => {
+    if (!val && val !== 0) return fallback;
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) {
+        const parts = val.map(v => toMessage(v, '')).filter(Boolean);
+        return parts.join(', ') || fallback;
+    }
+    if (typeof val === 'object') {
+        if (val.msg) return toMessage(val.msg, fallback);
+        if (val.detail) return toMessage(val.detail, fallback);
+        return JSON.stringify(val);
+    }
+    return String(val);
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Returns the Monday of the ISO week containing the given date. */
@@ -938,17 +953,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             setIsEditing(false);
         } catch (error) {
             console.error('Saving allocations failed:', error);
-            const detail = error?.response?.data?.detail;
-            let msg = 'Failed to save resource allocations.';
-            if (typeof detail === 'string') {
-                msg = detail;
-            } else if (Array.isArray(detail)) {
-                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-            } else if (detail && typeof detail === 'object') {
-                msg = detail.msg || JSON.stringify(detail);
-            }
+            const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || error;
+            const msg = toMessage(detail, 'Failed to save resource allocations.');
             setSaveError(msg);
-            alert(msg);
         } finally {
             setIsSaving(false);
         }
@@ -971,17 +978,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             console.error('Deleting all resources failed:', error);
             setLocalRows(previousRows);
             if (onClearAll) onClearAll(previousRows);
-            const detail = error?.response?.data?.detail;
-            let msg = 'Failed to delete all resources.';
-            if (typeof detail === 'string') {
-                msg = detail;
-            } else if (Array.isArray(detail)) {
-                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-            } else if (detail && typeof detail === 'object') {
-                msg = detail.msg || JSON.stringify(detail);
-            }
+            const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || error;
+            const msg = toMessage(detail, 'Failed to delete all resources.');
             setSaveError(msg);
-            alert(msg);
         } finally {
             setIsDeletingAll(false);
         }
@@ -1623,23 +1622,49 @@ const CommercialSection = ({ project, onUpdate }) => {
         setEditData(newData);
     }, [project]);
 
+    const [saveError, setSaveError] = useState('');
+
+    const normalizeBudget = (val) => {
+        if (val === null || val === undefined) return '0';
+        const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+        if (Number.isNaN(num)) return '0';
+        return num.toString();
+    };
+
     const handleSave = async () => {
         const pId = project.project_id || project.id;
-        if (!pId) return;
+        if (!pId) {
+            setSaveError('Missing project id.');
+            return;
+        }
+
+        const payload = {
+            budget: normalizeBudget(editData.budget),
+            billing_type: (editData.billingType ?? '').toString(),
+            contract_type: (editData.contractType ?? '').toString(),
+            revenue_model: (editData.revenueModel ?? '').toString(),
+            commercial_notes: (editData.notes ?? '').toString()
+        };
+
+        console.log('Commercial save payload:', { projectId: pId, ...payload });
+
         try {
-            await axios.put(`/projects/${pId}/details`, {
-                budget: editData.budget,
-                billing_type: editData.billingType,
-                contract_type: editData.contractType,
-                revenue_model: editData.revenueModel,
-                commercial_notes: editData.notes
-            });
-            setData(editData);
+            const response = await axios.put(`/projects/${pId}/details`, payload);
+            if (!response || response.data?.error) {
+                throw new Error(response?.data?.message || 'Save failed');
+            }
+            setSaveError('');
+            setData(payload);
             setIsEditing(false);
             if (onUpdate) onUpdate();
         } catch (error) {
-            console.error("Failed to save commercial details", error);
-            alert("Failed to save changes. Please try again.");
+            console.error('Failed to save commercial details', error);
+            const message =
+                error?.response?.data?.message ||
+                error?.response?.data?.detail ||
+                error?.message ||
+                'Failed to save changes';
+            setSaveError(toMessage(message));
         }
     };
 
@@ -1661,6 +1686,12 @@ const CommercialSection = ({ project, onUpdate }) => {
                     </button>
                 )}
             </div>
+
+            {saveError && (
+                <div className="mb-3 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    {saveError}
+                </div>
+            )}
 
             {isEditing ? (
                 <div className="space-y-3">
@@ -1968,76 +1999,79 @@ const ProjectDetailsPage = () => {
                 <OngoingProjectInfoCard project={project} resources={resources} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                {/* Left Col: Overview Information */}
-                <div className="lg:col-span-1 flex flex-col gap-5 relative">
-                    <ScopeSection project={project} onUpdate={loadProjectData} />
-                    <CommercialSection project={project} onUpdate={loadProjectData} />
-                </div>
+            <div className="flex flex-col gap-5">
+                {/* Full-width overview cards */}
+                <ProjectHealthCard project={project} resources={resources} />
 
-                {/* Right Col: Resource Allocation */}
-                <div className="lg:col-span-2 space-y-6">
-                    <ProjectHealthCard project={project} resources={resources} />
-
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        {/* Section header */}
-                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                    <Users size={18} className="text-blue-500" />
-                                    Resource Allocation &amp; Planning
-                                </h3>
-                            </div>
-                            <div className="flex items-center">
-                                <div className="bg-slate-100/80 p-1 rounded-xl flex items-center shadow-inner w-fit border border-slate-200/60">
-                                    <button 
-                                        onClick={() => setViewMode('previous')}
-                                        className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
-                                            viewMode === 'previous' 
-                                            ? 'bg-rose-600 text-white shadow-md scale-105' 
-                                            : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
-                                        }`}
-                                    >
-                                        ← Previous
-                                    </button>
-                                    <button 
-                                        onClick={() => setViewMode('current')}
-                                        className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${
-                                            viewMode === 'current' 
-                                            ? 'bg-blue-600 text-white shadow-md scale-105' 
-                                            : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
-                                        }`}
-                                    >
-                                        ● Current
-                                    </button>
-                                    <button 
-                                        onClick={() => setViewMode('next')}
-                                        className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
-                                            viewMode === 'next' 
-                                            ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                                            : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
-                                        }`}
-                                    >
-                                        Upcoming →
-                                    </button>
-                                </div>
+                {/* Full-width Resource Allocation & Planning */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                    {/* Section header */}
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <Users size={18} className="text-blue-500" />
+                                Resource Allocation &amp; Planning
+                            </h3>
+                        </div>
+                        <div className="flex items-center">
+                            <div className="bg-slate-100/80 p-1 rounded-xl flex items-center shadow-inner w-fit border border-slate-200/60">
+                                <button 
+                                    onClick={() => setViewMode('previous')}
+                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
+                                        viewMode === 'previous' 
+                                        ? 'bg-rose-600 text-white shadow-md scale-105' 
+                                        : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
+                                    }`}
+                                >
+                                    ← Previous
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('current')}
+                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${
+                                        viewMode === 'current' 
+                                        ? 'bg-blue-600 text-white shadow-md scale-105' 
+                                        : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
+                                    }`}
+                                >
+                                    ● Current
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('next')}
+                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
+                                        viewMode === 'next' 
+                                        ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                                        : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
+                                    }`}
+                                >
+                                    Upcoming →
+                                </button>
                             </div>
                         </div>
+                    </div>
 
-                        <AllocationTable 
-                            projectId={id} 
-                            projectStart={project.start_date}
-                            projectEnd={project.end_date}
-                            rows={resources} 
-                            employees={employees} 
-                            rolesList={rolesList} 
-                            globalAllocations={globalAllocations}
-                            onUpdate={loadProjectData} 
-                            onClearAll={(nextRows = []) => setResources(nextRows)}
-                            viewMode={viewMode}
-                            setViewMode={setViewMode}
-                            visibleWeeks={visibleWeeks}
-                        />
+                    <AllocationTable 
+                        projectId={id} 
+                        projectStart={project.start_date}
+                        projectEnd={project.end_date}
+                        rows={resources} 
+                        employees={employees} 
+                        rolesList={rolesList} 
+                        globalAllocations={globalAllocations}
+                        onUpdate={loadProjectData} 
+                        onClearAll={(nextRows = []) => setResources(nextRows)}
+                        viewMode={viewMode}
+                        setViewMode={setViewMode}
+                        visibleWeeks={visibleWeeks}
+                    />
+                </div>
+
+                {/* Scope & Commercial side-by-side below allocation */}
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <ScopeSection project={project} onUpdate={loadProjectData} />
+                    </div>
+                    <div>
+                        <CommercialSection project={project} onUpdate={loadProjectData} />
                     </div>
                 </div>
             </div>

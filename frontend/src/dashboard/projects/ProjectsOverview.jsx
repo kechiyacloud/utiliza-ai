@@ -52,7 +52,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
     if (!stats) return null;
 
     return (
-        <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="w-full flex flex-col gap-4 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-4">
                     {location.state?.showBack && (
@@ -65,7 +65,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                         </button>
                     )}
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Projects Overview</h1>
+                        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Projects Overview</h1>
                         <p className="text-gray-500 text-sm mt-1 font-medium">Manage and monitor all active and upcoming projects.</p>
                     </div>
                 </div>

@@ -398,6 +398,7 @@ def get_employee_filter_options():
         release_db_connection(conn)
 
 @router.get("/departments/roles-mapping")
+@router.get("/employees/departments/roles-mapping")  # Frontend expects /employees prefix
 def get_departments_roles_mapping():
     conn = get_db_connection()
     cur = conn.cursor()
