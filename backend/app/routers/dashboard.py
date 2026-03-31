@@ -213,7 +213,12 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
             """, (department, department))
             skills_gap = []
             for r in cur.fetchall():
-                avail, alloc = r[1] or 0, r[2] or 0
+                try:
+                    avail = float(r[1] or 0)
+                    alloc = float(r[2] or 0)
+                except (ValueError, TypeError):
+                    avail, alloc = 0.0, 0.0
+                
                 gap = "high" if alloc > avail else "medium" if alloc == avail else "low"
                 skills_gap.append({"skill": r[0], "availability": avail, "allocated": alloc, "gap": gap})
         except Exception as e:
@@ -321,9 +326,18 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
                 GROUP BY mo.month_start ORDER BY mo.month_start
             """, dept_params)
             forecast = []
+            forecast = []
             for r in cur.fetchall():
-                alloc = float(r[1])
-                forecast.append({"month": r[0], "allocated": round(alloc, 2), "availability": round(max(float(active_hc)-alloc, 0), 2)})
+                try:
+                    alloc = float(r[1] or 0)
+                    hc_val = float(active_hc or 0)
+                except (ValueError, TypeError):
+                    alloc, hc_val = 0.0, 0.0
+                forecast.append({
+                    "month": r[0],
+                    "allocated": round(alloc, 2),
+                    "availability": round(max(hc_val - alloc, 0.0), 2)
+                })
 
             # Projects at risk
             if department:
@@ -342,12 +356,17 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
                 """)
             projects_at_risk = []
             for r in cur.fetchall():
-                if r[1] == 0:
-                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"High","reason": f"No resources ({r[1]} members)","health":20})
-                elif r[1] < 3:
-                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"Medium","reason": f"Under-resourced ({r[1]} members)","health":55})
+                try:
+                    res_count = int(r[1] or 0)
+                except (ValueError, TypeError):
+                    res_count = 0
+                
+                if res_count == 0:
+                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"High","reason": f"No resources ({res_count} members)","health":20})
+                elif res_count < 3:
+                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"Medium","reason": f"Under-resourced ({res_count} members)","health":55})
                 else:
-                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"Low","reason": f"Sufficient ({r[1]} members)","health":100})
+                    projects_at_risk.append({"name": r[0],"client":"Internal","risk":"Low","reason": f"Sufficient ({res_count} members)","health":100})
 
             alerts = []
             if upcoming_bench > 0:
@@ -594,7 +613,12 @@ def skills_gap():
         rows = cur.fetchall()
         result = []
         for r in rows:
-            availability, allocated = r[1] or 0, r[2] or 0
+            try:
+                availability = float(r[1] or 0)
+                allocated = float(r[2] or 0)
+            except (ValueError, TypeError):
+                availability, allocated = 0.0, 0.0
+            
             gap = "high" if allocated > availability else "medium" if allocated == availability else "low"
             result.append({"skill": r[0], "availability": availability, "allocated": allocated, "gap": gap})
         return result
@@ -642,7 +666,19 @@ def dashboard_executive_metrics():
             LEFT JOIN projects_allocation pa ON pa.allocation_start_date<=(mo.month_start+INTERVAL '1 month'-INTERVAL '1 day') AND (pa.allocation_end_date>=mo.month_start OR pa.allocation_end_date IS NULL)
             GROUP BY mo.month_start ORDER BY mo.month_start
         """)
-        forecast = [{"month": r[0], "allocated": round(float(r[1]), 2), "availability": round(max(float(active_hc)-float(r[1]), 0), 2)} for r in cur.fetchall()]
+        forecast = []
+        for r in cur.fetchall():
+            try:
+                r_alloc = float(r[1] or 0)
+                hc_val = float(active_hc or 0)
+            except (ValueError, TypeError):
+                r_alloc, hc_val = 0.0, 0.0
+            
+            forecast.append({
+                "month": r[0],
+                "allocated": round(r_alloc, 2),
+                "availability": round(max(hc_val - r_alloc, 0.0), 2)
+            })
 
         return {"total_employees": total_emp, "billable_headcount": billable_hc, "bench_headcount": bench_hc, "notice_period": notice_p, "upcoming_bench": upcoming_bench, "forecast": forecast}
     finally:
@@ -700,7 +736,15 @@ def export_risk_board():
     try:
         cur.execute("SELECT p.project_name, count(pa.employee_id) as res_count FROM projects p LEFT JOIN projects_allocation pa ON pa.project_id = p.project_id GROUP BY p.project_name ORDER BY res_count ASC")
         rows = cur.fetchall()
-        data = [[r[0], "Internal", "High" if r[1]==0 else "Medium" if r[1]<3 else "Low", f"Res count: {r[1]}", r[1], 100 if r[1]>=3 else 55 if r[1]>0 else 20] for r in rows]
+        data = []
+        for r in rows:
+            try:
+                rc = int(r[1] or 0)
+            except (ValueError, TypeError):
+                rc = 0
+            risk = "High" if rc == 0 else "Medium" if rc < 3 else "Low"
+            health = 100 if rc >= 3 else 55 if rc > 0 else 20
+            data.append([r[0], "Internal", risk, f"Res count: {rc}", rc, health])
         output = io.StringIO(); writer = csv.writer(output); writer.writerow(["Project Name", "Client", "Delivery Risk", "Risk Reason", "Resource Count", "Health %"]); writer.writerows(data); output.seek(0)
         return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=delivery_risk_board.csv"})
     finally:

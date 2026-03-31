@@ -12,7 +12,8 @@ allowed_origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
     "https://nonhabitably-arabinosic-dedra.ngrok-free.dev",
-    "http://utiliza-ai.cdians.com"
+    "http://utiliza-ai.cdians.com",
+    "https://utiliza-ai.cdians.com",
 ]
 
 app.add_middleware(

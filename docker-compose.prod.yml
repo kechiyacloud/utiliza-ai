@@ -1,0 +1,30 @@
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: app-backend
+    restart: always
+    env_file: ./backend/.env.prod
+    expose:
+      - "8000"
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: app-frontend
+    restart: always
+    ports:
+      - "443:443"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

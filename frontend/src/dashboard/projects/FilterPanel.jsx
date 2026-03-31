@@ -2,21 +2,44 @@ import React, { useState } from 'react';
 import { X, Filter, RotateCcw } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
-const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
-    const [filters, setFilters] = useState({
+const FilterPanel = ({
+    isOpen,
+    onClose,
+    onApplyFilters,
+    currentFilters,
+    availableStatuses,
+    onClearFilters,
+}) => {
+    const defaultFilters = {
         name: '',
         type: '',
         status: '',
         minResources: '',
         startDate: '',
-        endDate: ''
-    });
+        endDate: '',
+        resourceName: '',
+        monthWeek: '',
+        allocation: '',
+        resourceType: '',
+    };
+
+    const statusOptions = (availableStatuses && availableStatuses.length > 0)
+        ? availableStatuses
+        : PROJECT_STATUS_OPTIONS;
+
+    const [filters, setFilters] = useState({ ...defaultFilters, ...(currentFilters || {}) });
+
+    React.useEffect(() => {
+        if (isOpen) {
+            setFilters({ ...defaultFilters, ...(currentFilters || {}) });
+        }
+    }, [isOpen, currentFilters]);
 
     if (!isOpen) return null;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFilters(prev => ({ ...prev, [name]: value }));
+        setFilters((prev) => ({ ...prev, [name]: value }));
     };
 
     const handleApply = () => {
@@ -25,31 +48,24 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
     };
 
     const handleReset = () => {
-        const resetFilters = {
-            name: '',
-            type: '',
-            status: '',
-            minResources: '',
-            startDate: '',
-            endDate: ''
-        };
-        setFilters(resetFilters);
-        onApplyFilters(resetFilters); // Optional: Apply reset immediately or wait for "Apply"
+        setFilters(defaultFilters);
+        if (onClearFilters) {
+            onClearFilters();
+        } else {
+            onApplyFilters(defaultFilters);
+        }
+        onClose();
     };
 
     return (
         <>
-            {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity"
                 onClick={onClose}
             />
 
-            {/* Side Panel */}
             <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
                 <div className="h-full flex flex-col">
-
-                    {/* Header */}
                     <div className="flex justify-between items-center p-6 border-b border-gray-100">
                         <div>
                             <h2 className="text-xl font-bold text-gray-800">Filter Projects</h2>
@@ -60,11 +76,8 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                         </button>
                     </div>
 
-                    {/* Form Content */}
                     <div className="flex-1 overflow-y-auto p-6">
                         <div className="flex flex-col gap-6">
-
-                            {/* Project Name */}
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Project Name</label>
                                 <input
@@ -77,7 +90,6 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                 />
                             </div>
 
-                            {/* Type */}
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Type</label>
                                 <select
@@ -94,7 +106,6 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                 </select>
                             </div>
 
-                            {/* Status */}
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
                                 <select
@@ -104,13 +115,12 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     onChange={handleChange}
                                 >
                                     <option value="">All Status</option>
-                                    {PROJECT_STATUS_OPTIONS.map((status) => (
+                                    {statusOptions.map((status) => (
                                         <option key={status} value={status}>{status}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Resource Count */}
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Min Employees</label>
                                 <input
@@ -124,7 +134,6 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                 />
                             </div>
 
-                            {/* Dates */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Start Date (After)</label>
@@ -148,10 +157,15 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                 </div>
                             </div>
 
+                            <div className="flex flex-col gap-1 border-t border-gray-100 pt-2">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Advanced Filters</label>
+                                <p className="text-[11px] text-gray-400">
+                                    Additional filter keys are preserved for compatibility with allocation views.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Footer */}
                     <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
                         <button
                             onClick={handleReset}

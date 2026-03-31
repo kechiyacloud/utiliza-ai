@@ -58,7 +58,7 @@ def register_user(data: RegisterRequest):
         print("Error:", str(e))
         raise HTTPException(
             status_code=500,
-            detail="Internal server error"
+            detail=str(e)
         )
 
     finally:
@@ -118,7 +118,7 @@ def login_user(data: LoginRequest):
         print("Error:", str(e))
         raise HTTPException(
             status_code=500,
-            detail="Internal server error"
+            detail=str(e)
         )
 
     finally:

@@ -67,7 +67,7 @@ const ProjectTypeChart = ({ projects }) => {
 
                 <div className="flex-1 min-h-[250px] relative">
                     {data.length > 0 ? (
-                        <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                        <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
                                     data={data}

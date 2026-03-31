@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Pencil, Eye, Trash2, AlertTriangle, Loader2, PieChart, ArrowLeft, Download, FileText, Table as TableIcon, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { Search, Filter, Pencil, Eye, Trash2, AlertTriangle, Loader2, PieChart, ArrowLeft, Download, FileText, Table as TableIcon, FileSpreadsheet, ChevronDown, RotateCcw } from 'lucide-react';
 import axios from '../../api/axios';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
@@ -192,7 +192,19 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
 
                     {/* Right Side: Search and Export */}
-                    <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full md:w-auto">
+                        {/* Active Filters Clear Button UI */}
+                        {Object.values(filters).some(val => val !== '') && (
+                            <button
+                                onClick={() => setFilters({ name: '', resourceName: '', monthWeek: '', status: '', allocation: '', resourceType: '' })}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-100 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100 transition-all shadow-sm"
+                                title="Clear Active Filters"
+                            >
+                                <RotateCcw size={14} />
+                                Clear Filters
+                            </button>
+                        )}
+
                         <div className="relative group">
                             <button 
                                 onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
@@ -353,6 +365,11 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 isOpen={isFilterPanelOpen}
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
+                currentFilters={filters}
+                availableStatuses={[...new Set(projects.map(p => p.status).filter(Boolean))].sort()}
+                onClearFilters={() => setFilters({
+                    name: '', resourceName: '', monthWeek: '', status: '', allocation: '', resourceType: ''
+                })}
             />
 
             {/* Delete Confirmation Modal */}

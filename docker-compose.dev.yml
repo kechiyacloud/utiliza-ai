@@ -1,25 +1,47 @@
-services:
+sservices:
+
+  database:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    env_file: ./database/.env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5440:5432"
+    volumes:
+      - ./database/backup_v6.sql:/docker-entrypoint-initdb.d/1_backup_v6.sql
+      - ./database/backup_v7.sql:/docker-entrypoint-initdb.d/2_backup_v7.sql
+      - postgres_data:/var/lib/postgresql/data
 
   backend:
     restart: always
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: project-backend-full
+    container_name: project-backend-dev
     env_file: ./backend/.env
+    environment:
+      - DB_HOST=database
+      - DB_PORT=5432
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    depends_on:
+      - database
 
   frontend:
-    restart: always
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: project-frontend-full
+    container_name: project-frontend-dev
     ports:
-      - "443:5173"
+      - "5173:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+volumes:
+  postgres_data:
