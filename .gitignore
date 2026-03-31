@@ -10,6 +10,10 @@ dumps/
 # Sheets sync credentials
 .env.sheets
 
+# Production env files with secrets (templates are safe, filled copies are not)
+.env.prod.db
+.env.prod.app
+
 
 .claude/
 
@@ -19,6 +23,9 @@ dumps/
 *_report.md
 *_logs*
 MCP_GUIDE.md
+start-dev.bat
+README.md
+LOCAL_DEV_SETUP.md
 
 
 

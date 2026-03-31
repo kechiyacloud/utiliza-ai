@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+.env.local
 
 # Diagnostic and temp scripts
 test_db.py

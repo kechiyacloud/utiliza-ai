@@ -1,0 +1,54 @@
+# =============================================================================
+# PRODUCTION — App Instance (EC2 #1)
+# Runs Frontend (Nginx) + Backend (FastAPI). Connects to DB instance via VPC.
+#
+# Usage:
+#   1. Copy this file, .env.prod.app, backend/, and frontend/ to App EC2 instance
+#   2. Fill in .env.prod.app with the correct APP_PORT
+#   3. Fill in backend/.env.prod with the DB instance private IP and passwords
+#   4. docker compose -f docker-compose.prod.app.yml up -d --build
+#
+# Port mapping:
+#   - Nginx listens on port 80 inside the container
+#   - Docker maps ${APP_PORT}:80 on the host
+#   - Set APP_PORT to match your ALB Target Group port
+#   - Example: If Target Group health check port = 8080, set APP_PORT=8080
+# =============================================================================
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: prod-backend
+    restart: always
+    env_file: ./backend/.env.prod
+    expose:
+      - "8000"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: prod-frontend
+    restart: always
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

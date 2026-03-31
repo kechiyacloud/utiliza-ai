@@ -52,7 +52,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '^/(api/)?(login|register|employees?|dashboard|projects|allocations|clients|partners|availability|departments|feedback)': {
-        target: 'http://backend:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       }

@@ -1,0 +1,52 @@
+# =============================================================================
+# PRODUCTION — DB Instance (EC2 #2)
+# Runs PostgreSQL + Redis. Accessed by App instance via VPC private IP.
+#
+# Usage:
+#   1. Copy this file + .env.prod.db to the DB EC2 instance
+#   2. Fill in .env.prod.db with strong passwords
+#   3. docker compose -f docker-compose.prod.db.yml up -d
+#
+# Security:
+#   - Ports are bound to 0.0.0.0 (all interfaces) — use Security Groups to
+#     restrict access to only the App instance's private IP
+#   - Never expose these ports to the internet (no public subnet / no IGW route)
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: prod-postgres
+    restart: always
+    env_file: .env.prod.db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-migration_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d migration_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: prod-redis
+    restart: always
+    env_file: .env.prod.db
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_prod:/data
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

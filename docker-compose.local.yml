@@ -1,9 +1,21 @@
+# =============================================================================
+# LOCAL DEVELOPMENT — Databases only
+# Frontend and Backend run in terminal (not in Docker)
+#
+# Usage:
+#   docker compose -f docker-compose.local.yml up -d
+#
+# Then in separate terminals:
+#   Terminal 1 (backend):  cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+#   Terminal 2 (frontend): cd frontend && npm run dev
+# =============================================================================
+
 services:
 
   postgres:
     image: postgres:16-alpine
     container_name: project-postgres-local
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: localpass
@@ -20,41 +32,10 @@ services:
       retries: 10
       start_period: 10s
 
-  backend:
-    restart: always
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: project-backend-local
-    env_file: ./backend/.env
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: project-frontend-local
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-
   redis:
     image: redis:7-alpine
     container_name: project-redis-local
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
