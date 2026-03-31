@@ -18,6 +18,88 @@ import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
 /* ──────────────────────────────────────────────────────────
    HELPERS — for Last 4 Weeks visualization
    ────────────────────────────────────────────────────────── */
+function normalizeDateString(dateStr) {
+    if (!dateStr) return '';
+    const trimmed = (dateStr || '').trim();
+    if (!trimmed) return '';
+
+    // yyyy-mm-dd (already in DB-friendly format)
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return trimmed;
+
+    // dd-mm-yyyy or dd/mm/yyyy
+    const altMatch = trimmed.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (altMatch) {
+        const [, dd, mm, yyyy] = altMatch;
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // Fallback: parseable date -> format to yyyy-mm-dd
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+        const yyyy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+        const dd = String(parsed.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return ''; // invalid / unrecognized
+}
+
+function toMessage(val, fallback = 'Something went wrong') {
+    if (!val && val !== 0) return fallback;
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) {
+        const parts = val.map(v => toMessage(v, '')).filter(Boolean);
+        return parts.join(', ') || fallback;
+    }
+    if (typeof val === 'object') {
+        if (val.msg) return toMessage(val.msg, fallback);
+        if (val.detail) return toMessage(val.detail, fallback);
+        return JSON.stringify(val);
+    }
+    return String(val);
+}
+
+const toIntOrNull = (val) => {
+    if (val === undefined || val === null || val === '') return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+};
+
+const sanitizeWeeklyHours = (wh = {}) => {
+    const cleaned = {};
+    Object.entries(wh || {}).forEach(([wk, hrs]) => {
+        if (hrs === '' || hrs === null || hrs === undefined) return;
+        const numWeek = Number(wk);
+        const numHours = Number(hrs);
+        if (Number.isFinite(numWeek) && Number.isFinite(numHours)) {
+            cleaned[numWeek] = numHours;
+        }
+    });
+    return cleaned;
+};
+
+const normalizeTeamMember = (tm = {}) => ({
+    employee_id: tm.employee_id || null,
+    name: (tm.name || '').trim(),
+    role: (tm.role || '').trim(),
+    location: tm.location || 'Remote',
+    allocation_pct: tm.allocation_pct === '' ? null : Number(tm.allocation_pct || 0),
+    allocation_start_date: tm.allocation_start_date || null,
+    allocation_end_date: tm.allocation_end_date || null,
+    billable_shadow: tm.billable_shadow || 'Billable',
+    weekly_hours: sanitizeWeeklyHours(tm.weekly_hours),
+    w1: Number(tm.w1 || 0),
+    w2: Number(tm.w2 || 0),
+    w3: Number(tm.w3 || 0),
+    w4: Number(tm.w4 || 0),
+    project_count: tm.project_count || null,
+    department: tm.department || null,
+    company: tm.company || 'Cloud Destinations',
+    company_type: tm.company_type || 'Internal',
+});
+
 function getMonday(date) {
     const d = new Date(date);
     const day = d.getDay() || 7;
@@ -316,7 +398,7 @@ const SearchableDropdown = ({
                     setIsOpen(false);
                 }}
                 disabled={disabled}
-                className={`w-full p-2.5 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
+                className={`w-full h-10 px-3 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
                     ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
                     ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
@@ -755,6 +837,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     const handleAddTeamMember = () => {
         setFormData(prev => ({
+            ...prev,
             teamMembers: [
                 ...prev.teamMembers,
                 {
@@ -847,7 +930,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                     );
                 }
 
-                const newWeeklyHours = { ...updated.weekly_hours };
+                const newWeeklyHours = { ...(updated.weekly_hours || {}) };
                 targetWeeks.forEach(w => {
                     newWeeklyHours[w.weekNum] = hours;
                 });
@@ -879,7 +962,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         e.preventDefault();
         setSubmitError('');
 
-        if (!formData.name.trim()) {
+        if (!(formData.name || '').trim()) {
             setSubmitError('Project name is required.');
             return;
         }
@@ -887,9 +970,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Start date is required.');
             return;
         }
-        if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
-            setSubmitError('End date cannot be earlier than start date.');
+        const normalizedStart = normalizeDateString(formData.startDate);
+        if (!normalizedStart) {
+            setSubmitError('Start date format is invalid.');
             return;
+        }
+        const normalizedEnd = normalizeDateString(formData.endDate);
+        if (normalizedEnd && normalizedStart) {
+            const startTs = new Date(normalizedStart).getTime();
+            const endTs = new Date(normalizedEnd).getTime();
+            if (endTs < startTs) {
+                setSubmitError('End date cannot be earlier than start date.');
+                return;
+            }
         }
         if (formData.type === 'Client' && !formData.clientType) {
             setSubmitError('Please select a client type.');
@@ -899,7 +992,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-        if (formData.type === 'Client' && !formData.clientName.trim()) {
+        if (formData.type === 'Client' && !(formData.clientName || '').trim()) {
             setSubmitError('Please select a client name.');
             return;
         }
@@ -921,41 +1014,44 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
         const payload = {
             project_id: projectId,
-            project_name: formData.name,
+            project_name: (formData.name || '').trim(),
             project_status: formData.status,
             type: effectiveType,
             billable: formData.billable,
-            start_date: formData.startDate,
-            end_date: formData.endDate || null,
-            team_members: formData.teamMembers
+            start_date: normalizedStart,
+            end_date: normalizedEnd || null,
+            team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
         if (isClientProject) {
-            payload.client_id = formData.clientId || null;
-            payload.client_name = formData.clientName || null;
+            payload.client_id = toIntOrNull(formData.clientId);
+            payload.client_name = (formData.clientName || '').trim() || null;
         }
         if (isPartnerClientProject) {
-            payload.partner_id = formData.partnerId || null;
-            payload.partner = formData.partnerName || null;
+            payload.partner_id = toIntOrNull(formData.partnerId);
+            payload.partner = (formData.partnerName || '').trim() || null;
         }
+
+        console.log('Payload:', payload);
 
         try {
             const response = await axios.post('/projects', payload);
+            if (!response || response.data?.error) {
+                throw new Error(response?.data?.message || 'Save failed');
+            }
+            setSubmitError('');
             setIsSubmitting(false);
             if (onAdd) onAdd(response?.data || payload);
             onClose();
         } catch (err) {
-            console.error(err);
-            const detail = err.response?.data?.detail;
-            let msg = 'Failed to create project.';
-            if (typeof detail === 'string') {
-                msg = detail;
-            } else if (Array.isArray(detail)) {
-                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
-            } else if (detail && typeof detail === 'object') {
-                msg = detail.msg || JSON.stringify(detail);
-            }
-            setSubmitError(msg);
+            console.error('Save Error:', err);
+            const message =
+                err?.response?.data?.message ||
+                err?.response?.data?.detail ||
+                err?.message ||
+                err ||
+                'Failed to save changes';
+            setSubmitError(toMessage(message, 'Failed to save changes'));
             setIsSubmitting(false);
         }
     };
@@ -995,12 +1091,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                     <form id="add-project-form" onSubmit={handleSubmit} className="p-6 flex flex-col gap-8">
                         {submitError && (
                             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 flex items-center gap-2">
-                                <AlertCircle size={16} className="shrink-0" /> {submitError}
+                                <AlertCircle size={16} className="shrink-0" /> {toMessage(submitError)}
                             </div>
                         )}
                         {entityError && (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 flex items-center gap-2">
-                                <AlertCircle size={16} className="shrink-0" /> {entityError}
+                                <AlertCircle size={16} className="shrink-0" /> {toMessage(entityError)}
                             </div>
                         )}
 
@@ -1198,24 +1294,23 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         onBlurCapture={handleTeamBlur}
                                         className="rounded-xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible"
                                     >
-                                        <table className="w-full text-xs min-w-[1200px]">
+                                        <table className="w-full text-sm min-w-[1200px]">
                                             <thead>
-                                                <tr className="bg-slate-50 border-b border-slate-100">
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-8 tracking-tight">S.No</th>
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[160px]">Name</th>
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[140px]">Role</th>
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[90px]">Location</th>
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[260px]">
-                                                        Allocation
-                                                        <span className="ml-1 font-normal text-slate-400 normal-case">(100% = 40h)</span>
-                                                    </th>
-                                                    <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[100px]">Resource Type</th>
+                                                <tr className="bg-blue-50/70 border-b border-slate-200">
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[160px]">Name</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
                                                     {visibleWeeks.map((wk, wIdx) => {
                                                         const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                         return (
-                                                        <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50/50 border-l border-slate-100">
-                                                            <div className="text-xs font-bold text-gray-600 uppercase tracking-tight">{weekLabel}</div>
-                                                            <div className="text-[9px] font-medium text-slate-400 whitespace-nowrap">{wk.dateRange}</div>
+                                                        <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50 border-l border-slate-200">
+                                                            <div className="text-[11px] font-semibold text-blue-800 uppercase tracking-tight">{weekLabel}</div>
+                                                            <div className="text-[9px] font-medium text-slate-500 whitespace-nowrap">{wk.dateRange}</div>
                                                         </th>
                                                         );
                                                     })}
@@ -1224,7 +1319,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setShowAllWeeks(v => !v)}
-                                                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+                                                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                                                             >
                                                                 {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
                                                             </button>
@@ -1235,8 +1330,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             </thead>
                                             <tbody>
                                                 {formData.teamMembers.map((member, idx) => (
-                                                    <tr key={idx} className="border-b border-gray-50 bg-white hover:bg-slate-50/40">
-                                                        <td className="px-3 py-2 text-center text-slate-400 font-medium">{idx + 1}</td>
+                                                    <tr key={idx} className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
+                                                        <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
                                                         <td className="px-2 py-2 min-w-[160px]">
                                                             <SearchableDropdown
                                                                 items={employeeOptions}
@@ -1265,44 +1360,47 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                             <select
                                                                 value={member.location}
                                                                 onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
-                                                                className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
+                                                                className="w-full h-10 px-2 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
                                                             >
                                                                 <option value="Remote">Remote</option>
                                                                 <option value="On-Site">On-Site</option>
                                                                 <option value="Hybrid">Hybrid</option>
                                                             </select>
                                                         </td>
-                                                        {/* Allocation column — single line: % | Full | Start → End */}
-                                                        <td className="px-2 py-2 min-w-[260px]">
-                                                            <div className="flex items-center gap-1.5 flex-nowrap">
-                                                                <input
-                                                                    type="number" min="0" max="100"
-                                                                    placeholder="0"
-                                                                    value={member.allocation_pct}
-                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
-                                                                    className="w-12 px-1.5 py-1 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                />
-                                                                <input
-                                                                    type="date"
-                                                                    value={member.allocation_start_date}
-                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
-                                                                    className="w-[100px] px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
-                                                                />
-                                                                <span className="text-[10px] text-slate-400 shrink-0">→</span>
-                                                                <input
-                                                                    type="date"
-                                                                    value={member.allocation_end_date}
-                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
-                                                                    className="w-[100px] px-1 py-0.5 text-[10px] border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
-                                                                />
-                                                            </div>
+                                                        {/* Allocation % */}
+                                                        <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
+                                                            <input
+                                                                type="number" min="0" max="100"
+                                                                placeholder="0"
+                                                                value={member.allocation_pct}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
+                                                                className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            />
+                                                        </td>
+                                                        {/* Start Date */}
+                                                        <td className="px-2 py-2 min-w-[130px]">
+                                                            <input
+                                                                type="date"
+                                                                value={member.allocation_start_date || ''}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
+                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                            />
+                                                        </td>
+                                                        {/* End Date */}
+                                                        <td className="px-2 py-2 min-w-[130px]">
+                                                            <input
+                                                                type="date"
+                                                                value={member.allocation_end_date || ''}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
+                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                            />
                                                         </td>
                                                         {/* Resource Type column */}
-                                                        <td className="px-2 py-2 min-w-[100px]">
+                                                        <td className="px-2 py-2 min-w-[110px]">
                                                             <select
                                                                 value={member.billable_shadow}
                                                                 onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
-                                                                className={`w-full px-2 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
+                                                                className={`w-full h-10 px-2 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
                                                                     ${member.billable_shadow === 'Billable'
                                                                         ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
                                                                         : member.billable_shadow === 'Non-billable'
@@ -1319,14 +1417,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                         {visibleWeeks.map((wk, wIdx) => {
                                                             const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                             return (
-                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/20">
+                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/40">
                                                                 <input
                                                                     type="number" min="0" max="40"
                                                                     placeholder="0h"
-                                                                    value={member.weekly_hours[wk.weekNum] ?? ''}
+                                                                    value={(member.weekly_hours || {})[wk.weekNum] ?? ''}
                                                                     onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
                                                                     title={weekLabel}
-                                                                    className="w-full px-1 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
+                                                                    className="w-full px-1.5 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
                                                                 />
                                                             </td>
                                                             );

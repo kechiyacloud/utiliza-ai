@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import psycopg2
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.database import get_db_connection, release_db_connection
 
@@ -48,7 +48,7 @@ class TeamMemberCreate(BaseModel):
     allocation_start_date: Optional[str] = None
     allocation_end_date: Optional[str] = None
     billable_shadow: Optional[str] = "Billable"   # 'Billable' | 'Shadow'
-    weekly_hours: Optional[Dict[str, float]] = {} # e.g., {"2025-10": 40, "45": 20}
+    weekly_hours: Optional[Dict[int, float]] = Field(default_factory=dict)  # {"2025-10": 40, "45": 20}
     # Backward-compat fields (used by PDF export and existing callers)
     project_count: Optional[float] = None
     department: Optional[str] = None
@@ -58,6 +58,40 @@ class TeamMemberCreate(BaseModel):
     w2: float = 0
     w3: float = 0
     w4: float = 0
+
+    @field_validator("allocation_pct", mode="before")
+    def _clean_allocation_pct(cls, v):
+        if v in ("", None):
+            return None
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            raise ValueError("allocation_pct must be a number")
+
+    @field_validator("w1", "w2", "w3", "w4", mode="before")
+    def _clean_week_slots(cls, v):
+        if v in ("", None):
+            return 0.0
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            raise ValueError("Weekly hour slots must be numbers")
+
+    @field_validator("weekly_hours", mode="before")
+    def _clean_weekly_hours(cls, v):
+        if not v:
+            return {}
+        cleaned = {}
+        for wk, hrs in dict(v).items():
+            if hrs in ("", None):
+                continue
+            try:
+                week_num = int(wk)
+                hours_val = float(hrs)
+            except (TypeError, ValueError):
+                continue  # skip unparsable entries
+            cleaned[week_num] = hours_val
+        return cleaned
 
 
 class ResourceAllocationUpdate(BaseModel):
