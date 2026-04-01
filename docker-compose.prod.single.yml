@@ -1,0 +1,98 @@
+# =============================================================================
+# PRODUCTION — Single EC2 Instance
+# Runs all services: Frontend (Nginx) + Backend (FastAPI) + PostgreSQL + Redis
+#
+# Usage:
+#   1. Copy this file, backend/, frontend/, and database/ to the EC2 instance
+#   2. Fill in backend/.env.prod.single (DB_HOST=postgres, REDIS_HOST=redis)
+#   3. docker compose -f docker-compose.prod.single.yml up -d --build
+#
+# Port mapping:
+#   - ALB / Target Group health check port: 80
+#   - Host port 80 → Nginx (frontend) container port 80
+#   - All other services are internal-only (no host port binding)
+#
+# Security:
+#   - Only port 80 is exposed to the host; use EC2 Security Groups to restrict
+#     inbound traffic to port 80 (HTTP) and 443 if HTTPS is terminated at ALB
+#   - postgres and redis are reachable only via the internal app-network
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: prod-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234567@CD
+      POSTGRES_DB: migration_db
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init_copy.sql:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d migration_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: prod-redis
+    restart: always
+    command: redis-server --requirepass 1234567@CD --appendonly yes
+    expose:
+      - "6379"
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: prod-backend
+    restart: always
+    env_file: ./backend/.env.prod.single
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: prod-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
