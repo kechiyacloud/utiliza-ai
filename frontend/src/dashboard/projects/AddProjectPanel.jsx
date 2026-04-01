@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
 import axios from '../../api/axios';
 import {
     fetchSimpleClients,
+    fetchAutocompleteClients,
     createSimpleClient,
     updateSimpleClient,
     deleteSimpleClient,
@@ -16,6 +18,88 @@ import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
 /* ──────────────────────────────────────────────────────────
    HELPERS — for Last 4 Weeks visualization
    ────────────────────────────────────────────────────────── */
+function normalizeDateString(dateStr) {
+    if (!dateStr) return '';
+    const trimmed = (dateStr || '').trim();
+    if (!trimmed) return '';
+
+    // yyyy-mm-dd (already in DB-friendly format)
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return trimmed;
+
+    // dd-mm-yyyy or dd/mm/yyyy
+    const altMatch = trimmed.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (altMatch) {
+        const [, dd, mm, yyyy] = altMatch;
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // Fallback: parseable date -> format to yyyy-mm-dd
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+        const yyyy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+        const dd = String(parsed.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return ''; // invalid / unrecognized
+}
+
+function toMessage(val, fallback = 'Something went wrong') {
+    if (!val && val !== 0) return fallback;
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) {
+        const parts = val.map(v => toMessage(v, '')).filter(Boolean);
+        return parts.join(', ') || fallback;
+    }
+    if (typeof val === 'object') {
+        if (val.msg) return toMessage(val.msg, fallback);
+        if (val.detail) return toMessage(val.detail, fallback);
+        return JSON.stringify(val);
+    }
+    return String(val);
+}
+
+const toIntOrNull = (val) => {
+    if (val === undefined || val === null || val === '') return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+};
+
+const sanitizeWeeklyHours = (wh = {}) => {
+    const cleaned = {};
+    Object.entries(wh || {}).forEach(([wk, hrs]) => {
+        if (hrs === '' || hrs === null || hrs === undefined) return;
+        const numWeek = Number(wk);
+        const numHours = Number(hrs);
+        if (Number.isFinite(numWeek) && Number.isFinite(numHours)) {
+            cleaned[numWeek] = numHours;
+        }
+    });
+    return cleaned;
+};
+
+const normalizeTeamMember = (tm = {}) => ({
+    employee_id: tm.employee_id || null,
+    name: (tm.name || '').trim(),
+    role: (tm.role || '').trim(),
+    location: tm.location || 'Remote',
+    allocation_pct: tm.allocation_pct === '' ? null : Number(tm.allocation_pct || 0),
+    allocation_start_date: tm.allocation_start_date || null,
+    allocation_end_date: tm.allocation_end_date || null,
+    billable_shadow: tm.billable_shadow || 'Billable',
+    weekly_hours: sanitizeWeeklyHours(tm.weekly_hours),
+    w1: Number(tm.w1 || 0),
+    w2: Number(tm.w2 || 0),
+    w3: Number(tm.w3 || 0),
+    w4: Number(tm.w4 || 0),
+    project_count: tm.project_count || null,
+    department: tm.department || null,
+    company: tm.company || 'Cloud Destinations',
+    company_type: tm.company_type || 'Internal',
+});
+
 function getMonday(date) {
     const d = new Date(date);
     const day = d.getDay() || 7;
@@ -49,6 +133,38 @@ function getLast4Weeks() {
             weekNum: wk,
             year: monday.getFullYear()
         });
+    }
+    return weeks;
+}
+
+/* Generate all ISO weeks between startDateStr and endDateStr (inclusive).
+   Falls back to 12 weeks from start if endDateStr is missing. */
+function getProjectWeeks(startDateStr, endDateStr) {
+    if (!startDateStr) return [];
+    const start = new Date(startDateStr + 'T00:00:00');
+    const startMonday = getMonday(start);
+    let endMonday;
+    if (endDateStr) {
+        const end = new Date(endDateStr + 'T00:00:00');
+        endMonday = getMonday(end);
+    } else {
+        endMonday = new Date(startMonday);
+        endMonday.setDate(startMonday.getDate() + 11 * 7); // 12 weeks default
+    }
+    const weeks = [];
+    const cursor = new Date(startMonday);
+    let wIdx = 1;
+    while (cursor <= endMonday) {
+        const sunday = new Date(cursor);
+        sunday.setDate(cursor.getDate() + 6);
+        weeks.push({
+            weekNum: getISOWeekNumber(cursor),
+            year: cursor.getFullYear(),
+            label: `W${wIdx}`,
+            dateRange: `${fmtDate(cursor)} – ${fmtDate(sunday)}`,
+        });
+        cursor.setDate(cursor.getDate() + 7);
+        wIdx++;
     }
     return weeks;
 }
@@ -148,17 +264,50 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
 /* ──────────────────────────────────────────────────────────
    SEARCHABLE DROPDOWN  —  scrollable + filterable
    ────────────────────────────────────────────────────────── */
-const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found' }) => {
+const SearchableDropdown = ({
+    items,
+    selectedId,
+    onSelect,
+    placeholder,
+    label,
+    disabled = false,
+    noResultsText = 'No results found',
+    isLoading = false,
+    onBeforeOpen,
+    onOpenChange,
+    loadOptions,
+}) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
+    const [asyncItems, setAsyncItems] = useState(items || []);
+    const [asyncLoading, setAsyncLoading] = useState(false);
     const containerRef = useRef(null);
+    const menuRef = useRef(null);
+    const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
+    const requestSeqRef = useRef(0);
 
-    const selectedItem = items.find(i => String(i.id) === String(selectedId));
-    const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+    const selectedPool = loadOptions ? [...asyncItems, ...(items || [])] : items;
+    const selectedItem = selectedPool.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
+    const filtered = loadOptions
+        ? asyncItems
+        : items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    const loading = isLoading || asyncLoading;
+
+    const syncMenuPosition = () => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        setMenuStyle({
+            top: rect.bottom + 6,
+            left: rect.left,
+            width: rect.width,
+        });
+    };
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (containerRef.current && !containerRef.current.contains(e.target)) {
+            const clickedInsideTrigger = containerRef.current && containerRef.current.contains(e.target);
+            const clickedInsideMenu = menuRef.current && menuRef.current.contains(e.target);
+            if (!clickedInsideTrigger && !clickedInsideMenu) {
                 setIsOpen(false);
                 setSearch('');
             }
@@ -167,69 +316,157 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (onOpenChange) onOpenChange(isOpen);
+    }, [isOpen, onOpenChange]);
+
+    useEffect(() => {
+        if (!loadOptions) {
+            return;
+        }
+
+        if (!isOpen) {
+            setAsyncItems(items || []);
+            setAsyncLoading(false);
+            requestSeqRef.current += 1;
+            return;
+        }
+
+        let cancelled = false;
+        const requestSeq = ++requestSeqRef.current;
+        const timer = window.setTimeout(async () => {
+            try {
+                setAsyncLoading(true);
+                const result = await loadOptions(search);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems(Array.isArray(result) ? result : []);
+                }
+            } catch (error) {
+                console.error(`[SearchableDropdown:${label}] failed to load options`, error);
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncItems([]);
+                }
+            } finally {
+                if (!cancelled && requestSeqRef.current === requestSeq) {
+                    setAsyncLoading(false);
+                }
+            }
+        }, 180);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [loadOptions, isOpen, items, label, search]);
+
+    useEffect(() => {
+        if (!isOpen || !containerRef.current) return;
+        syncMenuPosition();
+        const updatePosition = () => syncMenuPosition();
+        window.addEventListener('resize', updatePosition);
+        window.addEventListener('scroll', updatePosition, true);
+
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+            window.removeEventListener('scroll', updatePosition, true);
+        };
+    }, [isOpen]);
+
     return (
-        <div ref={containerRef} className="relative flex-1">
+        <div ref={containerRef} className="relative flex-1 min-w-0 overflow-visible">
             {/* Trigger */}
             <button
                 type="button"
-                onClick={() => !disabled && setIsOpen(!isOpen)}
+                onClick={async () => {
+                    if (disabled) return;
+                    setSearch('');
+                    if (!isOpen) {
+                        if (loadOptions) {
+                            setAsyncItems(items || []);
+                        }
+                        syncMenuPosition();
+                        setIsOpen(true);
+                        if (onBeforeOpen) {
+                            try {
+                                await onBeforeOpen();
+                            } catch (err) {
+                                console.error(`[SearchableDropdown:${label}] pre-open load failed`, err);
+                            }
+                        }
+                        return;
+                    }
+                    setIsOpen(false);
+                }}
                 disabled={disabled}
-                className={`w-full p-2.5 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2
+                className={`w-full h-10 px-3 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
                     ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
                     ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
             >
-                <span className={selectedItem ? 'text-gray-800' : 'text-gray-400'}>
+                <span className={`${selectedItem ? 'text-gray-800' : 'text-gray-400'} truncate min-w-0 flex-1`}>
                     {selectedItem ? selectedItem.name : placeholder || `Select ${label}`}
                 </span>
                 <Search size={14} className="text-gray-400 shrink-0" />
             </button>
 
             {/* Dropdown List */}
-            {!disabled && isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                    {/* Search Input */}
-                    <div className="p-2 border-b border-gray-100">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder={`Search ${label}...`}
-                                className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-lg outline-none focus:bg-white focus:border-blue-200 transition-all"
-                                autoFocus
-                            />
+            {!disabled && isOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={menuRef}
+                    className="fixed bg-white border border-gray-200 rounded-2xl shadow-2xl z-[9999] overflow-hidden"
+                    style={{
+                        top: `${menuStyle.top}px`,
+                        left: `${menuStyle.left}px`,
+                        width: `${menuStyle.width}px`,
+                    }}
+                >
+                    <div className="max-h-[240px] overflow-y-auto overflow-x-hidden overscroll-contain">
+                        <div className="sticky top-0 z-10 p-2.5 border-b border-gray-100 bg-white">
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder={`Search ${label}...`}
+                                    className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-xl outline-none focus:bg-white focus:border-blue-200 transition-all"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+
+                        <div className="py-1">
+                            {loading && filtered.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
+                            ) : filtered.length === 0 && search.trim().length > 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
+                            ) : filtered.length === 0 ? (
+                                <div className="px-4 py-4 text-center text-xs text-gray-300">No options available</div>
+                            ) : (
+                                filtered.map((item) => (
+                                    <button
+                                        type="button"
+                                        key={item.id}
+                                        onClick={() => {
+                                            onSelect(item);
+                                            setIsOpen(false);
+                                            setSearch('');
+                                        }}
+                                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2 min-w-0
+                                            ${String(item.id) === String(selectedId) || item.name === selectedId
+                                                ? 'bg-blue-50 text-blue-700 font-semibold'
+                                                : 'text-gray-700 hover:bg-gray-50 font-medium'
+                                            }`}
+                                    >
+                                        {(String(item.id) === String(selectedId) || item.name === selectedId) && <Check size={14} className="text-blue-500 shrink-0" />}
+                                        <span className="truncate min-w-0">{item.name}</span>
+                                    </button>
+                                ))
+                            )}
                         </div>
                     </div>
-
-                    {/* Options */}
-                    <div className="max-h-48 overflow-y-auto">
-                        {filtered.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
-                        ) : (
-                            filtered.map((item) => (
-                                <button
-                                    type="button"
-                                    key={item.id}
-                                    onClick={() => {
-                                        onSelect(item);
-                                        setIsOpen(false);
-                                        setSearch('');
-                                    }}
-                                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2
-                                        ${String(item.id) === String(selectedId)
-                                            ? 'bg-blue-50 text-blue-700 font-semibold'
-                                            : 'text-gray-700 hover:bg-gray-50 font-medium'
-                                        }`}
-                                >
-                                    {String(item.id) === String(selectedId) && <Check size={14} className="text-blue-500" />}
-                                    {item.name}
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -239,7 +476,7 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
 /* ══════════════════════════════════════════════════════════
    MAIN COMPONENT — AddProjectPanel
    ══════════════════════════════════════════════════════════ */
-const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
+const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const DIRECT_CLIENT_TYPE = 'Direct Client';
     const PARTNER_CLIENT_TYPE = 'Partner Client';
     const CLOUD_DESTINATION_PARTNER = 'Cloud Destination';
@@ -265,33 +502,73 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     const [partnerClients, setPartnerClients] = useState([]);
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
+    const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
+    const [activeDropdown, setActiveDropdown] = useState('');
+    const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
+    const teamTableRef = useRef(null);
 
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [entityError, setEntityError] = useState('');
+    const [showAllWeeks, setShowAllWeeks] = useState(false);
 
     // --- Modal State ---
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
 
     async function loadEntities() {
         setEntityError('');
+        setIsDirectoryLoading(true);
         try {
-            const [clientData, partnerData, empRes, rolesRes] = await Promise.all([
+            const [clientResult, partnerResult, employeesResult, rolesResult] = await Promise.allSettled([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
                 axios.get('/employees/list'),
-                axios.get('/employees/roles'),
+                axios.get('/employees/departments/roles-mapping'),
             ]);
-            setClients(clientData);
-            setPartnerClients(partnerData);
-            setEmployees(empRes.data || []);
-            // roles API returns { department: [roles] }; flatten into unique sorted list
-            const allRoles = new Set();
-            Object.values(rolesRes.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
-            setRolesList(Array.from(allRoles).sort());
-        } catch {
+
+            if (clientResult.status === 'fulfilled') {
+                setClients(clientResult.value);
+            } else {
+                console.error('[AddProjectPanel] Failed to load clients', clientResult.reason);
+            }
+
+            if (partnerResult.status === 'fulfilled') {
+                setPartnerClients(partnerResult.value);
+            } else {
+                console.error('[AddProjectPanel] Failed to load partner clients', partnerResult.reason);
+            }
+
+            if (employeesResult.status === 'fulfilled') {
+                const employeesFromApi = employeesResult.value?.data || [];
+                setEmployees(employeesFromApi);
+                console.log('[AddProjectPanel] employees/list count:', employeesFromApi.length);
+                console.log('[AddProjectPanel] employees/list sample:', employeesFromApi.slice(0, 3).map((e) => ({
+                    employee_id: e?.employee_id,
+                    employee_name: e?.employee_name,
+                    role_designation: e?.role_designation
+                })));
+            } else {
+                console.error('[AddProjectPanel] Failed to load employees', employeesResult.reason);
+            }
+
+            if (rolesResult.status === 'fulfilled') {
+                // roles API returns { department: [roles] }; flatten into unique sorted list
+                const allRoles = new Set();
+                Object.values(rolesResult.value?.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
+                const flattenedRoles = Array.from(allRoles).sort();
+                setRolesList(flattenedRoles);
+                console.log('[AddProjectPanel] employees/roles count:', flattenedRoles.length);
+                console.log('[AddProjectPanel] employees/roles sample:', flattenedRoles.slice(0, 10));
+            } else {
+                console.error('[AddProjectPanel] Failed to load roles mapping', rolesResult.reason);
+            }
+
+        } catch (error) {
+            console.error('[AddProjectPanel] Failed to load dropdown entities', error);
             setEntityError('Failed to load clients/partner clients.');
+        } finally {
+            setIsDirectoryLoading(false);
         }
     }
 
@@ -397,6 +674,88 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         });
     }, [clients, formData.type, formData.clientType, formData.partnerId]);
 
+    const employeeOptions = useMemo(
+        () =>
+            (employees || [])
+                .filter(e => e?.employee_id && e?.employee_name)
+                .map(e => ({ id: e.employee_id, name: e.employee_name, _raw: e })),
+        [employees]
+    );
+
+    const roleOptions = useMemo(() => {
+        const roleSet = new Set();
+
+        const addRole = (value) => {
+            const role = String(value || '').trim();
+            if (role) roleSet.add(role);
+        };
+
+        if (Array.isArray(rolesList)) {
+            rolesList.forEach(addRole);
+        } else if (rolesList && typeof rolesList === 'object') {
+            Object.values(rolesList).forEach((val) => {
+                if (Array.isArray(val)) {
+                    val.forEach(addRole);
+                } else {
+                    addRole(val);
+                }
+            });
+        }
+
+        (employees || []).forEach((emp) => addRole(emp?.role_designation));
+
+        return Array.from(roleSet)
+            .sort((a, b) => a.localeCompare(b))
+            .map(r => ({ id: r, name: r }));
+    }, [rolesList, employees]);
+
+    const VISIBLE_WEEKS = 4;
+    const projectWeeks = useMemo(
+        () => getProjectWeeks(formData.startDate, formData.endDate),
+        [formData.startDate, formData.endDate]
+    );
+    const visibleWeeks = useMemo(() => {
+        if (projectWeeks.length > 0) {
+            return showAllWeeks ? projectWeeks : projectWeeks.slice(0, VISIBLE_WEEKS);
+        }
+        // Placeholder weeks if no dates are set yet
+        return Array.from({ length: VISIBLE_WEEKS }).map((_, i) => ({
+            weekNum: `tmp-${i}`,
+            year: new Date().getFullYear(),
+            label: i === 0 ? 'This Week' : `Week ${i + 1}`,
+            dateRange: 'Dates not set'
+        }));
+    }, [projectWeeks, showAllWeeks]);
+    const hasMoreWeeks = projectWeeks.length > VISIBLE_WEEKS;
+
+    const ensureTeamDropdownData = async () => {
+        if (isDirectoryLoading) return;
+        if (employeeOptions.length > 0 && roleOptions.length > 0) return;
+        await loadEntities();
+    };
+
+    const handleTeamBlur = () => {
+        window.setTimeout(() => {
+            const activeElement = document.activeElement;
+            if (teamTableRef.current && activeElement && teamTableRef.current.contains(activeElement)) {
+                setIsTeamInputsActive(true);
+            } else {
+                setIsTeamInputsActive(false);
+            }
+        }, 0);
+    };
+
+    useEffect(() => {
+        console.log('[AddProjectPanel] employee options length:', employeeOptions.length);
+    }, [employeeOptions]);
+
+    useEffect(() => {
+        console.log('[AddProjectPanel] role options length:', roleOptions.length);
+    }, [roleOptions]);
+
+    const isDropdownOpen = Boolean(activeDropdown);
+    const hideTeamHorizontalScroll = isDropdownOpen || isTeamInputsActive;
+
     // --- Entity Modal Openers ---
     const openModal = (mode, entityType) => {
         const isClient = entityType === 'client';
@@ -463,7 +822,15 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             setEntityError('');
             closeModal();
         } catch (error) {
-            const msg = error?.response?.data?.detail || `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
+            const detail = error?.response?.data?.detail;
+            let msg = `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
+            if (typeof detail === 'string') {
+                msg = detail;
+            } else if (Array.isArray(detail)) {
+                msg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+            } else if (detail && typeof detail === 'object') {
+                msg = detail.msg || JSON.stringify(detail);
+            }
             setModal(prev => ({ ...prev, error: msg }));
         }
     };
@@ -473,19 +840,36 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             ...prev,
             teamMembers: [
                 ...prev.teamMembers,
-                { employee_id: '', name: '', role: '', company: 'Cloud Destinations', company_type: 'Internal', location: 'Remote', w1: 0, w2: 0, w3: 0, w4: 0 }
+                {
+                    employee_id: '',
+                    name: '',
+                    role: '',
+                    location: 'Remote',
+                    allocation_pct: '',
+                    allocation_start_date: '',
+                    allocation_end_date: '',
+                    billable_shadow: 'Billable',
+                    weekly_hours: {},
+                }
             ]
         }));
     };
 
     const handleEmployeeSelect = (index, emp) => {
+        // Prevent duplicates
+        const isDuplicate = formData.teamMembers.some((m, i) => i !== index && m.employee_id === emp.employee_id);
+        if (isDuplicate) {
+            alert(`${emp.employee_name} is already added to this project.`);
+            return;
+        }
+
         const newTeam = [...formData.teamMembers];
         newTeam[index] = {
             ...newTeam[index],
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            // Auto-fill role from employee designation if role is empty
             role: newTeam[index].role || emp.role_designation || '',
+            location: newTeam[index].location !== 'Remote' ? newTeam[index].location : (emp.location || emp.mode_of_work || 'Remote'),
         };
         setFormData({ ...formData, teamMembers: newTeam });
     };
@@ -503,21 +887,74 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         }));
     };
 
+    /* Auto-fill weekly hours based on allocation_pct and date range */
+    const autoFillWeeks = (index, updatedMember) => {
+        const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
+        const pct = Math.min(100, Math.max(0, parseInt(updatedMember.allocation_pct) || 0));
+        const hours = Math.round((pct / 100) * 40);
+
+        let targetWeeks = projectWeeks;
+        if (updatedMember.allocation_start_date || updatedMember.allocation_end_date) {
+            targetWeeks = getProjectWeeks(
+                updatedMember.allocation_start_date || formData.startDate,
+                updatedMember.allocation_end_date || formData.endDate
+            );
+        }
+
+        const newWeeklyHours = {};
+        targetWeeks.forEach(w => { newWeeklyHours[w.weekNum] = hours; });
+
+        const newTeam = [...formData.teamMembers];
+        newTeam[index] = { ...updatedMember, weekly_hours: newWeeklyHours };
+        setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+    };
+
     const handleTeamMemberChange = (index, field, value) => {
         const newTeam = [...formData.teamMembers];
-        if (['w1', 'w2', 'w3', 'w4'].includes(field)) {
-            newTeam[index][field] = parseInt(value) || 0;
-        } else if (field === 'company_type') {
-            newTeam[index][field] = value;
-            if (value === 'Internal') {
-                newTeam[index]['company'] = 'Cloud Destinations';
-            } else {
-                newTeam[index]['company'] = '';
+        let updated = { ...newTeam[index], [field]: value };
+
+        if (field === 'allocation_pct') {
+            const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
+            updated.allocation_pct = pct;
+            
+            // Dynamic Proportional Allocation (100% = 40h)
+            if (pct !== '') {
+                const hours = Math.round((pct / 100) * 40);
+                const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
+                
+                let targetWeeks = projectWeeks;
+                if (updated.allocation_start_date || updated.allocation_end_date) {
+                    targetWeeks = getProjectWeeks(
+                        updated.allocation_start_date || formData.startDate,
+                        updated.allocation_end_date || formData.endDate
+                    );
+                }
+
+                const newWeeklyHours = { ...(updated.weekly_hours || {}) };
+                targetWeeks.forEach(w => {
+                    newWeeklyHours[w.weekNum] = hours;
+                });
+                updated.weekly_hours = newWeeklyHours;
             }
-        } else {
-            newTeam[index][field] = value;
         }
-        setFormData({ ...formData, teamMembers: newTeam });
+
+        newTeam[index] = updated;
+        setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+
+        // Auto-fill weeks when dates change (keep logic for date shifts)
+        if (['allocation_start_date', 'allocation_end_date'].includes(field)) {
+            setTimeout(() => autoFillWeeks(index, updated), 0);
+        }
+    };
+
+    const handleWeekHoursChange = (index, weekNum, value) => {
+        const newTeam = [...formData.teamMembers];
+        const hours = Math.min(40, Math.max(0, parseInt(value) || 0));
+        newTeam[index] = {
+            ...newTeam[index],
+            weekly_hours: { ...newTeam[index].weekly_hours, [weekNum]: hours }
+        };
+        setFormData(prev => ({ ...prev, teamMembers: newTeam }));
     };
 
     // --- Form Submission ---
@@ -525,7 +962,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         e.preventDefault();
         setSubmitError('');
 
-        if (!formData.name.trim()) {
+        if (!(formData.name || '').trim()) {
             setSubmitError('Project name is required.');
             return;
         }
@@ -533,9 +970,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             setSubmitError('Start date is required.');
             return;
         }
-        if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
-            setSubmitError('End date cannot be earlier than start date.');
+        const normalizedStart = normalizeDateString(formData.startDate);
+        if (!normalizedStart) {
+            setSubmitError('Start date format is invalid.');
             return;
+        }
+        const normalizedEnd = normalizeDateString(formData.endDate);
+        if (normalizedEnd && normalizedStart) {
+            const startTs = new Date(normalizedStart).getTime();
+            const endTs = new Date(normalizedEnd).getTime();
+            if (endTs < startTs) {
+                setSubmitError('End date cannot be earlier than start date.');
+                return;
+            }
         }
         if (formData.type === 'Client' && !formData.clientType) {
             setSubmitError('Please select a client type.');
@@ -543,6 +990,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         }
         if (formData.type === 'Client' && formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
             setSubmitError('Please select a client.');
+            return;
+        }
+        if (formData.type === 'Client' && !(formData.clientName || '').trim()) {
+            setSubmitError('Please select a client name.');
             return;
         }
         if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
@@ -557,32 +1008,50 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         setIsSubmitting(true);
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
+        const isClientProject = formData.type === 'Client';
         const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
-        const effectiveType = isPartnerClientProject ? 'Partner' : formData.type;
+        const effectiveType = formData.type;
 
         const payload = {
             project_id: projectId,
-            project_name: formData.name,
+            project_name: (formData.name || '').trim(),
             project_status: formData.status,
             type: effectiveType,
-            client_id: formData.type === 'Client' ? (formData.clientId || null) : null,
-            client: formData.type === 'Client' && !isPartnerClientProject ? (formData.clientName || null) : null,
-            partner_id: isPartnerClientProject ? (formData.partnerId || null) : null,
-            partner: isPartnerClientProject ? (formData.partnerName || null) : null,
             billable: formData.billable,
-            start_date: formData.startDate,
-            end_date: formData.endDate || null,
-            team_members: formData.teamMembers
+            start_date: normalizedStart,
+            end_date: normalizedEnd || null,
+            team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
+
+        if (isClientProject) {
+            payload.client_id = toIntOrNull(formData.clientId);
+            payload.client_name = (formData.clientName || '').trim() || null;
+        }
+        if (isPartnerClientProject) {
+            payload.partner_id = toIntOrNull(formData.partnerId);
+            payload.partner = (formData.partnerName || '').trim() || null;
+        }
+
+        console.log('Payload:', payload);
 
         try {
             const response = await axios.post('/projects', payload);
+            if (!response || response.data?.error) {
+                throw new Error(response?.data?.message || 'Save failed');
+            }
+            setSubmitError('');
             setIsSubmitting(false);
             if (onAdd) onAdd(response?.data || payload);
             onClose();
         } catch (err) {
-            console.error(err);
-            setSubmitError(err.response?.data?.detail || "Failed to create project.");
+            console.error('Save Error:', err);
+            const message =
+                err?.response?.data?.message ||
+                err?.response?.data?.detail ||
+                err?.message ||
+                err ||
+                'Failed to save changes';
+            setSubmitError(toMessage(message, 'Failed to save changes'));
             setIsSubmitting(false);
         }
     };
@@ -596,10 +1065,15 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
     return (
         <>
-            <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+            {!pageMode && (
+                <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+            )}
 
-            {/* Panel */}
-            <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
+            {/* Panel / Page */}
+            <div className={pageMode
+                ? "w-full h-full bg-white flex flex-col"
+                : "fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col"
+            }>
 
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
@@ -617,12 +1091,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                     <form id="add-project-form" onSubmit={handleSubmit} className="p-6 flex flex-col gap-8">
                         {submitError && (
                             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 flex items-center gap-2">
-                                <AlertCircle size={16} className="shrink-0" /> {submitError}
+                                <AlertCircle size={16} className="shrink-0" /> {toMessage(submitError)}
                             </div>
                         )}
                         {entityError && (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 flex items-center gap-2">
-                                <AlertCircle size={16} className="shrink-0" /> {entityError}
+                                <AlertCircle size={16} className="shrink-0" /> {toMessage(entityError)}
                             </div>
                         )}
 
@@ -717,6 +1191,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                 label="clients"
                                                 disabled={Boolean(isPartnerClient && hasPartnerMappedClients && !formData.partnerId)}
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
+                                                loadOptions={fetchAutocompleteClients}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'client')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
@@ -804,7 +1279,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-3">
                                 <Info size={16} className="text-blue-500 mt-0.5 shrink-0" />
                                 <div className="text-[11px] text-blue-700 leading-relaxed">
-                                    <strong>Allocation Logic:</strong> Weekly hours are based on a 40h standard (40h = 100%). You are currently planning for the <strong>last 4 weeks</strong> (Current week + previous 3 weeks).
+                                    <strong>Allocation Logic:</strong> 40h/week = 100% allocation. Set allocation % and optionally a date range, then click <strong>Full</strong> or leave date range to auto-fill all project weeks. Weeks are derived from the project start/end dates. <strong>Billable</strong> = client-facing; <strong>Shadow</strong> = non-billable, works behind the scenes.
                                 </div>
                             </div>
 
@@ -813,80 +1288,159 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                     No team members allocated to this project yet.
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                                    <table className="w-full text-xs min-w-[800px]">
-                                        <thead>
-                                            <tr className="bg-slate-50 border-b border-slate-100">
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">S.No</th>
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Name</th>
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Role</th>
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Comp. Type</th>
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Company</th>
-                                                <th className="px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Location</th>
-                                                {getLast4Weeks().map((wk, idx) => (
-                                                    <th key={idx} className="px-2 py-3 text-center min-w-[70px]">
-                                                        <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-tight">{wk.label}</div>
-                                                        <div className="text-[9px] font-medium text-slate-400 whitespace-nowrap">{wk.dateRange}</div>
-                                                    </th>
-                                                ))}
-                                                <th className="px-3 py-3 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {formData.teamMembers.map((member, idx) => (
-                                                <tr key={idx} className="border-b border-gray-50 bg-white hover:bg-slate-50/40">
-                                                    <td className="px-3 py-2 text-center text-slate-400 font-medium">{idx + 1}</td>
-                                                    <td className="px-2 py-2 min-w-[160px]">
-                                                        {/* Employee name — searchable dropdown */}
-                                                        <SearchableDropdown
-                                                            items={employees.map(e => ({ id: e.employee_id, name: e.employee_name, _raw: e }))}
-                                                            selectedId={member.employee_id}
-                                                            onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
-                                                            placeholder="Select Employee"
-                                                            label="employees"
-                                                        />
-                                                    </td>
-                                                    <td className="px-2 py-2 min-w-[150px]">
-                                                        {/* Role — searchable dropdown */}
-                                                        <SearchableDropdown
-                                                            items={rolesList.map(r => ({ id: r, name: r }))}
-                                                            selectedId={member.role}
-                                                            onSelect={(item) => handleRoleSelect(idx, item.name)}
-                                                            placeholder="Select Role"
-                                                            label="roles"
-                                                        />
-                                                    </td>
-                                                    <td className="px-2 py-2 min-w-[100px]">
-                                                        <select value={member.company_type} onChange={(e) => handleTeamMemberChange(idx, 'company_type', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer font-semibold text-slate-600">
-                                                            <option value="Internal">Internal</option>
-                                                            <option value="Partner">Partner</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-2 py-2 min-w-[130px]">
-                                                        <input type="text" value={member.company} onChange={(e) => handleTeamMemberChange(idx, 'company', e.target.value)} disabled={member.company_type === 'Internal'} placeholder="Company Name" className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white disabled:bg-slate-50 disabled:text-slate-400" />
-                                                    </td>
-                                                    <td className="px-2 py-2 min-w-[90px]">
-                                                        <select value={member.location} onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer">
-                                                            <option value="Remote">Remote</option>
-                                                            <option value="On-Site">On-Site</option>
-                                                            <option value="Hybrid">Hybrid</option>
-                                                        </select>
-                                                    </td>
-                                                    {['w1', 'w2', 'w3', 'w4'].map((wCol) => (
-                                                        <td key={wCol} className="px-1 py-2 min-w-[45px]">
-                                                            <input type="number" min="0" max="168" value={member[wCol]} onChange={(e) => handleTeamMemberChange(idx, wCol, e.target.value)} className="w-full px-1 py-1.5 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
-                                                        </td>
-                                                    ))}
-                                                    <td className="px-3 py-2 text-center">
-                                                        <button type="button" onClick={() => handleRemoveTeamMember(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Remove">
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </td>
+                                    <div
+                                        ref={teamTableRef}
+                                        onFocusCapture={() => setIsTeamInputsActive(true)}
+                                        onBlurCapture={handleTeamBlur}
+                                        className="rounded-xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible"
+                                    >
+                                        <table className="w-full text-sm min-w-[1200px]">
+                                            <thead>
+                                                <tr className="bg-blue-50/70 border-b border-slate-200">
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[160px]">Name</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
+                                                    {visibleWeeks.map((wk, wIdx) => {
+                                                        const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                        return (
+                                                        <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50 border-l border-slate-200">
+                                                            <div className="text-[11px] font-semibold text-blue-800 uppercase tracking-tight">{weekLabel}</div>
+                                                            <div className="text-[9px] font-medium text-slate-500 whitespace-nowrap">{wk.dateRange}</div>
+                                                        </th>
+                                                        );
+                                                    })}
+                                                    {hasMoreWeeks && (
+                                                        <th className="px-2 py-3 text-center min-w-[80px]">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowAllWeeks(v => !v)}
+                                                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+                                                            >
+                                                                {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
+                                                            </button>
+                                                        </th>
+                                                    )}
+                                                    <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 uppercase tracking-wider w-8"></th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {formData.teamMembers.map((member, idx) => (
+                                                    <tr key={idx} className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
+                                                        <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
+                                                        <td className="px-2 py-2 min-w-[160px]">
+                                                            <SearchableDropdown
+                                                                items={employeeOptions}
+                                                                selectedId={member.employee_id}
+                                                                onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
+                                                                placeholder="Select Employee"
+                                                                label="employees"
+                                                                isLoading={isDirectoryLoading}
+                                                                onBeforeOpen={ensureTeamDropdownData}
+                                                                onOpenChange={(open) => setActiveDropdown(open ? `employee-${idx}` : '')}
+                                                            />
+                                                        </td>
+                                                        <td className="px-2 py-2 min-w-[140px]">
+                                                            <SearchableDropdown
+                                                                items={roleOptions}
+                                                                selectedId={member.role}
+                                                                onSelect={(item) => handleRoleSelect(idx, item.name)}
+                                                                placeholder="Select Role"
+                                                                label="roles"
+                                                                isLoading={isDirectoryLoading}
+                                                                onBeforeOpen={ensureTeamDropdownData}
+                                                                onOpenChange={(open) => setActiveDropdown(open ? `role-${idx}` : '')}
+                                                            />
+                                                        </td>
+                                                        <td className="px-2 py-2 min-w-[90px]">
+                                                            <select
+                                                                value={member.location}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
+                                                                className="w-full h-10 px-2 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
+                                                            >
+                                                                <option value="Remote">Remote</option>
+                                                                <option value="On-Site">On-Site</option>
+                                                                <option value="Hybrid">Hybrid</option>
+                                                            </select>
+                                                        </td>
+                                                        {/* Allocation % */}
+                                                        <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
+                                                            <input
+                                                                type="number" min="0" max="100"
+                                                                placeholder="0"
+                                                                value={member.allocation_pct}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
+                                                                className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            />
+                                                        </td>
+                                                        {/* Start Date */}
+                                                        <td className="px-2 py-2 min-w-[130px]">
+                                                            <input
+                                                                type="date"
+                                                                value={member.allocation_start_date || ''}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
+                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                            />
+                                                        </td>
+                                                        {/* End Date */}
+                                                        <td className="px-2 py-2 min-w-[130px]">
+                                                            <input
+                                                                type="date"
+                                                                value={member.allocation_end_date || ''}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
+                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                            />
+                                                        </td>
+                                                        {/* Resource Type column */}
+                                                        <td className="px-2 py-2 min-w-[110px]">
+                                                            <select
+                                                                value={member.billable_shadow}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
+                                                                className={`w-full h-10 px-2 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
+                                                                    ${member.billable_shadow === 'Billable'
+                                                                        ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                                        : member.billable_shadow === 'Non-billable'
+                                                                        ? 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                                        : 'border-slate-200 text-slate-500 focus:border-slate-400 focus:ring-slate-100'
+                                                                    }`}
+                                                            >
+                                                                <option value="Billable">Billable</option>
+                                                                <option value="Non-billable">Non-billable</option>
+                                                                <option value="Shadow">Shadow</option>
+                                                            </select>
+                                                        </td>
+                                                        {/* Dynamic week columns — Excel-style */}
+                                                        {visibleWeeks.map((wk, wIdx) => {
+                                                            const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                            return (
+                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/40">
+                                                                <input
+                                                                    type="number" min="0" max="40"
+                                                                    placeholder="0h"
+                                                                    value={(member.weekly_hours || {})[wk.weekNum] ?? ''}
+                                                                    onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
+                                                                    title={weekLabel}
+                                                                    className="w-full px-1.5 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
+                                                                />
+                                                            </td>
+                                                            );
+                                                        })}
+                                                        {/* Empty cell under "See more" header */}
+                                                        {hasMoreWeeks && <td />}
+                                                        <td className="px-3 py-2 text-center">
+                                                            <button type="button" onClick={() => handleRemoveTeamMember(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Remove">
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                             )}
                         </div>
                     </form>
