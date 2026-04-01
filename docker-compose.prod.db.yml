@@ -5,7 +5,7 @@
 # Usage:
 #   1. Copy this file + .env.prod.db to the DB EC2 instance
 #   2. Fill in .env.prod.db with strong passwords
-#   3. docker compose -f docker-compose.prod.db.yml up -d
+#   3. docker compose -f docker-compose.prod.db.yml --env-file .env.prod.db up -d
 #
 # Security:
 #   - Ports are bound to 0.0.0.0 (all interfaces) — use Security Groups to
@@ -19,11 +19,10 @@ services:
     image: postgres:16-alpine
     container_name: prod-postgres
     restart: always
-    env_file: .env.prod.db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-migration_db}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234567@CD
+      POSTGRES_DB: migration_db
     ports:
       - "5432:5432"
     volumes:
@@ -40,8 +39,7 @@ services:
     image: redis:7-alpine
     container_name: prod-redis
     restart: always
-    env_file: .env.prod.db
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    command: redis-server --requirepass 1234567@CD --appendonly yes
     ports:
       - "6379:6379"
     volumes:
