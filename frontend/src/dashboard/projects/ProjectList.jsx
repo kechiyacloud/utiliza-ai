@@ -34,16 +34,31 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     }, [location.state, projects, navigate]);
 
     // Filter States
-    const [filters, setFilters] = useState({
+    const initialFilters = {
         name: '',
         resourceName: '',
-        monthWeek: '',
-        status: '',
-        allocation: '',
+        status: 'All Status',
         resourceType: ''
-    });
+    };
+
+    const [filters, setFilters] = useState(initialFilters);
+    const [inputMinAllocation, setInputMinAllocation] = useState('');
+    const [appliedMinAllocation, setAppliedMinAllocation] = useState(null);
+    const [selectedTimePeriod, setSelectedTimePeriod] = useState('Any Time');
 
     if (!projects || !Array.isArray(projects)) return null;
+
+    const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
+    const getStartOfWeek = (date) => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+        return new Date(d.setDate(diff));
+    };
+    const getEndOfWeek = (date) => {
+        const start = getStartOfWeek(date);
+        return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    };
 
     const filteredProjects = projects.filter(project => {
         if (!project || !project.name) return false;
@@ -57,37 +72,41 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         
         const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
-        const matchesStatus = !filters.status || project.status === filters.status;
+        const isAllStatus = !filters.status || filters.status === 'All Status';
+        const matchesStatus = isAllStatus || project.status === filters.status;
         
         const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
-        const matchesAllocation = !filters.allocation || (project.allocation_pct || project.total_allocation || 0) >= parseInt(filters.allocation);
+        // Allocation filter applies only after user clicks Apply
+        const projectAllocation = Number(project.allocation_pct || project.total_allocation || project.allocation || 0);
+        const matchesAllocation = appliedMinAllocation === null || appliedMinAllocation === 0
+            ? true
+            : projectAllocation >= appliedMinAllocation;
 
         // Time-based filtering (Month/Week)
         const matchesTimeRange = () => {
-            if (!filters.monthWeek) return true;
-            if (!project.startDate || project.startDate === 'Not Set') return false;
-            
-            const start = new Date(project.startDate);
-            const end = project.endDate && project.endDate !== 'TBD' ? new Date(project.endDate) : new Date('2099-12-31');
+            if (selectedTimePeriod === 'Any Time') return true;
+
+            const start = new Date(project.startDate || project.start_date);
+            const end = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
+            if (!isValidDate(start)) return false;
             const today = new Date();
-            
-            if (filters.monthWeek === 'this-month') {
-                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                return start <= lastDay && end >= firstDay;
+
+            if (selectedTimePeriod === 'This Week') {
+                const startWeek = getStartOfWeek(today);
+                const endWeek = getEndOfWeek(today);
+                return start <= endWeek && end >= startWeek;
             }
-            if (filters.monthWeek === 'next-month') {
-                const firstDay = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-                const lastDay = new Date(today.getFullYear(), today.getMonth() + 2, 0);
-                return start <= lastDay && end >= firstDay;
+
+            if (selectedTimePeriod === 'This Month') {
+                return start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear();
             }
-            if (filters.monthWeek === 'this-week') {
-                const day = today.getDay();
-                const sunday = new Date(today.getTime() - day * 24*60*60*1000); sunday.setHours(0,0,0,0);
-                const saturday = new Date(today.getTime() + (6-day)*24*60*60*1000); saturday.setHours(23,59,59,999);
-                return start <= saturday && end >= sunday;
+
+            if (selectedTimePeriod === 'Next Month') {
+                const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                return start.getMonth() === nextMonth.getMonth() && start.getFullYear() === nextMonth.getFullYear();
             }
+
             return true;
         };
         const matchesTime = matchesTimeRange();
@@ -141,8 +160,18 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
-    const handleApplyFilters = (newFilters) => {
+    const handleApplyFilters = (newFilters, minAllocationValue, timePeriod) => {
         setFilters(newFilters);
+        const numericValue = Number(minAllocationValue);
+        setAppliedMinAllocation(Number.isNaN(numericValue) ? null : numericValue);
+        setSelectedTimePeriod(timePeriod || 'Any Time');
+    };
+
+    const handleClearFilters = () => {
+        setFilters(initialFilters);
+        setInputMinAllocation('');
+        setAppliedMinAllocation(null);
+        setSelectedTimePeriod('Any Time');
     };
 
     const handleViewClick = (project) => {
@@ -384,6 +413,11 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 isOpen={isFilterPanelOpen}
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
+                inputMinAllocation={inputMinAllocation}
+                setInputMinAllocation={setInputMinAllocation}
+                onClearFilters={handleClearFilters}
+                selectedTimePeriod={selectedTimePeriod}
+                setSelectedTimePeriod={setSelectedTimePeriod}
             />
 
             {/* Delete Confirmation Modal */}
