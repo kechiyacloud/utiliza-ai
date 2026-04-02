@@ -24,7 +24,7 @@ import {
   fetchDepartments 
 } from '../api/dashboardApi';
 import { getEmployeeList } from '../api/employeeApi';
-import { createProject } from '../api/projectsApi';
+
 import { createClient } from '../api/clientApi';
 
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
@@ -224,26 +224,15 @@ function Dashboard() {
     }
   }, [loading]);
 
-  const handleAddProject = async (projectData) => {
+  const handleAddProject = async () => {
     try {
-      const payload = {
-        project_id: (projectData.name.replace(/\s+/g, '-').toUpperCase() + '-' + Math.floor(Math.random() * 1000)).substring(0, 20),
-        project_name: projectData.name,
-        project_status: projectData.status,
-        billable: projectData.type === 'Client' ? 'Yes' : 'No',
-        start_date: projectData.startDate || null,
-        end_date: projectData.endDate || null
-      };
-      await createProject(payload);
-
       setIsProjectPanelOpen(false);
       clearDashboardCache();
       const res = await fetchDashboardData(true, selectedDepartment);
       setData(res.data);
       if (res.todos) setTodos(res.todos);
     } catch (e) {
-      console.error("Failed to add project", e);
-      alert("Failed to create project");
+      console.error("Failed to refresh after add project", e);
     }
   };
 

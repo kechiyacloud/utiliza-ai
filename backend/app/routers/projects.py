@@ -1087,12 +1087,6 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "end_date" in payload:
             fields.append("end_date = %s")
             values.append(end_date_value)
-        if "client" in payload:
-            fields.append("client_name = %s")
-            values.append(_normalize_text(payload["client"]))
-        if "partner" in payload:
-            fields.append("client_name = %s")
-            values.append(_normalize_text(payload["partner"]))
         if "client_id" in payload:
             fields.append("client_id = %s")
             values.append(payload["client_id"])
@@ -1146,20 +1140,10 @@ def create_project(project: ProjectCreate):
             project.end_date,
         ]
 
-        if normalized_type == "internal":
-            pass
-        elif normalized_type == "client":
-            insert_fields.insert(5, "client_name")
-            insert_values.insert(5, client_name)
+        if normalized_type == "client":
             if project.client_id is not None:
-                insert_fields.insert(6, "client_id")
-                insert_values.insert(6, project.client_id)
-        elif normalized_type == "partner":
-            insert_fields.insert(5, "client_name")
-            insert_values.insert(5, partner_name)
-            if project.client_id is not None:
-                insert_fields.insert(6, "client_id")
-                insert_values.insert(6, project.client_id)
+                insert_fields.append("client_id")
+                insert_values.append(str(project.client_id))
 
         placeholders = ", ".join(["%s"] * len(insert_fields))
         cur.execute(f"INSERT INTO projects ({', '.join(insert_fields)}) VALUES ({placeholders})", tuple(insert_values))
