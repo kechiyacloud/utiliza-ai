@@ -48,7 +48,7 @@ def get_total_employee_count():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM employee_master")
+        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL")
         count = cur.fetchone()[0]
         return count
     except Exception as e:
