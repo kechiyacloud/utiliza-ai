@@ -134,6 +134,38 @@ function allocPctToHours(pct) {
     return Math.min(WEEK_DEFAULT_HOURS, Math.max(0, hours));
 }
 
+function parseDate(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+function isWeekWithinAllocationRange(weekDescriptor, row = {}) {
+    const weekStart = new Date(weekDescriptor.monday);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekDescriptor.sunday);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const startDate = parseDate(row.allocation_start_date);
+    const endDate = parseDate(row.allocation_end_date);
+
+    if (startDate && startDate > weekEnd) return false;
+    if (endDate && endDate < weekStart) return false;
+    return true; // Partial overlaps count as valid
+}
+
+function getWeeklyHoursForWeek(row = {}, weekDescriptor) {
+    const withinRange = isWeekWithinAllocationRange(weekDescriptor, row);
+    if (!withinRange) return { withinRange: false, hours: null, rawVal: undefined };
+    const rawVal = (row.weekly_hours || {})[weekDescriptor.yearWeek];
+    const hours = (rawVal === '' || rawVal === undefined)
+        ? allocPctToHours(row.allocation_pct)
+        : Number(rawVal || 0);
+    return { withinRange, hours, rawVal };
+}
+
 function normalizeAllocationRow(row = {}) {
     const normalized = { 
         ...row,
@@ -157,8 +189,12 @@ function getResourceAllocationPct(row, visibleWeeks = []) {
         return Number(row.allocation_pct) || 0;
     }
     if (!visibleWeeks || visibleWeeks.length === 0) return 0;
-    const totalHours = visibleWeeks.reduce((sum, wk) => sum + Number((row.weekly_hours || {})[wk.yearWeek] || 0), 0);
-    const maxCapacity = WEEK_DEFAULT_HOURS * visibleWeeks.length;
+    const totalHours = visibleWeeks.reduce((sum, wk) => {
+        const { withinRange, hours } = getWeeklyHoursForWeek(row, wk);
+        return withinRange ? sum + Number(hours || 0) : sum;
+    }, 0);
+    const activeWeeks = visibleWeeks.filter(wk => isWeekWithinAllocationRange(wk, row)).length;
+    const maxCapacity = WEEK_DEFAULT_HOURS * (activeWeeks || visibleWeeks.length);
     if (maxCapacity <= 0) return 0;
     return Math.round((totalHours / maxCapacity) * 100);
 }
@@ -654,11 +690,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
 
     const getRowTotal = (row) => {
         return visibleWeeks.reduce((sum, wk) => {
-            const rawVal = (row.weekly_hours || {})[wk.yearWeek];
-            const hours = (rawVal === '' || rawVal === undefined) 
-                ? allocPctToHours(row.allocation_pct) 
-                : Number(rawVal || 0);
-            return sum + hours;
+            const { withinRange, hours } = getWeeklyHoursForWeek(row, wk);
+            return withinRange ? sum + Number(hours || 0) : sum;
         }, 0);
     };
 
@@ -699,6 +732,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 
                 if (currentRow.employee_id) {
                     visibleWeeks.forEach(wk => { 
+                        if (!isWeekWithinAllocationRange(wk, currentRow)) {
+                            currentRow.weekly_hours[wk.yearWeek] = '';
+                            return;
+                        }
                         const otherProjHours = getOtherProjectHours(currentRow.employee_id, wk.yearWeek);
                         const maxAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjHours);
                         minRemaining = Math.min(minRemaining, maxAllowed);
@@ -711,7 +748,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                         alert(`You can only allocate up to ${minRemaining} hours. Allocation exceeded! Max allowed is ${WEEK_DEFAULT_HOURS} hours/week`);
                     }
                 } else {
-                    visibleWeeks.forEach(wk => { currentRow.weekly_hours[wk.yearWeek] = hrs; });
+                    visibleWeeks.forEach(wk => { 
+                        currentRow.weekly_hours[wk.yearWeek] = isWeekWithinAllocationRange(wk, currentRow) ? hrs : '';
+                    });
                 }
             }
         } else if (field.startsWith('week_')) {
@@ -742,8 +781,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 
                 currentRow.weekly_hours[yearWeek] = clamped;
             }
-            const totalHours = visibleWeeks.reduce((sum, wk) => sum + Number(currentRow.weekly_hours[wk.yearWeek] || 0), 0);
-            const maxCapacity = WEEK_DEFAULT_HOURS * visibleWeeks.length;
+            const totalHours = visibleWeeks.reduce((sum, wk) => {
+                const { withinRange } = getWeeklyHoursForWeek(currentRow, wk);
+                return withinRange ? sum + Number(currentRow.weekly_hours[wk.yearWeek] || 0) : sum;
+            }, 0);
+            const activeWeeks = visibleWeeks.filter(wk => isWeekWithinAllocationRange(wk, currentRow)).length;
+            const maxCapacity = WEEK_DEFAULT_HOURS * (activeWeeks || visibleWeeks.length || 0);
             currentRow.allocation_pct = maxCapacity > 0 ? Math.round((totalHours / maxCapacity) * 10000) / 100 : 0;
         } else {
             currentRow[field] = value;
@@ -769,15 +812,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             const obj = {
                 'Resource': r.name,
                 'Role': r.role,
-                'Start Date': r.allocation_start_date || '—',
-                'End Date': r.allocation_end_date || '—',
+                'Start Date': r.allocation_start_date || '-',
+                'End Date': r.allocation_end_date || '-',
             };
             visibleWeeks.forEach(wk => {
-                const rawVal = (r.weekly_hours || {})[wk.yearWeek];
-                const hours = (rawVal === '' || rawVal === undefined) 
-                    ? allocPctToHours(r.allocation_pct) 
-                    : Number(rawVal || 0);
-                obj[wk.label] = `${hours}h`;
+                const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                const safeHours = Number(hours || 0);
+                obj[wk.label] = withinRange && safeHours > 0 ? `${safeHours}h` : 'â€”';
             });
             obj['Total'] = `${rowTotal}h`;
             return obj;
@@ -816,7 +857,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 doc.setFontSize(8.5);
                 doc.setTextColor(100, 116, 139);
                 doc.text(`Total Resources: ${localRows.length}`, 36, 66);
-                const grandTotal = visibleWeeks.reduce((s, wk) => s + localRows.reduce((a, r) => a + Number((r.weekly_hours || {})[wk.yearWeek] || 0), 0), 0);
+                const grandTotal = visibleWeeks.reduce((s, wk) => s + localRows.reduce((a, r) => {
+                    const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                    return a + (withinRange ? Number(hours || 0) : 0);
+                }, 0), 0);
                 doc.text(`Total Hours Allocated: ${grandTotal}h`, 200, 66);
 
                 // ── Table ──
@@ -831,17 +875,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                         ? `${r.allocation_pct}%`
                         : `${getResourceAllocationPct(r, visibleWeeks)}%`;
                     const rowWeeks = visibleWeeks.map(wk => {
-                        const rawVal = (r.weekly_hours || {})[wk.yearWeek];
-                        const hours = (rawVal === '' || rawVal === undefined) 
-                            ? allocPctToHours(r.allocation_pct) 
-                            : Number(rawVal || 0);
-                        return `${hours}h`;
+                        const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                        const safeHours = Number(hours || 0);
+                        return withinRange && safeHours > 0 ? `${safeHours}h` : 'â€”';
                     });
                     return [
-                        r.name || '—',
-                        r.role || '—',
-                        r.allocation_start_date || '—',
-                        r.allocation_end_date || '—',
+                        r.name || '-',
+                        r.role || '-',
+                        r.allocation_start_date || '-',
+                        r.allocation_end_date || '-',
                         pctDisp,
                         ...rowWeeks,
                         `${total}h`,
@@ -995,11 +1037,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     const columnTotals = useMemo(() =>
         visibleWeeks.map(wk =>
             localRows.reduce((sum, r) => {
-                const rawVal = (r.weekly_hours || {})[wk.yearWeek];
-                const hours = (rawVal === '' || rawVal === undefined) 
-                    ? allocPctToHours(r.allocation_pct) 
-                    : Number(rawVal || 0);
-                return sum + hours;
+                const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                return sum + (withinRange ? Number(hours || 0) : 0);
             }, 0)
         ), [localRows, visibleWeeks]);
 
@@ -1166,10 +1205,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     to={`/info/employee/${row.employee_id}`}
                                                     className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
                                                 >
-                                                    {row.name || '—'}
+                                                    {row.name || '-'}
                                                 </Link>
                                             ) : (
-                                                row.name || '—'
+                                                row.name || '-'
                                             )
                                         )}
                                     </td>
@@ -1192,14 +1231,14 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         {isEditing ? (
                                             <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
-                                            row.allocation_start_date || '—'
+                                            row.allocation_start_date || '-'
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
                                         {isEditing ? (
                                             <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
-                                            row.allocation_end_date || '—'
+                                            row.allocation_end_date || '-'
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-600 text-xs min-w-[100px]">
@@ -1235,22 +1274,20 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         )}
                                     </td>
                                     {visibleWeeks.map((wk) => {
-                                        const rawVal = (row.weekly_hours || {})[wk.yearWeek];
-                                        const hours = (rawVal === '' || rawVal === undefined) 
-                                            ? allocPctToHours(row.allocation_pct) 
-                                            : Number(rawVal || 0);
-                                        const pct = Math.min(100, Math.round((hours / WEEK_DEFAULT_HOURS) * 100));
+                                        const { withinRange, hours, rawVal } = getWeeklyHoursForWeek(row, wk);
+                                        const safeHours = hours ?? 0;
+                                        const pct = withinRange ? Math.min(100, Math.round((safeHours / WEEK_DEFAULT_HOURS) * 100)) : 0;
                                         const isCurrentWeek = wk.isCurrent;
-                                        const barColor = hours === 0 ? 'bg-gray-200' :
+                                        const barColor = safeHours === 0 ? 'bg-gray-200' :
                                             pct >= 100 ? 'bg-green-500' :
                                             pct >= 75 ? 'bg-blue-500' :
                                             pct >= 40 ? 'bg-indigo-400' :
                                             'bg-slate-300';
                                         
-                                        const otherProjectHours = row.employee_id ? getOtherProjectHours(row.employee_id, wk.yearWeek) : 0;
+                                        const otherProjectHours = withinRange && row.employee_id ? getOtherProjectHours(row.employee_id, wk.yearWeek) : 0;
                                         const remainingAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjectHours);
                                         // Past weeks or fully allocated (40h+) in other projects are read-only
-                                        const isCellEditable = isEditing && !wk.isPast && remainingAllowed > 0;
+                                        const isCellEditable = isEditing && withinRange && !wk.isPast && remainingAllowed > 0;
 
                                         return (
                                             <td key={wk.yearWeek} className={`px-3 py-2.5 text-center border-l ${
@@ -1265,13 +1302,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                             min="0"
                                                             max={remainingAllowed}
                                                             step="0.1"
-                                                            value={rawVal === '' ? '' : hours}
+                                                            value={rawVal === '' ? '' : safeHours}
                                                             onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
                                                             onBlur={(e) => {
                                                                 if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 0);
                                                             }}
                                                             className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 bg-white transition-colors ${
-                                                                hours > WEEK_DEFAULT_HOURS
+                                                                safeHours > WEEK_DEFAULT_HOURS
                                                                     ? 'border-rose-400 text-rose-600'
                                                                     : 'border-gray-200 focus:border-blue-400'
                                                             }`}
@@ -1279,12 +1316,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                         {/* 'Rem: XXh' text removed per user request */}
                                                     </div>
                                                 ) : (
-                                                    hours === 0 ? (
+                                                    !withinRange || safeHours === 0 ? (
                                                         <span className={`text-xs font-medium ${
                                                             viewMode === 'previous' ? 'text-rose-300' : 
                                                             viewMode === 'next' ? 'text-emerald-300' : 
                                                             'text-slate-300'
-                                                        }`}>—</span>
+                                                        }`}>-</span>
                                                     ) : (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className={`text-xs font-bold ${
@@ -1292,7 +1329,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                                 isCurrentWeek ? 'text-blue-700' : 
                                                                 (viewMode === 'previous' ? 'text-rose-600' : viewMode === 'next' ? 'text-emerald-600' : 'text-slate-700')
                                                             }`}>
-                                                                {hours}h
+                                                                {safeHours}h
                                                             </span>
                                                             <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
                                                                 <div
@@ -1311,7 +1348,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         );
                                     })}
                                     <td className="px-3 py-3 text-center font-bold text-blue-700 border-l-2 border-slate-200 text-sm">
-                                        {rowTotal > 0 ? `${rowTotal}h` : '—'}
+                                        {rowTotal > 0 ? `${rowTotal}h` : '-'}
                                     </td>
                                     <td className="px-4 py-3 min-w-[120px]">
                                         {isEditing ? (
@@ -1372,7 +1409,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                     viewMode === 'next' ? 'text-emerald-700 border-l border-emerald-100 bg-emerald-50/10' : 
                                     'text-slate-700 border-l border-slate-200'
                                 } ${visibleWeeks[idx]?.isCurrent ? 'bg-blue-50 text-blue-700' : ''}`}>
-                                    {total > 0 ? `${total}h` : '—'}
+                                    {total > 0 ? `${total}h` : '-'}
                                 </td>
                             ))}
                             <td className="px-3 py-3 text-center font-extrabold text-blue-700 border-l-2 border-slate-200 text-sm">
@@ -1454,7 +1491,7 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                         <CalendarDays size={12} /> Timeline
                     </span>
                     <span className="text-sm font-bold text-slate-700">
-                        {project.startDate || project.start_date || 'N/A'} — {project.endDate || project.end_date || 'TBD'}
+                        {project.startDate || project.start_date || 'N/A'} - {project.endDate || project.end_date || 'TBD'}
                     </span>
                 </div>
 
