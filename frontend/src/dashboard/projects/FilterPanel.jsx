@@ -2,13 +2,20 @@ import React, { useState } from 'react';
 import { X, Filter, RotateCcw } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
-const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
+const FilterPanel = ({
+    isOpen,
+    onClose,
+    onApplyFilters,
+    inputMinAllocation,
+    setInputMinAllocation,
+    onClearFilters,
+    selectedTimePeriod,
+    setSelectedTimePeriod
+}) => {
     const [filters, setFilters] = useState({
         name: '',
         resourceName: '',
-        monthWeek: '',
-        status: '',
-        allocation: '',
+        status: 'All Status',
         resourceType: ''
     });
 
@@ -20,7 +27,7 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
     };
 
     const handleApply = () => {
-        onApplyFilters(filters);
+        onApplyFilters(filters, Number(inputMinAllocation), selectedTimePeriod);
         onClose();
     };
 
@@ -89,42 +96,42 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
                                     value={filters.status}
                                     onChange={handleChange}
                                 >
-                                    <option value="">All Statuses</option>
+                                    <option value="All Status">All Status</option>
                                     {PROJECT_STATUS_OPTIONS.map((status) => (
                                         <option key={status} value={status}>{status}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Month / Week Filter */}
+                            {/* Time Period Filter */}
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Time Period</label>
                                 <select
-                                    name="monthWeek"
+                                    name="timePeriod"
                                     className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
-                                    value={filters.monthWeek}
-                                    onChange={handleChange}
+                                    value={selectedTimePeriod}
+                                    onChange={(e) => setSelectedTimePeriod(e.target.value)}
                                 >
-                                    <option value="">Any Time</option>
-                                    <option value="this-month">This Month</option>
-                                    <option value="next-month">Next Month</option>
-                                    <option value="this-week">This Week</option>
+                                    <option value="Any Time">Any Time</option>
+                                    <option value="This Week">This Week</option>
+                                    <option value="This Month">This Month</option>
+                                    <option value="Next Month">Next Month</option>
                                 </select>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                {/* Allocation % */}
+                                {/* Allocation % (input only, applies on button press) */}
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Min. Allocation %</label>
                                     <input
                                         type="number"
                                         name="allocation"
-                                        placeholder="0"
+                                        placeholder="Enter %"
                                         min="0"
                                         max="100"
                                         className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
-                                        value={filters.allocation}
-                                        onChange={handleChange}
+                                        value={inputMinAllocation}
+                                        onChange={(e) => setInputMinAllocation(e.target.value)}
                                     />
                                 </div>
 
@@ -150,13 +157,35 @@ const FilterPanel = ({ isOpen, onClose, onApplyFilters }) => {
 
                     {/* Footer */}
                     <div className="p-6 border-t border-gray-50 bg-white">
-                        <button
-                            onClick={handleApply}
-                            className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-                        >
-                            <Filter size={18} />
-                            Apply Filters
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setFilters({
+                                        name: '',
+                                        resourceName: '',
+                                        status: 'All Status',
+                                        resourceType: ''
+                                    });
+                                    setInputMinAllocation('');
+                                    setSelectedTimePeriod('Any Time');
+                                    onClearFilters?.();
+                                    onClose();
+                                }}
+                                className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                                type="button"
+                            >
+                                <RotateCcw size={16} />
+                                Clear
+                            </button>
+                            <button
+                                onClick={handleApply}
+                                className="flex-1 py-3.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                                type="button"
+                            >
+                                <Filter size={18} />
+                                Apply Filters
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
