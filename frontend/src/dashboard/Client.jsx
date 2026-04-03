@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, ArrowLeft } from 'lucide-react';
+import { Plus, FileText, ArrowLeft, Lock } from 'lucide-react';
+
+// ── MASK: remove this block to restore the Client Dashboard ──────────────────
+const ClientMask = () => (
+    <div className="flex h-full w-full items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-16 py-14 shadow-sm text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+                <Lock size={28} className="text-slate-400" />
+            </div>
+            <div>
+                <h2 className="text-xl font-bold text-mainTheme">Client Dashboard</h2>
+                <p className="mt-1 text-sm text-slate-500">This section is currently unavailable.</p>
+                <p className="mt-0.5 text-sm font-semibold text-CD_Blue">Coming Soon</p>
+            </div>
+        </div>
+    </div>
+);
+// ─────────────────────────────────────────────────────────────────────────────
 import { useNavigate, useLocation } from 'react-router-dom';
 import ClientKPIs from './clients/ClientKPIs';
 import ClientList from './clients/ClientList';
@@ -126,6 +143,9 @@ const Client = () => {
     return <div className="flex items-center justify-center h-full text-slate-400">Loading Clients...</div>;
   }
 
+  // ── MASK: replace `return <ClientMask />;` with the block below to restore ──
+  return <ClientMask />;
+  /* eslint-disable no-unreachable */
   return (
     <div className="p-6 space-y-6 animate-in fade-in duration-500 pb-20 relative min-h-screen">
       {/* Header & Actions */}

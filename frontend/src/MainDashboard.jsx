@@ -15,7 +15,7 @@ function MainDashboard() {
       {/* Main content area */}
       <div
         id="main-scroll-container"
-        className="flex-1 h-full bg-slate-50 text-mainTheme p-1 overflow-y-auto rounded-xl shadow-lg"
+        className="flex-1 h-full min-w-0 bg-slate-50 text-mainTheme p-1 overflow-y-auto overflow-x-hidden rounded-xl shadow-lg"
       >
         <Outlet />
       </div>

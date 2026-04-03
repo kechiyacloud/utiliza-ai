@@ -245,6 +245,8 @@ const Availability = () => {
     const [isExportOpen, setIsExportOpen] = useState(false);
     const timelineRef = useRef(null);
     const exportMenuRef = useRef(null);
+    const isDragging = useRef(false);
+    const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
     const currentMonthStart = useMemo(() => {
         const date = new Date();
@@ -401,18 +403,20 @@ const Availability = () => {
     }, []);
 
     useEffect(() => {
-        if (!timelineRef.current) return;
+        if (!timelineRef.current || loading) return;
 
         const currentMonthIndex = timelineMonths.findIndex((month) => month.isCurrent);
         const targetMonthIndex = currentMonthIndex >= 0 ? currentMonthIndex : 0;
         const targetScrollLeft = Math.max(0, (targetMonthIndex * MONTH_WIDTH) - 24);
 
         requestAnimationFrame(() => {
-            if (timelineRef.current) {
-                timelineRef.current.scrollLeft = targetScrollLeft;
-            }
+            requestAnimationFrame(() => {
+                if (timelineRef.current) {
+                    timelineRef.current.scrollLeft = targetScrollLeft;
+                }
+            });
         });
-    }, [timelineMonths, data]);
+    }, [timelineMonths, loading]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -660,7 +664,42 @@ const Availability = () => {
                 </div>
             </div>
 
-            <div ref={timelineRef} className="custom-scrollbar relative flex-1 overflow-x-auto overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+            <div
+                ref={timelineRef}
+                className="custom-scrollbar relative flex-1 min-h-0 overflow-x-auto overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-sm"
+                style={{ cursor: isDragging.current ? 'grabbing' : 'grab' }}
+                onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    isDragging.current = true;
+                    dragStart.current = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        scrollLeft: timelineRef.current.scrollLeft,
+                        scrollTop: timelineRef.current.scrollTop,
+                    };
+                    timelineRef.current.style.cursor = 'grabbing';
+                    timelineRef.current.style.userSelect = 'none';
+                }}
+                onMouseMove={(e) => {
+                    if (!isDragging.current) return;
+                    const dx = e.clientX - dragStart.current.x;
+                    const dy = e.clientY - dragStart.current.y;
+                    timelineRef.current.scrollLeft = dragStart.current.scrollLeft - dx;
+                    timelineRef.current.scrollTop = dragStart.current.scrollTop - dy;
+                }}
+                onMouseUp={() => {
+                    isDragging.current = false;
+                    timelineRef.current.style.cursor = 'grab';
+                    timelineRef.current.style.userSelect = '';
+                }}
+                onMouseLeave={() => {
+                    if (isDragging.current) {
+                        isDragging.current = false;
+                        timelineRef.current.style.cursor = 'grab';
+                        timelineRef.current.style.userSelect = '';
+                    }
+                }}
+            >
                 <table className="border-separate border-spacing-0 table-fixed" style={{ minWidth: `${STICKY_COLUMNS_WIDTH + (timelineMonths.length * MONTH_WIDTH)}px` }}>
                     <thead>
                         <tr>

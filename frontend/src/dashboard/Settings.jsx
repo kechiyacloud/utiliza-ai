@@ -5,9 +5,9 @@ import { Soon_GIF } from '../Assets';
 import EmployeeStatusTag from '../components/EmployeeStatusTag';
 import {
     User, Mail, Phone, MapPin, Briefcase, Calendar, Clock,
-    Building2, Laptop, Award, Send, Github, MessageSquare,
-    AlertCircle, CheckCircle2, Loader2, LayoutGrid, CalendarDays,
-    Slack, BarChart2, FileText, Settings as SettingsIcon
+    Building2, Laptop, Award, Send, MessageSquare,
+    AlertCircle, CheckCircle2, Loader2,
+    BarChart2, FileText, Settings as SettingsIcon
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────
@@ -127,42 +127,6 @@ const ProfileSection = ({ employeeData, loading, notLinked }) => {
         </div>
     );
 };
-
-// ─────────────────────────────────────────────
-// Section B — Connectors (placeholder)
-// ─────────────────────────────────────────────
-
-const connectors = [
-    { name: 'Slack',           icon: Slack,         color: 'bg-purple-100 text-purple-600' },
-    { name: 'Jira',            icon: LayoutGrid,    color: 'bg-blue-100 text-blue-600' },
-    { name: 'GitHub',          icon: Github,        color: 'bg-gray-100 text-gray-700' },
-    { name: 'Microsoft Teams', icon: MessageSquare, color: 'bg-indigo-100 text-indigo-600' },
-    { name: 'Google Calendar', icon: CalendarDays,  color: 'bg-green-100 text-green-600' },
-];
-
-const ConnectorsSection = () => (
-    <div>
-        <p className="text-sm text-gray-500 mb-4">
-            Connect your workspace tools. Integrations are currently in development.
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {connectors.map(({ name, icon: Icon, color }) => (
-                <div
-                    key={name}
-                    className="relative bg-white border border-gray-100 rounded-2xl shadow-sm p-5 flex flex-col items-center gap-3 opacity-70"
-                >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-                        <Icon size={22} />
-                    </div>
-                    <span className="text-xs font-semibold text-mainTheme text-center">{name}</span>
-                    <span className="absolute top-2.5 right-2.5 text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200 whitespace-nowrap">
-                        Coming Soon
-                    </span>
-                </div>
-            ))}
-        </div>
-    </div>
-);
 
 // ─────────────────────────────────────────────
 // Section C — Feedback (functional)
@@ -360,10 +324,9 @@ const AutoReportsSection = () => (
 // ─────────────────────────────────────────────
 
 const TABS = [
-    { id: 'profile',    label: 'Profile',      icon: User },
-    { id: 'connectors', label: 'Connectors',   icon: LayoutGrid },
-    { id: 'feedback',   label: 'Feedback',     icon: MessageSquare },
-    { id: 'reports',    label: 'Auto Reports', icon: BarChart2 },
+    { id: 'profile',  label: 'Profile',      icon: User },
+    { id: 'feedback', label: 'Feedback',     icon: MessageSquare },
+    { id: 'reports',  label: 'Auto Reports', icon: BarChart2 },
 ];
 
 function Settings() {
@@ -433,8 +396,7 @@ function Settings() {
                     notLinked={empNotLinked}
                 />
             )}
-            {activeTab === 'connectors' && <ConnectorsSection />}
-            {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
+{activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
             {activeTab === 'reports' && <AutoReportsSection />}
         </div>
     );

@@ -35,30 +35,17 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
     // Filter States
     const initialFilters = {
-        name: '',
-        resourceName: '',
+        projectName: '',
         status: 'All Status',
+        startDate: '',
+        endDate: '',
+        resourceName: '',
         resourceType: ''
     };
 
     const [filters, setFilters] = useState(initialFilters);
-    const [inputMinAllocation, setInputMinAllocation] = useState('');
-    const [appliedMinAllocation, setAppliedMinAllocation] = useState(null);
-    const [selectedTimePeriod, setSelectedTimePeriod] = useState('Any Time');
 
     if (!projects || !Array.isArray(projects)) return null;
-
-    const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
-    const getStartOfWeek = (date) => {
-        const d = new Date(date);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
-        return new Date(d.setDate(diff));
-    };
-    const getEndOfWeek = (date) => {
-        const start = getStartOfWeek(date);
-        return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-    };
 
     const filteredProjects = projects.filter(project => {
         if (!project || !project.name) return false;
@@ -68,7 +55,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         // Side Panel Filter Logic (AND condition)
-        const matchesName = !filters.name || (project.name || '').toLowerCase().includes(filters.name.toLowerCase());
+        const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
         
         const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
@@ -77,39 +64,21 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         
         const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
-        // Allocation filter applies only after user clicks Apply
-        const projectAllocation = Number(project.allocation_pct || project.total_allocation || project.allocation || 0);
-        const matchesAllocation = appliedMinAllocation === null || appliedMinAllocation === 0
-            ? true
-            : projectAllocation >= appliedMinAllocation;
-
-        // Time-based filtering (Month/Week)
-        const matchesTimeRange = () => {
-            if (selectedTimePeriod === 'Any Time') return true;
-
-            const start = new Date(project.startDate || project.start_date);
-            const end = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
-            if (!isValidDate(start)) return false;
-            const today = new Date();
-
-            if (selectedTimePeriod === 'This Week') {
-                const startWeek = getStartOfWeek(today);
-                const endWeek = getEndOfWeek(today);
-                return start <= endWeek && end >= startWeek;
-            }
-
-            if (selectedTimePeriod === 'This Month') {
-                return start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear();
-            }
-
-            if (selectedTimePeriod === 'Next Month') {
-                const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-                return start.getMonth() === nextMonth.getMonth() && start.getFullYear() === nextMonth.getFullYear();
-            }
-
+        // Date overlap filter (Start/End)
+        const projectStart = new Date(project.startDate || project.start_date);
+        const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
+        const hasProjectDates = !Number.isNaN(projectStart.getTime());
+        const filterStart = filters.startDate ? new Date(filters.startDate) : null;
+        const filterEnd = filters.endDate ? new Date(filters.endDate) : null;
+        const matchesDate = (() => {
+            if (!filterStart && !filterEnd) return true;
+            if (!hasProjectDates) return false;
+            if (filterStart && projectEnd < filterStart) return false;
+            if (filterEnd && projectStart > filterEnd) return false;
             return true;
-        };
-        const matchesTime = matchesTimeRange();
+        })();
+
+        const matchesTime = true;
 
         // Quick Card Filter logic (Categories)
         let matchesCardFilter = true;
@@ -129,7 +98,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
 
         return matchesSearchTerm && matchesName && matchesResource && matchesStatus && 
-               matchesResourceType && matchesAllocation && matchesTime && matchesCardFilter;
+               matchesResourceType && matchesDate && matchesTime && matchesCardFilter;
     });
 
     // Compute dynamic table heading
@@ -160,19 +129,22 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
-    const handleApplyFilters = (newFilters, minAllocationValue, timePeriod) => {
+    const handleApplyFilters = (newFilters) => {
         setFilters(newFilters);
-        const numericValue = Number(minAllocationValue);
-        setAppliedMinAllocation(Number.isNaN(numericValue) ? null : numericValue);
-        setSelectedTimePeriod(timePeriod || 'Any Time');
     };
 
     const handleClearFilters = () => {
         setFilters(initialFilters);
-        setInputMinAllocation('');
-        setAppliedMinAllocation(null);
-        setSelectedTimePeriod('Any Time');
     };
+
+    const isFilterActive = Boolean(
+        filters.projectName ||
+        (filters.status && filters.status !== 'All Status') ||
+        filters.startDate ||
+        filters.endDate ||
+        filters.resourceName ||
+        filters.resourceType
+    );
 
     const handleViewClick = (project) => {
         navigate(`/info/projects/${project.id}`, { state: { project } });
@@ -238,10 +210,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full relative min-h-[500px]">
 
                 {/* Header (Tabs and Filter) */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-4 mb-6 gap-4">
-                    {/* Left Side: Tabs */}
-                    <div className="flex gap-8">
-                        <button
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-4 mb-6 gap-4">
+                {/* Left Side: Tabs */}
+                <div className="flex gap-8">
+                    <button
                             onClick={() => setActiveView('table')}
                             className={`text-lg font-bold transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                         >
@@ -295,6 +267,16 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
+                        {isFilterActive && (
+                            <button
+                                onClick={handleClearFilters}
+                                className="flex items-center gap-1 px-3 py-2 text-xs font-bold bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition text-gray-700"
+                                title="Clear all active filters"
+                            >
+                                <span className="text-gray-500 text-sm">✕</span>
+                                Clear
+                            </button>
+                        )}
                         <button
                             onClick={() => setIsFilterPanelOpen(true)}
                             className={`p-2 rounded-xl border transition-all shadow-sm ${isFilterPanelOpen ? 'bg-blue-50 border-blue-200 text-blue-600 ring-2 ring-blue-50' : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-white hover:border-gray-200'}`}
@@ -413,11 +395,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 isOpen={isFilterPanelOpen}
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
-                inputMinAllocation={inputMinAllocation}
-                setInputMinAllocation={setInputMinAllocation}
                 onClearFilters={handleClearFilters}
-                selectedTimePeriod={selectedTimePeriod}
-                setSelectedTimePeriod={setSelectedTimePeriod}
+                currentFilters={filters}
             />
 
             {/* Delete Confirmation Modal */}

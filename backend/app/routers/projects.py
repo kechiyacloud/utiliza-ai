@@ -788,20 +788,6 @@ def create_project_resource(project_id: str, payload: TeamMemberCreate):
             raise HTTPException(status_code=404, detail="Project not found")
 
         resource = _save_single_resource(cur, project_id, payload, project_row[0])
-        # Sync employee_master_pro for the affected employee
-        if resource.get("employee_id"):
-            cur.execute("""
-                UPDATE employee_master_pro p
-                SET employee_allocations = COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = p.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0),
-                employee_status = CASE
-                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0 THEN 'Bench'
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                    ELSE 'Allocated'
-                END
-                WHERE p.employee_id = %s
-            """, (resource["employee_id"],))
         conn.commit()
         return {"message": "Resource created successfully", "resource": resource}
     except HTTPException:
@@ -833,20 +819,6 @@ def update_project_resource(project_id: str, allocation_id: str, payload: TeamMe
             raise HTTPException(status_code=404, detail="Allocation not found")
 
         resource = _save_single_resource(cur, project_id, payload, project_row[0], replace_allocation_id=allocation_id)
-        # Sync employee_master_pro for the affected employee
-        if resource.get("employee_id"):
-            cur.execute("""
-                UPDATE employee_master_pro p
-                SET employee_allocations = COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = p.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0),
-                employee_status = CASE
-                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0 THEN 'Bench'
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                    WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                    ELSE 'Allocated'
-                END
-                WHERE p.employee_id = %s
-            """, (resource["employee_id"],))
         conn.commit()
         return {"message": "Resource updated successfully", "resource": resource}
     except HTTPException:
@@ -877,18 +849,6 @@ def delete_project_resource(project_id: str, allocation_id: str):
             "DELETE FROM projects_allocation WHERE allocation_id = %s AND project_id = %s",
             (allocation_id, project_id)
         )
-        # Sync employee_master_pro for all employees previously in this project (fullscan safer since we don't have emp_id here)
-        cur.execute("""
-            UPDATE employee_master_pro p
-            SET employee_allocations = COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = p.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0),
-            employee_status = CASE
-                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0 THEN 'Bench'
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                ELSE 'Allocated'
-            END
-        """)
         conn.commit()
         return {"message": "Resource deleted successfully"}
     except HTTPException:
@@ -1062,22 +1022,6 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
                 print(f"Allocation insert error for {tm.name}: {alloc_err}")
 
         conn.commit()
-        # Sync employee_master_pro for all employees in this project after bulk update
-        cur.execute(f"""
-            UPDATE employee_master_pro p
-            SET employee_allocations = COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = p.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0),
-            employee_status = CASE
-                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0 THEN 'Bench'
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                WHEN COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = p.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                ELSE 'Allocated'
-            END
-            WHERE p.employee_id IN (
-                SELECT DISTINCT employee_id FROM projects_allocation WHERE project_id = %s
-            )
-        """, (project_id,))
-        conn.commit()
         return {"message": "Project resources updated successfully"}
     except HTTPException:
         conn.rollback()
@@ -1143,6 +1087,12 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "end_date" in payload:
             fields.append("end_date = %s")
             values.append(end_date_value)
+        if "client" in payload:
+            fields.append("client_name = %s")
+            values.append(_normalize_text(payload["client"]))
+        if "partner" in payload:
+            fields.append("client_name = %s")
+            values.append(_normalize_text(payload["partner"]))
         if "client_id" in payload:
             fields.append("client_id = %s")
             values.append(payload["client_id"])
@@ -1196,10 +1146,20 @@ def create_project(project: ProjectCreate):
             project.end_date,
         ]
 
-        if normalized_type == "client":
+        if normalized_type == "internal":
+            pass
+        elif normalized_type == "client":
+            insert_fields.insert(5, "client_name")
+            insert_values.insert(5, client_name)
             if project.client_id is not None:
-                insert_fields.append("client_id")
-                insert_values.append(str(project.client_id))
+                insert_fields.insert(6, "client_id")
+                insert_values.insert(6, project.client_id)
+        elif normalized_type == "partner":
+            insert_fields.insert(5, "client_name")
+            insert_values.insert(5, partner_name)
+            if project.client_id is not None:
+                insert_fields.insert(6, "client_id")
+                insert_values.insert(6, project.client_id)
 
         placeholders = ", ".join(["%s"] * len(insert_fields))
         cur.execute(f"INSERT INTO projects ({', '.join(insert_fields)}) VALUES ({placeholders})", tuple(insert_values))

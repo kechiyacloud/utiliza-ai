@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Filter, RotateCcw } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
@@ -6,18 +6,30 @@ const FilterPanel = ({
     isOpen,
     onClose,
     onApplyFilters,
-    inputMinAllocation,
-    setInputMinAllocation,
     onClearFilters,
-    selectedTimePeriod,
-    setSelectedTimePeriod
+    currentFilters
 }) => {
     const [filters, setFilters] = useState({
-        name: '',
+        projectName: '',
         resourceName: '',
         status: 'All Status',
-        resourceType: ''
+        resourceType: '',
+        startDate: '',
+        endDate: ''
     });
+
+    useEffect(() => {
+        if (isOpen && currentFilters) {
+            setFilters({
+                projectName: currentFilters.projectName || '',
+                resourceName: currentFilters.resourceName || '',
+                status: currentFilters.status || 'All Status',
+                resourceType: currentFilters.resourceType || '',
+                startDate: currentFilters.startDate || '',
+                endDate: currentFilters.endDate || ''
+            });
+        }
+    }, [isOpen, currentFilters]);
 
     if (!isOpen) return null;
 
@@ -27,7 +39,7 @@ const FilterPanel = ({
     };
 
     const handleApply = () => {
-        onApplyFilters(filters, Number(inputMinAllocation), selectedTimePeriod);
+        onApplyFilters(filters);
         onClose();
     };
 
@@ -52,6 +64,7 @@ const FilterPanel = ({
                         <button 
                             onClick={onClose} 
                             className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all border border-transparent hover:border-slate-100"
+                            aria-label="Close Filter Panel"
                         >
                             <X size={20} />
                         </button>
@@ -66,10 +79,10 @@ const FilterPanel = ({
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Project Name</label>
                                 <input
                                     type="text"
-                                    name="name"
+                                    name="projectName"
                                     placeholder="Enter project name..."
                                     className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
-                                    value={filters.name}
+                                    value={filters.projectName}
                                     onChange={handleChange}
                                 />
                             </div>
@@ -103,52 +116,29 @@ const FilterPanel = ({
                                 </select>
                             </div>
 
-                            {/* Time Period Filter */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Time Period</label>
-                                <select
-                                    name="timePeriod"
-                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
-                                    value={selectedTimePeriod}
-                                    onChange={(e) => setSelectedTimePeriod(e.target.value)}
-                                >
-                                    <option value="Any Time">Any Time</option>
-                                    <option value="This Week">This Week</option>
-                                    <option value="This Month">This Month</option>
-                                    <option value="Next Month">Next Month</option>
-                                </select>
-                            </div>
-
                             <div className="grid grid-cols-2 gap-4">
-                                {/* Allocation % (input only, applies on button press) */}
+                                {/* Start Date */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Min. Allocation %</label>
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Start Date</label>
                                     <input
-                                        type="number"
-                                        name="allocation"
-                                        placeholder="Enter %"
-                                        min="0"
-                                        max="100"
+                                        type="date"
+                                        name="startDate"
+                                        value={filters.startDate}
+                                        onChange={handleChange}
                                         className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
-                                        value={inputMinAllocation}
-                                        onChange={(e) => setInputMinAllocation(e.target.value)}
                                     />
                                 </div>
 
-                                {/* Resource Type */}
+                                {/* End Date */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Resource Type</label>
-                                    <select
-                                        name="resourceType"
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
-                                        value={filters.resourceType}
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">End Date</label>
+                                    <input
+                                        type="date"
+                                        name="endDate"
+                                        value={filters.endDate}
                                         onChange={handleChange}
-                                    >
-                                        <option value="">All Types</option>
-                                        <option value="Billable">Billable</option>
-                                        <option value="Non-Billable">Non-Billable</option>
-                                        <option value="Shadow">Shadow</option>
-                                    </select>
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                    />
                                 </div>
                             </div>
 
@@ -161,13 +151,13 @@ const FilterPanel = ({
                             <button
                                 onClick={() => {
                                     setFilters({
-                                        name: '',
+                                        projectName: '',
                                         resourceName: '',
                                         status: 'All Status',
-                                        resourceType: ''
+                                        resourceType: '',
+                                        startDate: '',
+                                        endDate: ''
                                     });
-                                    setInputMinAllocation('');
-                                    setSelectedTimePeriod('Any Time');
                                     onClearFilters?.();
                                     onClose();
                                 }}

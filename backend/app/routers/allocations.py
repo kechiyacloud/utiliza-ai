@@ -119,13 +119,13 @@ def allocation_metrics(
              avg_utilization = 0
         else:
             util_query = """
-                SELECT COALESCE(SUM(pa.allocation_percentage), 0) / NULLIF((SELECT COUNT(*) FROM employee_master em {0}), 0)
+                SELECT COALESCE(AVG(pa.allocation_percentage), 0)
                 FROM projects_allocation pa
                 JOIN employee_master em ON pa.employee_id = em.employee_id
-            """.format(" WHERE " + " AND ".join(where_clauses) if where_clauses else "")
-            
-            # Need params twice for SUM and for NULLIF subquery
-            cur.execute(util_query, tuple(params + params))
+            """
+            if where_clauses:
+                util_query += " WHERE " + " AND ".join(where_clauses)
+            cur.execute(util_query, tuple(params))
             avg_utilization_val = cur.fetchone()[0]
             avg_utilization = round(float(avg_utilization_val or 0), 2)
 

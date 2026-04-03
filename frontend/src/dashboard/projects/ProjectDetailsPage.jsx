@@ -46,13 +46,13 @@ function fmtDate(d) {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function buildWeekDescriptor(mondayDate) {
+function buildWeekDescriptor(mondayDate, index) {
     const sunday = new Date(mondayDate);
     sunday.setDate(mondayDate.getDate() + 6);
+
     const today = new Date();
     today.setHours(0,0,0,0);
     const currMonday = getMonday(today);
-    
     const isPast = mondayDate < currMonday;
     const isCurrent = mondayDate.getTime() === currMonday.getTime();
     const isFuture = mondayDate > currMonday;
@@ -61,58 +61,64 @@ function buildWeekDescriptor(mondayDate) {
     const yr = mondayDate.getFullYear();
     const yearWeek = `${yr}-${wkNum}`;
 
-    let label = isCurrent ? "This Week" : (isPast ? `Week ${wkNum}` : `Week ${wkNum}`);
+    const label = `Week ${index}`;
     
-    return { label, dateRange: `${fmtDate(mondayDate)} – ${fmtDate(sunday)}`, yearWeek, isPast, isCurrent, isFuture, year: yr, weekNum: wkNum, monday: new Date(mondayDate), sunday: new Date(sunday) };
+    return { 
+        label, 
+        dateRange: `${fmtDate(mondayDate)} – ${fmtDate(sunday)}`, 
+        yearWeek, 
+        year: yr, 
+        weekNum: wkNum, 
+        monday: new Date(mondayDate), 
+        sunday: new Date(sunday),
+        start: new Date(mondayDate),
+        end: new Date(sunday),
+        isPast,
+        isCurrent,
+        isFuture
+    };
 }
 
-function getViewWeeks(mode, startStr, endStr) {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const currMonday = getMonday(today);
-
-    let startMonday, endMonday;
-
-    if (mode === 'previous') {
-        if (!startStr) return [];
-        const pStart = new Date(startStr);
-        pStart.setHours(0,0,0,0);
-        startMonday = getMonday(pStart);
-        endMonday = new Date(currMonday);
-        endMonday.setDate(currMonday.getDate() - 7);
-        if (startMonday > endMonday) return [];
-    } else if (mode === 'next') {
-        if (!endStr) return [];
-        const pEnd = new Date(endStr);
-        pEnd.setHours(0,0,0,0);
-        startMonday = new Date(currMonday);
-        startMonday.setDate(currMonday.getDate() + 7);
-        endMonday = getMonday(pEnd);
-        if (startMonday > endMonday) return [];
-    } else {
-        startMonday = new Date(currMonday);
-        endMonday = new Date(currMonday);
-        endMonday.setDate(currMonday.getDate() + 21); // +3 weeks
-    }
+function generateProjectWeeks(startStr, endStr) {
+    const startDate = parseDate(startStr);
+    const endDate = parseDate(endStr);
+    if (!startDate || !endDate) return [];
+    const startMonday = getMonday(startDate);
+    const endMonday = getMonday(endDate);
 
     const weeks = [];
     let cur = new Date(startMonday);
-    while (cur <= endMonday && weeks.length < 300) {
-        weeks.push(buildWeekDescriptor(cur));
+    let index = 1;
+    while (cur <= endMonday && weeks.length < 400) {
+        weeks.push(buildWeekDescriptor(cur, index));
         cur.setDate(cur.getDate() + 7);
-    }
-
-    if (weeks.length === 0) {
-        for (let i = 0; i < 4; i++) {
-            const mockDate = new Date(currMonday);
-            mockDate.setDate(currMonday.getDate() + i * 7);
-            const desc = buildWeekDescriptor(mockDate);
-            desc.label = i === 0 ? "This Week" : `Week ${i + 1}`;
-            desc.dateRange = 'Dates not set';
-            weeks.push(desc);
-        }
+        index += 1;
     }
     return weeks;
+}
+
+function getViewWeeks(mode, startStr, endStr) {
+    const weeks = generateProjectWeeks(startStr, endStr);
+    if (weeks.length === 0) return [];
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const currentIndex = weeks.findIndex(w => w.start <= today && w.end >= today);
+
+    if (mode === 'previous') {
+        return weeks.filter(week => week.end < today);
+    }
+
+    if (mode === 'next') {
+        return weeks.filter(week => week.end >= today);
+    }
+
+    // current: this week + next 3 weeks
+    if (currentIndex === -1) {
+        return weeks.slice(0, 4);
+    }
+    return weeks.slice(currentIndex, currentIndex + 4);
 }
 
 const WEEK_DEFAULT_HOURS = 40;
@@ -157,13 +163,30 @@ function isWeekWithinAllocationRange(weekDescriptor, row = {}) {
 }
 
 function getWeeklyHoursForWeek(row = {}, weekDescriptor) {
-    const withinRange = isWeekWithinAllocationRange(weekDescriptor, row);
-    if (!withinRange) return { withinRange: false, hours: null, rawVal: undefined };
+    const resStart = parseDate(row.allocation_start_date);
+    const resEnd = parseDate(row.allocation_end_date);
+    const weekStart = new Date(weekDescriptor.start || weekDescriptor.monday);
+    const weekEnd = new Date(weekDescriptor.end || weekDescriptor.sunday);
+
+    // Outside allocation window -> show "-"
+    if ((resStart && weekEnd < resStart) || (resEnd && weekStart > resEnd)) {
+        return { withinRange: false, hours: null, rawVal: undefined };
+    }
+
     const rawVal = (row.weekly_hours || {})[weekDescriptor.yearWeek];
-    const hours = (rawVal === '' || rawVal === undefined)
-        ? allocPctToHours(row.allocation_pct)
-        : Number(rawVal || 0);
-    return { withinRange, hours, rawVal };
+    const baseWeeklyHours = Number(
+        (rawVal === '' || rawVal === undefined)
+            ? (row.allocation || row.allocation_hours || allocPctToHours(row.allocation_pct))
+            : (rawVal || 0)
+    ) || 0;
+
+    // Partial week handling
+    const overlapStart = new Date(Math.max(weekStart.getTime(), resStart ? resStart.getTime() : weekStart.getTime()));
+    const overlapEnd = new Date(Math.min(weekEnd.getTime(), resEnd ? resEnd.getTime() : weekEnd.getTime()));
+    const daysWorked = Math.max(0, (overlapEnd - overlapStart) / (1000 * 60 * 60 * 24) + 1);
+    const proratedHours = resStart || resEnd ? Math.round((daysWorked / 7) * baseWeeklyHours) : baseWeeklyHours;
+
+    return { withinRange: true, hours: proratedHours, rawVal };
 }
 
 function normalizeAllocationRow(row = {}) {
@@ -707,6 +730,47 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         return totalAllProjects - thisProjectDBHours;
     };
 
+    const generateWeeklyHours = (hours, row) => {
+        const weekly = {};
+        visibleWeeks.forEach(wk => {
+            weekly[wk.yearWeek] = isWeekWithinAllocationRange(wk, row) ? hours : '';
+        });
+        return weekly;
+    };
+
+    const handleEmployeeSelect = async (employee, rowIndex) => {
+        const empId = employee.employee_id || employee.id;
+        const empName = employee.employee_name || employee.name;
+        try {
+            const res = await axios.get(`/allocations/${empId}`);
+            const allocations = Array.isArray(res.data?.allocations) ? res.data.allocations : [];
+            const totalPercent = allocations.reduce((sum, a) => sum + Number(a.percentage || 0), 0);
+            const remainingPercent = Math.max(0, 100 - totalPercent);
+            const hours = Math.round((remainingPercent / 100) * WEEK_DEFAULT_HOURS);
+
+            const newRows = [...localRows];
+            const currentRow = { ...(newRows[rowIndex] || {}) };
+            currentRow.employee_id = empId;
+            currentRow.name = empName;
+            currentRow.allocation_pct = remainingPercent;
+            currentRow.weekly_hours = {
+                ...currentRow.weekly_hours,
+                ...generateWeeklyHours(hours, currentRow)
+            };
+            newRows[rowIndex] = currentRow;
+            setLocalRows(newRows);
+
+            if (remainingPercent <= 0) {
+                setStatusMessage(`Employee ${empName} is fully allocated (100%).`);
+            } else {
+                setStatusMessage(`Auto-filled ${remainingPercent}% (${hours}h/wk) for ${empName}.`);
+            }
+        } catch (error) {
+            console.error('Failed to load employee allocations', error);
+            setStatusMessage('Could not fetch allocation data for this employee.');
+        }
+    };
+
     const handleRowChange = (index, field, value) => {
         const newRows = [...localRows];
         const currentRow = { ...(newRows[index] || {}) };
@@ -1195,6 +1259,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                             })
                                                             : item
                                                     )));
+                                                    handleEmployeeSelect(emp, ridx);
                                                 }}
                                                 placeholder="Select Employee"
                                                 label="Employee"
@@ -1299,18 +1364,29 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     <div className="flex flex-col items-center gap-1">
                                                         <input
                                                             type="number"
-                                                            min="0"
-                                                            max={remainingAllowed}
+                                                            min="1"
+                                                            max={Math.min(40, remainingAllowed)}
                                                             step="0.1"
-                                                            value={rawVal === '' ? '' : safeHours}
-                                                            onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
-                                                            onBlur={(e) => {
-                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 0);
+                                                            value={rawVal === '' ? '' : Math.min(40, safeHours)}
+                                                            disabled={!isCellEditable}
+                                                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                                                            onChange={(e) => {
+                                                                let val = Number(e.target.value);
+                                                                if (Number.isNaN(val)) {
+                                                                    handleRowChange(ridx, `week_${wk.yearWeek}`, '');
+                                                                    return;
+                                                                }
+                                                                const clamped = Math.max(1, Math.min(40, val, remainingAllowed));
+                                                                handleRowChange(ridx, `week_${wk.yearWeek}`, clamped);
                                                             }}
-                                                            className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 bg-white transition-colors ${
+                                                            onBlur={(e) => {
+                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 1);
+                                                            }}
+                                                            className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${
                                                                 safeHours > WEEK_DEFAULT_HOURS
                                                                     ? 'border-rose-400 text-rose-600'
                                                                     : 'border-gray-200 focus:border-blue-400'
+                                                            } ${!isCellEditable ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'
                                                             }`}
                                                         />
                                                         {/* 'Rem: XXh' text removed per user request */}
@@ -2103,14 +2179,16 @@ const ProjectDetailsPage = () => {
                 </div>
 
                 {/* Scope & Commercial side-by-side below allocation */}
-                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div>
-                        <ScopeSection project={project} onUpdate={loadProjectData} />
+                {false && (
+                    <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <ScopeSection project={project} onUpdate={loadProjectData} />
+                        </div>
+                        <div>
+                            <CommercialSection project={project} onUpdate={loadProjectData} />
+                        </div>
                     </div>
-                    <div>
-                        <CommercialSection project={project} onUpdate={loadProjectData} />
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );

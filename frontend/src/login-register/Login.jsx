@@ -1,14 +1,17 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { CD_Blue } from '../Assets.jsx'
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import api from "../api/axios"
 
 function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const successMessage = location.state?.message || null
 
   const [formData, setFormData] = useState({
     email: '',
@@ -49,6 +52,13 @@ function Login() {
       <h2 className="text-white text-2xl font-bold text-center">
         Sign In
       </h2>
+
+      {successMessage && (
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-500/20 border border-emerald-400/40 px-4 py-3 text-emerald-300 text-sm font-medium">
+          <CheckCircle2 size={16} className="flex-shrink-0" />
+          {successMessage}
+        </div>
+      )}
 
       <p className="intro-text">
         One view <span className="mx-1">·</span> Every insight <span className="mx-1">·</span> Complete control

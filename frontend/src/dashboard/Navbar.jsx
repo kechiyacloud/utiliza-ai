@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, FolderKanban, Users, PieChart, CalendarClock, Briefcase, Settings, ChevronLeft, ChevronRight, Network, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, PieChart, CalendarClock, Briefcase, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -20,7 +20,6 @@ const Navbar = () => {
         { icon: PieChart, label: 'Allocation', path: 'allocation' },
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
         { icon: Briefcase, label: 'Client', path: 'client' },
-        { icon: Network, label: 'Organization', path: 'workstatus' },
         { icon: Settings, label: 'Settings', path: 'settings' },
     ];
 

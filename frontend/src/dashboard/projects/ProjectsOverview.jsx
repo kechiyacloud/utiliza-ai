@@ -2,7 +2,7 @@ import React from 'react';
 import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, CalendarClock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, description, icon: Icon, colorClass, onClick, active, customColors }) => {
+const StatCard = ({ label, value, description, subLabel, icon: Icon, colorClass, onClick, active, customColors }) => {
     return (
         <div
             onClick={onClick}
@@ -33,6 +33,11 @@ const StatCard = ({ label, value, description, icon: Icon, colorClass, onClick, 
                 <span className="text-slate-500 text-[10px] font-bold tracking-wider uppercase mb-1">{label}</span>
                 {description && (
                     <span className="text-slate-400 text-[10px] font-medium">{description}</span>
+                )}
+                {subLabel && (
+                    <span className="inline-flex items-center w-fit mt-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">
+                        {subLabel}
+                    </span>
                 )}
             </div>
 
@@ -120,6 +125,7 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     label="Completed Projects"
                     value={stats.completedProjects}
                     description="Successfully delivered"
+                    subLabel="Last 3 Months"
                     icon={CheckCircle}
                     customColors={{ bg: '#ECFDF5', text: '#10B981' }}
                     active={activeFilter === 'Completed'}

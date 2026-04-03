@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { CD_Blue } from '../Assets.jsx'
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from "../api/axios"
 
 function Register() {
@@ -10,6 +10,7 @@ function Register() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   
   const [formData, setFormData] = useState({
     email: '',
@@ -28,10 +29,11 @@ function Register() {
     e.preventDefault()
 
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match")
+      setError("Passwords do not match")
       return
     }
 
+    setError('')
     setLoading(true)
 
     try {
@@ -40,12 +42,10 @@ function Register() {
         password: formData.password,
       })
 
-      navigate("/", { state: { message: "Registration successful! Please log in." } })
-      // navigate("/verify", { state: { email: formData.email } })
+      navigate("/", { state: { message: "Registration successful! You can now sign in." } })
 
     } catch (err) {
-      alert(err.response?.data?.detail || "Registration failed") 
-      // python sends detail - node sends message
+      setError(err.response?.data?.detail || "Registration failed")
     } finally {
       setLoading(false)
     }
@@ -89,6 +89,13 @@ function Register() {
       {/* <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-CD_Blue transition">
         {showConfirmPassword ? "🙈" : "👁"}
       </button> */}
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl bg-red-500/20 border border-red-400/40 px-4 py-3 text-red-300 text-sm font-medium">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          {error}
+        </div>
+      )}
 
       <button type="submit" className="form-button">
         Register
