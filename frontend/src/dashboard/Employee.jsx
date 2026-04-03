@@ -329,6 +329,9 @@ function Employee() {
           loading={loading}
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
           onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
+          onEmployeeDelete={(deletedId) => {
+            setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
+          }}
           filters={combinedFilters}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}

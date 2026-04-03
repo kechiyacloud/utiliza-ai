@@ -61,7 +61,7 @@ def allocation_metrics(
         elif resource_type == 'Internal Only':
             tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable')")
         elif resource_type == 'Bench Strength':
-            tr_where.append("p.employee_status = 'Bench'")
+            tr_where.append("COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = em.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
             
         if tr_where:
             tr_query += " WHERE " + " AND ".join(tr_where)
@@ -98,8 +98,14 @@ def allocation_metrics(
         cur.execute(non_billable_query, tuple(params))
         non_billable_count = cur.fetchone()[0]
 
-        # 4. Bench Strength
-        bench_query = "SELECT COUNT(*) FROM employee_master_pro p JOIN employee_master em ON p.employee_id = em.employee_id WHERE p.employee_status = 'Bench'"
+        # 4. Bench Strength - use dynamic sum from projects_allocation
+        bench_query = """
+            SELECT COUNT(DISTINCT em.employee_id)
+            FROM employee_master em
+            LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
+            WHERE (p.employee_status NOT ILIKE '%%notice%%' OR p.employee_status IS NULL)
+            AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+        """
         ben_where = list(where_clauses)
         if resource_type == 'Billable Only' or resource_type == 'Internal Only':
              ben_where.append("1=0")
@@ -832,6 +838,40 @@ def import_allocations(body: AllocationImportRequest):
             )
 
         conn.commit()
+
+        # Sync employee_master_pro allocations from the updated projects_allocation data
+        synced_employee_ids = list({r["employee_id"] for r in valid_records})
+        if synced_employee_ids:
+            cur.execute("""
+                UPDATE employee_master_pro p
+                SET employee_allocations = COALESCE((
+                    SELECT SUM(pa.allocation_percentage)
+                    FROM projects_allocation pa
+                    WHERE pa.employee_id = p.employee_id
+                ), 0),
+                employee_status = CASE
+                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                    WHEN COALESCE((
+                        SELECT SUM(pa2.allocation_percentage)
+                        FROM projects_allocation pa2
+                        WHERE pa2.employee_id = p.employee_id
+                    ), 0) <= 0 THEN 'Bench'
+                    WHEN COALESCE((
+                        SELECT SUM(pa2.allocation_percentage)
+                        FROM projects_allocation pa2
+                        WHERE pa2.employee_id = p.employee_id
+                    ), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+                    WHEN COALESCE((
+                        SELECT SUM(pa2.allocation_percentage)
+                        FROM projects_allocation pa2
+                        WHERE pa2.employee_id = p.employee_id
+                    ), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+                    ELSE 'Allocated'
+                END
+                WHERE p.employee_id = ANY(%s)
+            """, (synced_employee_ids,))
+            conn.commit()
+
         return {
             "new_records":     new_records,
             "updated_records": updated_records,

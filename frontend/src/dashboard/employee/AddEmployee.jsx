@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
-import { createEmployee, updateEmployee, getEmployeeById } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList } from '../../api/employeeApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
 
@@ -25,6 +25,7 @@ const AddEmployee = () => {
     });
     const [showPreview, setShowPreview] = useState(false); // Track if preview tab should be visible
     const [completedSections, setCompletedSections] = useState([]); // Track which sections are completed
+    const [allEmployees, setAllEmployees] = useState([]);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -46,6 +47,7 @@ const AddEmployee = () => {
         work_mode: 'Hybrid',
         employee_status: 'Bench',
         employee_allocations: 0,
+        reporting_manager_id: '',
         skills: [],
         certificates: [], // Array of {name: '', file: null, fileData: ''}
 
@@ -100,6 +102,7 @@ const AddEmployee = () => {
                 work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
                 employee_status: source.status?.allocated || source.employee_status || 'Bench',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
+                reporting_manager_id: source.reporting_manager_id || '',
                 skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
                 certificates: (source.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
                 projects: (source.projects || []).map(p => ({
@@ -137,6 +140,18 @@ const AddEmployee = () => {
 
         loadEditData();
     }, [isEditMode, editData, editEmployeeId]);
+
+    useEffect(() => {
+        const loadEmployees = async () => {
+            try {
+                const list = await getEmployeeList();
+                setAllEmployees(list || []);
+            } catch (err) {
+                console.error('Failed to load employee list for manager dropdown', err);
+            }
+        };
+        loadEmployees();
+    }, []);
 
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
@@ -349,6 +364,7 @@ const AddEmployee = () => {
                 work_mode: formData.work_mode,
                 employee_status: formData.employee_status,
                 employee_allocations: formData.employee_allocations,
+                reporting_manager_id: formData.reporting_manager_id || null,
                 skills: formData.skills,
                 certificates: formData.certificates.map(c => ({ name: typeof c === 'string' ? c : (c.name || '') })),
                 projects: formData.projects.map(p => ({
@@ -549,6 +565,26 @@ const AddEmployee = () => {
                         ))}
                     </select>
                 </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Reporting Manager</label>
+                <select
+                    name="reporting_manager_id"
+                    value={formData.reporting_manager_id}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                    <option value="">Select Reporting Manager</option>
+                    {allEmployees
+                        .filter(emp => emp.employee_id !== formData.employee_id)
+                        .map(emp => (
+                            <option key={emp.employee_id} value={emp.employee_id}>
+                                {emp.employee_name} ({emp.employee_id})
+                            </option>
+                        ))
+                    }
+                </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -919,6 +955,7 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Employment Type:</span> {formData.employment_type || 'N/A'}</div>
                     <div><span className="font-semibold">Status:</span> <span className={`px-2 py-1 rounded text-xs ${formData.employee_status === 'Allocated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{formData.employee_status}</span></div>
                     <div><span className="font-semibold">Allocation:</span> {formData.employee_allocations}%</div>
+                    <div><span className="font-semibold">Reporting Manager:</span> {formData.reporting_manager_id ? (() => { const mgr = allEmployees.find(e => e.employee_id === formData.reporting_manager_id); return mgr ? `${mgr.employee_name} (${mgr.employee_id})` : formData.reporting_manager_id; })() : 'N/A'}</div>
                 </div>
                 {formData.skills.length > 0 && (
                     <div className="mt-3">

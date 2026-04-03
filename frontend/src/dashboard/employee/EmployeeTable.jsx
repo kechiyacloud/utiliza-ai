@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Search, Filter, SquarePen } from 'lucide-react';
+import { ChevronRight, Search, Filter, SquarePen, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
+import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import { deleteEmployee } from '../../api/employeeApi';
 
 // AllocationBar — color matches EmployeeStatusTag palette
 const AllocationBar = ({ percentage, status }) => {
@@ -46,9 +48,11 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
         const saved = sessionStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
@@ -126,6 +130,21 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const currentEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
+        try {
+            await deleteEmployee(deleteTarget.employee_id);
+            if (onEmployeeDelete) onEmployeeDelete(deleteTarget.employee_id);
+        } catch (err) {
+            console.error('Delete failed', err);
+            alert('Failed to delete employee.');
+        } finally {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+        }
+    };
 
     useEffect(() => {
         setCurrentPage(1);
@@ -251,6 +270,17 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                 <SquarePen size={13} />
                                                 Edit
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setDeleteTarget(emp);
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                            >
+                                                <Trash2 size={13} />
+                                                Delete
+                                            </button>
                                             <ChevronRight size={16} className="text-gray-300 group-hover:text-blue-500 transition-colors inline-block" />
                                         </div>
                                     </td>
@@ -320,6 +350,14 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                     </div>
                 </div>
             )}
+
+            <ConfirmDeleteModal
+                isOpen={!!deleteTarget}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                itemName={deleteTarget?.employee_name}
+                isDeleting={isDeleting}
+            />
         </div>
     );
 };

@@ -5,6 +5,41 @@ from typing import List, Optional
 from datetime import date
 import uuid
 
+
+def _sync_employee_allocations(cur, employee_ids):
+    """Re-compute employee_allocations in employee_master_pro from live projects_allocation rows."""
+    if not employee_ids:
+        return
+    cur.execute("""
+        UPDATE employee_master_pro p
+        SET employee_allocations = COALESCE((
+            SELECT SUM(pa.allocation_percentage)
+            FROM projects_allocation pa
+            WHERE pa.employee_id = p.employee_id
+        ), 0),
+        employee_status = CASE
+            WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+            WHEN COALESCE((
+                SELECT SUM(pa2.allocation_percentage)
+                FROM projects_allocation pa2
+                WHERE pa2.employee_id = p.employee_id
+            ), 0) <= 0 THEN 'Bench'
+            WHEN COALESCE((
+                SELECT SUM(pa2.allocation_percentage)
+                FROM projects_allocation pa2
+                WHERE pa2.employee_id = p.employee_id
+            ), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+            WHEN COALESCE((
+                SELECT SUM(pa2.allocation_percentage)
+                FROM projects_allocation pa2
+                WHERE pa2.employee_id = p.employee_id
+            ), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+            ELSE 'Allocated'
+        END
+        WHERE p.employee_id = ANY(%s)
+    """, (list(employee_ids),))
+
+
 class ProjectAllocationInput(BaseModel):
     project_id: str
     project_role: str
@@ -31,6 +66,7 @@ class EmployeeCreateUpdate(BaseModel):
     work_mode: str
     employee_status: str
     employee_allocations: int
+    reporting_manager_id: Optional[str] = None
     skills: List[str] = []
     projects: List[ProjectAllocationInput] = []
     certificates: List[CertificateInput] = []
@@ -63,7 +99,18 @@ def get_bench_employee_count():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM employee_master_pro WHERE employee_status = 'Bench'")
+        cur.execute("""
+            SELECT COUNT(DISTINCT m.employee_id)
+            FROM employee_master m
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE m.date_of_resign IS NULL
+              AND (p.employee_status NOT ILIKE '%%notice%%' OR p.employee_status IS NULL)
+              AND COALESCE((
+                  SELECT SUM(pa.allocation_percentage)
+                  FROM projects_allocation pa
+                  WHERE pa.employee_id = m.employee_id
+              ), 0) <= 0
+        """)
         count = cur.fetchone()[0]
         return count
     except Exception as e:
@@ -121,6 +168,12 @@ def get_all_employees():
                     END) as priority_rank
                 FROM projects_allocation
                 GROUP BY employee_id
+            ),
+            DynAlloc AS (
+                SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc
+                FROM projects_allocation
+                WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE
+                GROUP BY employee_id
             )
             SELECT 
                 m.employee_id, 
@@ -132,10 +185,10 @@ def get_all_employees():
                 COALESCE(m.employee_type, 'Full Time') as employee_type,
                 CASE 
                     WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                    WHEN COALESCE(p.employee_allocations, 0) <= 0 THEN 'Bench'
-                    WHEN COALESCE(p.employee_allocations, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                    WHEN COALESCE(p.employee_allocations, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                    WHEN COALESCE(p.employee_allocations, 0) >= 81 THEN 'Allocated'
+                    WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
+                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+                    WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
                     ELSE p.employee_status 
                 END as employee_status, 
                 CASE 
@@ -144,11 +197,12 @@ def get_all_employees():
                     WHEN ap.priority_rank = 1 THEN 'billable'
                     ELSE 'non-billable' 
                 END as billable,
-                p.employee_allocations,
+                COALESCE(da.total_alloc, 0) as employee_allocations,
                 ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
+            LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
             WHERE m.date_of_resign IS NULL
@@ -162,7 +216,7 @@ def get_all_employees():
                 m.employee_type,
                 p.employee_status, 
                 ap.priority_rank,
-                p.employee_allocations
+                da.total_alloc
         """
         cur.execute(query)
         columns = [column[0] for column in cur.description]
@@ -260,20 +314,20 @@ def fetch_employee_of_month():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Highest allocation employee
+        # Highest allocation employee — use live SUM from projects_allocation
         query = """
             SELECT 
                 m.employee_id,
                 m.employee_name,
                 m.role_designation,
                 m.photo_url,
-                p.employee_allocations
+                COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
-            JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            WHERE p.employee_allocations IS NOT NULL 
-              AND p.employee_allocations > 0
-              AND m.date_of_resign IS NULL
-            ORDER BY p.employee_allocations DESC, m.date_of_joining ASC
+            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            WHERE m.date_of_resign IS NULL
+            GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
+            HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
+            ORDER BY employee_allocations DESC, m.date_of_joining ASC
             LIMIT 1
         """
         cur.execute(query)
@@ -459,6 +513,12 @@ def get_employee_by_id(employee_id: str):
                 END) as priority_rank
             FROM projects_allocation
             GROUP BY employee_id
+        ),
+        DynAlloc AS (
+            SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc
+                FROM projects_allocation
+                WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE
+                GROUP BY employee_id
         )
         SELECT 
             m.employee_id,
@@ -476,10 +536,10 @@ def get_employee_by_id(employee_id: str):
             m.mode_of_work,
             CASE 
                 WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-                WHEN COALESCE(p.employee_allocations, 0) <= 0 THEN 'Bench'
-                WHEN COALESCE(p.employee_allocations, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                WHEN COALESCE(p.employee_allocations, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                WHEN COALESCE(p.employee_allocations, 0) >= 81 THEN 'Allocated'
+                WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
+                WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
+                WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
+                WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
                 ELSE p.employee_status 
             END as employee_status,
             CASE 
@@ -488,12 +548,13 @@ def get_employee_by_id(employee_id: str):
                 WHEN ap.priority_rank = 1 THEN 'billable'
                 ELSE 'non-billable' 
             END as billable,
-            p.employee_allocations,
+            COALESCE(da.total_alloc, 0) as employee_allocations,
             p.reporting_manager_id,
             mgr.employee_name as reporting_manager_name
         FROM employee_master m
         LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
         LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
+        LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id
         LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id
         WHERE m.employee_id = %s
         """
@@ -602,6 +663,7 @@ def get_employee_by_id(employee_id: str):
             "phone": employee.get("phone_number"),
             "photo_url": employee.get("photo_url"),
             "reporting_manager": employee.get("reporting_manager_name") or employee.get("reporting_manager_id"),
+            "reporting_manager_id": employee.get("reporting_manager_id"),
             "date_of_joining": employee.get("date_of_joining"),
             "total_experience": float(employee.get("total_experience") or 0),
             "cd_experience": float(employee.get("experience_in_cd") or 0),
@@ -653,9 +715,9 @@ def create_employee(emp: EmployeeCreateUpdate):
 
         # 2. Insert into employee_master_pro
         cur.execute("""
-            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations)
-            VALUES (%s, %s, %s)
-        """, (emp.employee_id, emp.employee_status, emp.employee_allocations))
+            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id)
+            VALUES (%s, %s, %s, %s)
+        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id))
 
         # 3. Handle skills
         for skill_name in emp.skills:
@@ -684,6 +746,9 @@ def create_employee(emp: EmployeeCreateUpdate):
                 allocation_id, emp.employee_id, proj.project_id, proj.project_role,
                 proj.project_allocation, proj.project_start_date, proj.project_end_date
             ))
+
+        # 4b. Sync employee_master_pro allocations from live projects_allocation
+        _sync_employee_allocations(cur, [emp.employee_id])
 
         # 5. Handle certificates
         for cert in emp.certificates:
@@ -744,14 +809,14 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
         if cur.fetchone():
             cur.execute("""
                 UPDATE employee_master_pro SET
-                    employee_status = %s, employee_allocations = %s, employee_id = %s
+                    employee_status = %s, employee_allocations = %s, reporting_manager_id = %s, employee_id = %s
                 WHERE employee_id = %s
-            """, (emp.employee_status, emp.employee_allocations, emp.employee_id, employee_id))
+            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.employee_id, employee_id))
         else:
             cur.execute("""
-                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations)
-                VALUES (%s, %s, %s)
-            """, (emp.employee_id, emp.employee_status, emp.employee_allocations))
+                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id)
+                VALUES (%s, %s, %s, %s)
+            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id))
 
         # 3. Update skills (delete old, insert new)
         cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
@@ -778,6 +843,9 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
                 allocation_id, emp.employee_id, proj.project_id, proj.project_role,
                 proj.project_allocation, proj.project_start_date, proj.project_end_date
             ))
+
+        # 4b. Sync employee_master_pro allocations from live projects_allocation
+        _sync_employee_allocations(cur, [emp.employee_id])
 
         # 5. Update certificates
         cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (employee_id,))
