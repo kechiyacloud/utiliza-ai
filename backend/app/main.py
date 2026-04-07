@@ -9,11 +9,17 @@ app = FastAPI()
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
-    "https://nonhabitably-arabinosic-dedra.ngrok-free.dev",
-    "http://utiliza-ai.cdians.com",
-    "https://utiliza-ai.cdians.com",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://65.0.110.174",
+    "http://65.0.110.174:5173",
+    "http://65.0.110.174:5174",
+    "http://65.0.110.174:3000",
+    "https://nonhabitably-arabinosic-dedra.ngrok-free.dev"
 ]
 
 app.add_middleware(

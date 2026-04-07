@@ -415,9 +415,11 @@ def fetch_action_inbox():
 
 @router.get("/employees/filter-options")
 def get_employee_filter_options():
-    conn = get_db_connection()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
+        conn = get_db_connection()
+        cur = conn.cursor()
         cur.execute("SELECT DISTINCT department FROM employee_master WHERE department IS NOT NULL AND department != ''")
         departments = [row[0] for row in cur.fetchall()]
 
@@ -448,8 +450,8 @@ def get_employee_filter_options():
         print(f"Error fetching filter options: {e}")
         return {"error": str(e), "departments": [], "locations": [], "employee_types": [], "skills": [], "status_tags": []}
     finally:
-        cur.close()
-        release_db_connection(conn)
+        if cur: cur.close()
+        if conn: release_db_connection(conn)
 
 @router.get("/departments/roles-mapping")
 @router.get("/employees/departments/roles-mapping")  # Frontend expects /employees prefix

@@ -19,6 +19,7 @@ const EmployeeMasterList = lazy(() => import('./dashboard/employee/EmployeeMaste
 const AddEmployee = lazy(() => import('./dashboard/employee/AddEmployee'))
 const ProjectDetailsPage = lazy(() => import('./dashboard/projects/ProjectDetailsPage'))
 const AddProjectPage = lazy(() => import('./dashboard/projects/AddProjectPage'))
+const ImportResourcesPage = lazy(() => import('./dashboard/projects/ImportResourcesPage'))
 const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
 const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
@@ -64,6 +65,7 @@ function App() {
             <Route path='projects/add' element={withSuspense(<AddProjectPage />, 'Loading add project...')} />
             <Route path='projects/:id' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
             <Route path='projects/:id/allocation' element={withSuspense(<ProjectDetailsPage />, 'Loading project details...')} />
+            <Route path='projects/:projectId/import' element={withSuspense(<ImportResourcesPage />, 'Loading import...')} />
             <Route path='employee' element={withSuspense(<Employee />, 'Loading employees...')} />
             <Route path='employee/add' element={withSuspense(<AddEmployee />, 'Loading employee form...')} />
             <Route path='employee/:id' element={withSuspense(<EmployeeDetails />, 'Loading employee details...')} />

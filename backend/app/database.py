@@ -3,8 +3,8 @@ from psycopg2 import pool
 import os
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
 load_dotenv()
+load_dotenv('.env.local', override=True)
 
 # Global pool instance
 _pool = None
