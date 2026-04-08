@@ -21,6 +21,7 @@ class ClientSimple(BaseModel):
 
 class EntityNameCreate(BaseModel):
     name: str
+    partner_id: Optional[str] = None
 
 
 
@@ -88,7 +89,7 @@ def _fetch_client_rows(cur, search: Optional[str] = None):
 
 @router.get("")
 @api_router.get("/clients")
-def list_clients(search: Optional[str] = None):
+def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -97,9 +98,21 @@ def list_clients(search: Optional[str] = None):
         if schema == "modern":
             query = "SELECT id::text AS id, name FROM clients"
             params = []
+            clauses = []
             if search:
-                query += " WHERE name ILIKE %s"
+                clauses.append("name ILIKE %s")
                 params.append(f"%{search.strip()}%")
+            if partner_id:
+                # Only apply if column exists
+                cur.execute("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_schema = current_schema() AND table_name = 'clients' AND column_name = 'partner_id'
+                """)
+                if cur.fetchone():
+                    clauses.append("partner_id = %s")
+                    params.append(partner_id)
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
             query += " ORDER BY name"
             cur.execute(query, tuple(params))
             rows = cur.fetchall()
@@ -117,7 +130,13 @@ def list_clients(search: Optional[str] = None):
                 for r in rows
             ]
 
-        cur.execute("SELECT client_id, client_name, website_url, industry, status, budget FROM clients ORDER BY client_name")
+        clauses = []
+        params = []
+        if partner_id:
+            clauses.append("partner_id = %s")
+            params.append(partner_id)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        cur.execute(f"SELECT client_id, client_name, website_url, industry, status, budget FROM clients {where_sql} ORDER BY client_name", tuple(params))
         rows = cur.fetchall()
 
         # Fetch projects and stakeholders for each client
@@ -331,10 +350,15 @@ def create_simple_client(payload: EntityNameCreate):
         name = (payload.name or "").strip()
         if not name:
             raise HTTPException(status_code=422, detail="Client name is required.")
+        partner_id = payload.partner_id
         if schema == "modern":
-            cur.execute("INSERT INTO clients (name) VALUES (%s) RETURNING id, name", (name,))
+            cur.execute("INSERT INTO clients (name, partner_id) VALUES (%s, %s) RETURNING id, name", (name, partner_id))
         else:
-            cur.execute("INSERT INTO clients (client_name) VALUES (%s) RETURNING client_id, client_name", (name,))
+            # legacy schema may not have partner_id; ignore if missing
+            try:
+                cur.execute("INSERT INTO clients (client_name, partner_id) VALUES (%s, %s) RETURNING client_id, client_name", (name, partner_id))
+            except Exception:
+                cur.execute("INSERT INTO clients (client_name) VALUES (%s) RETURNING client_id, client_name", (name,))
         row = cur.fetchone()
         conn.commit()
         return {"id": str(row[0]), "name": row[1]}
@@ -362,10 +386,14 @@ def update_simple_client(client_id: str, payload: EntityNameCreate):
         name = (payload.name or "").strip()
         if not name:
             raise HTTPException(status_code=422, detail="Client name is required.")
+        partner_id = payload.partner_id if hasattr(payload, "partner_id") else None
         if schema == "modern":
-            cur.execute("UPDATE clients SET name = %s WHERE id = %s RETURNING id, name", (name, client_id))
+            cur.execute("UPDATE clients SET name = %s, partner_id = COALESCE(%s, partner_id) WHERE id = %s RETURNING id, name", (name, partner_id, client_id))
         else:
-            cur.execute("UPDATE clients SET client_name = %s WHERE client_id = %s RETURNING client_id, client_name", (name, client_id))
+            try:
+                cur.execute("UPDATE clients SET client_name = %s, partner_id = COALESCE(%s, partner_id) WHERE client_id = %s RETURNING client_id, client_name", (name, partner_id, client_id))
+            except Exception:
+                cur.execute("UPDATE clients SET client_name = %s WHERE client_id = %s RETURNING client_id, client_name", (name, client_id))
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Client not found.")

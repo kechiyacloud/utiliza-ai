@@ -1,8 +1,14 @@
 import api from "./axios";
 
-// ─── Clients ───────────────────────────────────────────
+// ??? Clients ????????????????????????????????????????????????????????????????
 export const fetchSimpleClients = async () => {
     const res = await api.get("/clients/simple");
+    return Array.isArray(res.data) ? res.data : [];
+};
+
+export const fetchClientsByPartner = async (partnerId) => {
+    if (!partnerId) return [];
+    const res = await api.get("/clients", { params: { partner_id: partnerId } });
     return Array.isArray(res.data) ? res.data : [];
 };
 
@@ -17,6 +23,11 @@ export const createSimpleClient = async (name) => {
     return res.data;
 };
 
+export const createClientForPartner = async (name, partnerId) => {
+    const res = await api.post("/clients/simple", { name, partner_id: partnerId });
+    return res.data;
+};
+
 export const updateSimpleClient = async (id, name) => {
     const res = await api.put(`/clients/simple/${id}`, { name });
     return res.data;
@@ -27,44 +38,29 @@ export const deleteSimpleClient = async (id) => {
     return res.data;
 };
 
-// ─── Partner Clients ───────────────────────────────────
+// ??? Partners ????????????????????????????????????????????????????????????????
 export const fetchPartnerClients = async () => {
-    const res = await api.get("/partner-clients");
+    const res = await api.get("/partners");
     return Array.isArray(res.data) ? res.data : [];
 };
 
 export const createPartnerClient = async (name) => {
-    const res = await api.post("/partner-clients", { name });
+    const res = await api.post("/partners", { name });
     return res.data;
 };
 
 export const updatePartnerClient = async (id, name) => {
-    const res = await api.put(`/partner-clients/${id}`, { name });
+    const res = await api.put(`/partners/${id}`, { name });
     return res.data;
 };
 
 export const deletePartnerClient = async (id) => {
-    const res = await api.delete(`/partner-clients/${id}`);
+    const res = await api.delete(`/partners/${id}`);
     return res.data;
 };
 
-// ─── Partners (legacy, kept for backward compat) ──────
-export const fetchPartners = async () => {
-    const res = await api.get("/clients/partners");
-    return Array.isArray(res.data) ? res.data : [];
-};
-
-export const createPartner = async (name) => {
-    const res = await api.post("/clients/partners", { name });
-    return res.data;
-};
-
-export const updatePartner = async (id, name) => {
-    const res = await api.put(`/clients/partners/${id}`, { name });
-    return res.data;
-};
-
-export const deletePartner = async (id) => {
-    const res = await api.delete(`/clients/partners/${id}`);
-    return res.data;
-};
+// Legacy aliases retained for compatibility
+export const fetchPartners = fetchPartnerClients;
+export const createPartner = createPartnerClient;
+export const updatePartner = updatePartnerClient;
+export const deletePartner = deletePartnerClient;

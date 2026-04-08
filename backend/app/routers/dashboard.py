@@ -359,7 +359,7 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
 
             # Bench aging
             cur.execute("""
-                SELECT e.employee_name, CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)
+                SELECT e.employee_name, CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE)
                 FROM employee_master e
                 LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
                 LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
@@ -461,14 +461,14 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
                       AND e.department=%s LIMIT 3
                 UNION ALL
                     SELECT 'bench', e.employee_name,
-                        (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining))::text
+                        (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE))::text
                     FROM employee_master e
                     LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
                       AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0 AND e.department=%s
                     GROUP BY e.employee_name,e.date_of_joining
-                    HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)>30 LIMIT 3
+                    HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE)>30 LIMIT 3
                 """, (department, department, department))
             else:
                 cur.execute("""
@@ -484,14 +484,14 @@ def get_dashboard_all(department: Optional[str] = Query(None)):
                       AND LOWER(project_status) NOT LIKE CHR(37)||'complete'||CHR(37) LIMIT 3
                 UNION ALL
                     SELECT 'bench', e.employee_name,
-                        (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining))::text
+                        (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE))::text
                     FROM employee_master e
                     LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
                       AND e.date_of_resign IS NULL AND COALESCE(p.employee_allocations,0)<=0
                     GROUP BY e.employee_name,e.date_of_joining
-                    HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date),e.date_of_joining)>30 LIMIT 3
+                    HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE)>30 LIMIT 3
                 """)
             for r in cur.fetchall():
                 kind, name, extra = r

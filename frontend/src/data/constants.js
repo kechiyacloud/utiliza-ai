@@ -38,6 +38,11 @@ export const PROJECT_STATUS_OPTIONS = [
     'Completed'
 ];
 
+export const PROJECT_SUB_STATUS_OPTIONS = [
+    { value: 'SOW_SIGNED', label: 'SOW Signed' },
+    { value: 'SOW_NOT_SIGNED', label: 'SOW Not Signed' }
+];
+
 export const WORK_MODES = [
     'Remote',
     'Hybrid',

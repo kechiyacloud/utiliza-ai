@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
+import { loadLogoAsBase64, buildPDFHeader } from '../utils/exportUtils';
 import cdBlueLogo from '../assets/CD-Blue.svg';
 import { 
   ArrowLeft, 
@@ -205,7 +205,6 @@ const FullAnalytics = () => {
         margin: { left: 14, right: 14, bottom: 18 },
       });
 
-      addPDFFooter(doc, logoBase64);
       doc.save(`workforce-pulse-analytics-${selectedDept}.pdf`);
     } catch (error) {
       console.error('Failed to export analytics PDF', error);

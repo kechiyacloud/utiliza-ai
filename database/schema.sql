@@ -547,6 +547,7 @@ CREATE TABLE public.projects (
     project_id character varying(50) NOT NULL,
     project_name character varying(255) NOT NULL,
     project_status character varying(50) DEFAULT 'Active'::character varying,
+    sub_status character varying(50),
     billable character varying(50) DEFAULT 'Yes'::character varying,
     start_date date,
     end_date date,

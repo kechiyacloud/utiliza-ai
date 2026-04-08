@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Filter, RotateCcw } from 'lucide-react';
-import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
+import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const FilterPanel = ({
     isOpen,
@@ -13,6 +13,7 @@ const FilterPanel = ({
         projectName: '',
         resourceName: '',
         status: 'All Status',
+        sowStatus: '',
         resourceType: '',
         startDate: '',
         endDate: ''
@@ -24,6 +25,7 @@ const FilterPanel = ({
                 projectName: currentFilters.projectName || '',
                 resourceName: currentFilters.resourceName || '',
                 status: currentFilters.status || 'All Status',
+                sowStatus: currentFilters.sowStatus || '',
                 resourceType: currentFilters.resourceType || '',
                 startDate: currentFilters.startDate || '',
                 endDate: currentFilters.endDate || ''
@@ -35,11 +37,23 @@ const FilterPanel = ({
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        if (name === 'status') {
+            setFilters(prev => ({
+                ...prev,
+                status: value,
+                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
+            }));
+            return;
+        }
         setFilters(prev => ({ ...prev, [name]: value }));
     };
 
     const handleApply = () => {
-        onApplyFilters(filters);
+        const normalizedFilters = {
+            ...filters,
+            sowStatus: filters.status === 'In Progress' ? filters.sowStatus : '',
+        };
+        onApplyFilters(normalizedFilters);
         onClose();
     };
 
@@ -115,6 +129,22 @@ const FilterPanel = ({
                                     ))}
                                 </select>
                             </div>
+                            {filters.status === 'In Progress' && (
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">SOW Status</label>
+                                    <select
+                                        name="sowStatus"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                        value={filters.sowStatus}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">All SOW Status</option>
+                                        {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Start Date */}
@@ -154,6 +184,7 @@ const FilterPanel = ({
                                         projectName: '',
                                         resourceName: '',
                                         status: 'All Status',
+                                        sowStatus: '',
                                         resourceType: '',
                                         startDate: '',
                                         endDate: ''

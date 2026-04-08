@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from app.database import get_db_connection, release_db_connection
 import psycopg2
 
-router = APIRouter(prefix="/partner-clients", tags=["Partner Clients"])
+router = APIRouter(prefix="/partners", tags=["Partners"])
 
 
 class PartnerClientCreate(BaseModel):

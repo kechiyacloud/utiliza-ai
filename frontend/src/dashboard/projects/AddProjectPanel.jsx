@@ -5,6 +5,7 @@ import axios from '../../api/axios';
 import {
     fetchSimpleClients,
     fetchAutocompleteClients,
+    fetchClientsByPartner,
     createSimpleClient,
     updateSimpleClient,
     deleteSimpleClient,
@@ -13,7 +14,7 @@ import {
     updatePartnerClient,
     deletePartnerClient,
 } from '../../api/entitiesApi';
-import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
+import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 /* ──────────────────────────────────────────────────────────
    HELPERS — for Last 4 Weeks visualization
@@ -61,10 +62,12 @@ function toMessage(val, fallback = 'Something went wrong') {
     return String(val);
 }
 
-const toIntOrNull = (val) => {
-    if (val === undefined || val === null || val === '') return null;
-    const n = Number(val);
-    return Number.isFinite(n) ? n : null;
+const toIdOrNull = (val) => {
+    if (val === undefined || val === null) return null;
+    const text = String(val).trim();
+    if (!text) return null;
+    if (['undefined', 'null', 'nan'].includes(text.toLowerCase())) return null;
+    return text;
 };
 
 const sanitizeWeeklyHours = (wh = {}) => {
@@ -493,6 +496,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         department: '',
         billable: 'Billable',
         status: 'Not Started',
+        sowStatus: '',
         startDate: '',
         endDate: '',
         teamMembers: []
@@ -515,6 +519,27 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     // --- Modal State ---
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
+
+    const loadClientsForPartner = async (partnerId) => {
+        if (!partnerId) {
+            setClients([]);
+            setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
+            return;
+        }
+        try {
+            const data = await fetchClientsByPartner(partnerId);
+            setClients(data);
+            // auto-select first client if exists
+            if (data.length > 0) {
+                setFormData(prev => ({ ...prev, clientId: String(data[0].id), clientName: data[0].name }));
+            } else {
+                setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
+            }
+        } catch (err) {
+            console.error('[AddProjectPanel] Failed to load clients for partner', err);
+            setEntityError('Failed to load clients for selected partner.');
+        }
+    };
 
     async function loadEntities() {
         setEntityError('');
@@ -589,6 +614,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 department: '',
                 billable: 'Billable',
                 status: 'Not Started',
+                sowStatus: '',
                 startDate: '',
                 endDate: '',
                 teamMembers: []
@@ -597,6 +623,17 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
     }, [isOpen]);
     /* eslint-enable react-hooks/set-state-in-effect */
+
+    useEffect(() => {
+        const isPartnerFlow = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        if (isPartnerFlow && formData.partnerId) {
+            loadClientsForPartner(formData.partnerId);
+        }
+        if (isPartnerFlow && !formData.partnerId) {
+            setClients([]);
+            setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
+        }
+    }, [formData.type, formData.clientType, formData.partnerId]);
 
     // --- Handlers ---
     const handleChange = (e) => {
@@ -613,6 +650,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
                 department: value === 'Internal' ? prev.department : '',
                 billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
+            }));
+            return;
+        }
+        if (name === 'status') {
+            setFormData(prev => ({
+                ...prev,
+                status: value,
+                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
             }));
             return;
         }
@@ -642,6 +687,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             clientId: '',
             clientName: '',
         }));
+        loadClientsForPartner(item.id);
     };
 
     const hasPartnerMappedClients = useMemo(
@@ -992,10 +1038,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-        if (formData.type === 'Client' && !(formData.clientName || '').trim()) {
-            setSubmitError('Please select a client name.');
-            return;
-        }
         if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
             setSubmitError('Please select a partner.');
             return;
@@ -1004,18 +1046,34 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-
-        setIsSubmitting(true);
+        if (formData.status === 'In Progress' && !formData.sowStatus) {
+            setSubmitError('SOW Status is required when Project Status is In Progress.');
+            return;
+        }
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
         const isClientProject = formData.type === 'Client';
         const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
         const effectiveType = formData.type;
+        const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
+        const normalizedPartnerId = isPartnerClientProject ? toIdOrNull(formData.partnerId) : null;
+
+        if (isClientProject && !normalizedClientId) {
+            setSubmitError('Selected client is invalid. Please re-select the client.');
+            return;
+        }
+        if (isPartnerClientProject && !normalizedPartnerId) {
+            setSubmitError('Selected partner is invalid. Please re-select the partner.');
+            return;
+        }
+
+        setIsSubmitting(true);
 
         const payload = {
             project_id: projectId,
             project_name: (formData.name || '').trim(),
             project_status: formData.status,
+            sub_status: formData.status === 'In Progress' ? formData.sowStatus : null,
             type: effectiveType,
             billable: formData.billable,
             start_date: normalizedStart,
@@ -1024,15 +1082,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         };
 
         if (isClientProject) {
-            payload.client_id = toIntOrNull(formData.clientId);
-            payload.client_name = (formData.clientName || '').trim() || null;
+            payload.client_id = normalizedClientId;
         }
         if (isPartnerClientProject) {
-            payload.partner_id = toIntOrNull(formData.partnerId);
-            payload.partner = (formData.partnerName || '').trim() || null;
+            payload.partner_id = normalizedPartnerId;
         }
 
-        console.log('Payload:', payload);
+        console.log('Payload:', payload, 'client_id:', payload.client_id);
 
         try {
             const response = await axios.post('/projects', payload);
@@ -1161,17 +1217,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handlePartnerSelect}
                                                 placeholder="Select Partner"
                                                 label="partners"
+                                                disabled
                                             />
-                                            <button type="button" onClick={() => openModal('add', 'partner')}
-                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Partner">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Add Partner">
                                                 <Plus size={12} /> Add
                                             </button>
-                                            <button type="button" onClick={() => openModal('edit', 'partner')}
-                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1" title="Edit Partner">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Edit Partner">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" onClick={() => openModal('delete', 'partner')}
-                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-1" title="Delete Partner">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Delete Partner">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1189,20 +1246,20 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handleClientSelect}
                                                 placeholder={isPartnerClient && hasPartnerMappedClients && !formData.partnerId ? 'Select Partner first' : 'Select Client'}
                                                 label="clients"
-                                                disabled={Boolean(isPartnerClient && hasPartnerMappedClients && !formData.partnerId)}
+                                                disabled
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
                                                 loadOptions={fetchAutocompleteClients}
                                             />
-                                            <button type="button" onClick={() => openModal('add', 'client')}
-                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Add Client">
                                                 <Plus size={12} /> Add
                                             </button>
-                                            <button type="button" onClick={() => openModal('edit', 'client')}
-                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center gap-1" title="Edit Client">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Edit Client">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" onClick={() => openModal('delete', 'client')}
-                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-1" title="Delete Client">
+                                            <button type="button" disabled
+                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Delete Client">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1232,6 +1289,23 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         ))}
                                     </select>
                                 </div>
+
+                                {formData.status === 'In Progress' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">SOW Status</label>
+                                        <select
+                                            name="sowStatus"
+                                            className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                            value={formData.sowStatus}
+                                            onChange={handleChange}
+                                        >
+                                            <option value="">Select SOW Status</option>
+                                            {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Billable</label>

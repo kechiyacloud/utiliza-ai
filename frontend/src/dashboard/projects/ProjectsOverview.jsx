@@ -1,51 +1,45 @@
 import React from 'react';
-import { Briefcase, Radio, Globe, Activity, FileText, ArrowLeft, CheckCircle, CalendarClock } from 'lucide-react';
+import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, description, subLabel, icon: Icon, colorClass, onClick, active, customColors }) => {
+const StatCard = ({ label, value, description, subLabel, icon: Icon, onClick, active, customColors }) => {
+    const subtitle = description && subLabel ? `${description} (${subLabel})` : description || subLabel || '';
+    const cardTint = customColors?.cardBg || '#FFFFFF';
+    const cardBorder = customColors?.border || '#E2E8F0';
+    const accent = customColors?.accent || customColors?.text || '#475569';
+    const activeRing = customColors?.ring || '#BFDBFE';
     return (
         <div
             onClick={onClick}
-            className={`bg-white p-4 rounded-xl shadow-sm border ${active ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-100'} flex flex-col justify-between min-w-[140px] flex-1 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all relative overflow-hidden group`}
+            className={`p-3.5 rounded-lg border border-l-4 h-full min-h-[124px] flex flex-col justify-between cursor-pointer transition-all duration-200 ${
+                active ? 'ring-2 ring-offset-0 shadow-sm' : 'hover:shadow-sm hover:-translate-y-0.5'
+            }`}
+            style={{
+                backgroundColor: cardTint,
+                borderColor: cardBorder,
+                borderLeftColor: accent,
+                ...(active ? { boxShadow: `0 0 0 2px ${activeRing}` } : {})
+            }}
         >
-            {/* Background gradient effect */}
-            <div 
-                className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity`}
-                style={{ backgroundColor: customColors?.bg || '#F1F5F9' }}
-            ></div>
-
-            <div className="flex justify-between items-start mb-3 relative z-10">
-                <div 
-                    className={`p-2 rounded-lg ${customColors ? '' : (colorClass + ' bg-opacity-10')}`}
-                    style={{ 
-                        backgroundColor: customColors?.bg || (colorClass ? undefined : '#F1F5F9'),
-                        color: customColors?.text || (colorClass ? undefined : '#475569')
+            <div className="flex items-center justify-between mb-2">
+                <div
+                    className="p-1.5 rounded-md"
+                    style={{
+                        backgroundColor: customColors?.bg || '#F1F5F9',
+                        color: customColors?.text || '#475569'
                     }}
                 >
-                    <Icon size={18} />
+                    <Icon size={16} />
                 </div>
-
-                <div></div>
             </div>
 
-            <div className="flex flex-col relative z-10">
-                <span className="text-3xl font-bold text-slate-900 tracking-tight mb-1">{value}</span>
-                <span className="text-slate-500 text-[10px] font-bold tracking-wider uppercase mb-1">{label}</span>
-                {description && (
-                    <span className="text-slate-400 text-[10px] font-medium">{description}</span>
-                )}
-                {subLabel && (
-                    <span className="inline-flex items-center w-fit mt-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">
-                        {subLabel}
-                    </span>
+            <div className="flex flex-col items-start gap-1.5">
+                <p className="text-3xl font-bold leading-none text-slate-900 tracking-tight">{value}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">{label}</p>
+                {subtitle && (
+                    <p className="text-[11px] text-gray-500 leading-snug">{subtitle}</p>
                 )}
             </div>
-
-            {/* Colored Status indicator line at the bottom */}
-            <div 
-                className={`absolute bottom-0 left-0 w-full h-1 opacity-50 ${customColors ? '' : colorClass.split(' ')[0]}`}
-                style={{ backgroundColor: customColors?.text || (colorClass ? undefined : '#CBD5E1') }}
-            ></div>
         </div>
     );
 };
@@ -83,22 +77,36 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
             </div>
 
             {/* 5 Metric Cards Layout */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 <StatCard
                     label="Total Projects"
                     value={stats.totalProjects}
                     description="All-time tracked projects"
                     icon={Briefcase}
-                    customColors={{ bg: '#EFF6FF', text: '#2563EB' }}
+                    customColors={{
+                        bg: '#EAF2FF',
+                        text: '#2563EB',
+                        cardBg: '#F8FBFF',
+                        border: '#DBEAFE',
+                        accent: '#2563EB',
+                        ring: '#BFDBFE'
+                    }}
                     active={activeFilter === null}
                     onClick={() => onFilterChange(null)}
                 />
                 <StatCard
-                    label="Client Projects"
+                    label="External Projects"
                     value={stats.clientProjects}
                     description="Billable external work"
                     icon={Globe}
-                    customColors={{ bg: '#F5F3FF', text: '#7C3AED' }}
+                    customColors={{
+                        bg: '#F3ECFF',
+                        text: '#7C3AED',
+                        cardBg: '#FBF7FF',
+                        border: '#E9D5FF',
+                        accent: '#7C3AED',
+                        ring: '#DDD6FE'
+                    }}
                     active={activeFilter === 'Client'}
                     onClick={() => onFilterChange(activeFilter === 'Client' ? null : 'Client')}
                 />
@@ -107,7 +115,14 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     value={stats.internalProjects}
                     description="Non-billable initiatives & POCs"
                     icon={Radio}
-                    customColors={{ bg: '#F3F4F6', text: '#374151' }}
+                    customColors={{
+                        bg: '#F3F4F6',
+                        text: '#374151',
+                        cardBg: '#F9FAFB',
+                        border: '#E5E7EB',
+                        accent: '#6B7280',
+                        ring: '#D1D5DB'
+                    }}
                     active={activeFilter === 'Internal'}
                     onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
                 />
@@ -117,7 +132,14 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     value={stats.upcoming_projects}
                     description="Not yet started"
                     icon={CalendarClock}
-                    customColors={{ bg: '#FFFBEB', text: '#F59E0B' }}
+                    customColors={{
+                        bg: '#FFF3DC',
+                        text: '#F59E0B',
+                        cardBg: '#FFFDF6',
+                        border: '#FDE68A',
+                        accent: '#F59E0B',
+                        ring: '#FDE68A'
+                    }}
                     active={activeFilter === 'Upcoming'}
                     onClick={() => onFilterChange(activeFilter === 'Upcoming' ? null : 'Upcoming')}
                 />
@@ -127,7 +149,14 @@ const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded 
                     description="Successfully delivered"
                     subLabel="Last 3 Months"
                     icon={CheckCircle}
-                    customColors={{ bg: '#ECFDF5', text: '#10B981' }}
+                    customColors={{
+                        bg: '#EAFBF1',
+                        text: '#10B981',
+                        cardBg: '#F7FCF9',
+                        border: '#BBF7D0',
+                        accent: '#10B981',
+                        ring: '#BBF7D0'
+                    }}
                     active={activeFilter === 'Completed'}
                     onClick={() => onFilterChange(activeFilter === 'Completed' ? null : 'Completed')}
                 />

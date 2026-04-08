@@ -6,6 +6,7 @@ import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +38,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const initialFilters = {
         projectName: '',
         status: 'All Status',
+        sowStatus: '',
         startDate: '',
         endDate: '',
         resourceName: '',
@@ -60,7 +62,11 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
         const isAllStatus = !filters.status || filters.status === 'All Status';
-        const matchesStatus = isAllStatus || project.status === filters.status;
+        const statusValue = (project.status || '').trim();
+        const statusMatches = isAllStatus || statusValue === filters.status;
+        const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
+        const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
+        const matchesStatus = statusMatches && subStatusMatches;
         
         const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
@@ -105,7 +111,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const tableTitle = (() => {
         if (!activeCardFilter) return 'All Projects';
         if (activeCardFilter === 'Ongoing') return 'Active Projects';
-        if (activeCardFilter === 'Client') return 'Client Projects';
+        if (activeCardFilter === 'Client') return 'External Projects';
         if (activeCardFilter === 'Internal') return 'Internal Projects';
         if (activeCardFilter === 'Partner') return 'Partner Projects';
         if (activeCardFilter === 'Upcoming') return 'Upcoming Projects';
@@ -137,9 +143,25 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         setFilters(initialFilters);
     };
 
+    const SUB_STATUS_LABELS = PROJECT_SUB_STATUS_OPTIONS.reduce((acc, cur) => {
+        acc[cur.value] = cur.label;
+        return acc;
+    }, {});
+
+    const formatStatus = (project) => {
+        const base = project.status || '';
+        if (base.toLowerCase() === 'in progress') {
+            const sub = project.sub_status || project.subStatus;
+            const label = sub ? SUB_STATUS_LABELS[sub] || sub : '';
+            if (label) return `${base} / ${label}`;
+        }
+        return base;
+    };
+
     const isFilterActive = Boolean(
         filters.projectName ||
         (filters.status && filters.status !== 'All Status') ||
+        filters.sowStatus ||
         filters.startDate ||
         filters.endDate ||
         filters.resourceName ||
@@ -162,6 +184,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 project_status: updatedProject.status,
                 type: updatedProject.type,
                 client: updatedProject.client,
+                sub_status: updatedProject.subStatus || updatedProject.sub_status || null,
                 billable: updatedProject.billable,
                 start_date: updatedProject.startDate || null,
                 end_date: updatedProject.endDate || null,
@@ -179,7 +202,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             'Project Name': p.name,
             'Client/Partner': p.client || '—',
             'Type': p.type,
-            'Status': p.status,
+            'Status': formatStatus(p),
             'Billable': p.billable,
             'Resources': p.resource_count || p.resources || 0,
             'Start Date': p.startDate || p.start_date || '—',
@@ -324,7 +347,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                     color: project.status === 'Completed' ? '#1E40AF' : '#166534'
                                                 }}
                                             >
-                                                {project.status}
+                                                {formatStatus(project)}
                                             </span>
                                         </td>
                                         <td className="py-4 text-center">

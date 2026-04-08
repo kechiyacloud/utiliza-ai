@@ -29,7 +29,7 @@ const ProjectTypeChart = ({ projects }) => {
 
         // Only return segments that have at least 1 project to avoid empty slices
         return [
-            { name: 'Client Projects', value: typeCounts.Client, color: '#5B21B6' }, // Billable Text color
+            { name: 'External Projects', value: typeCounts.Client, color: '#5B21B6' }, // Billable Text color
             { name: 'Internal Projects', value: typeCounts.Internal, color: '#374151' }, // Non-Billable Text color
             { name: 'Partner Projects', value: typeCounts.Partner, color: '#F59E0B' }  // amber-500
         ].filter(item => item.value > 0);

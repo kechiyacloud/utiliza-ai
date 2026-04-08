@@ -33,7 +33,6 @@ import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
 import AddProjectPanel from './projects/AddProjectPanel';
 import AddClientModal from './clients/AddClientModal';
-import EmployeeMonthCard from './landing-dashboard/EmployeeMonthCard';
 import DashboardTables from './landing-dashboard/DashboardTables';
 import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import NominationModal from './employee/NominationModal';
@@ -292,21 +291,6 @@ function Dashboard() {
       ? allEmployees
       : allEmployees.filter((employee) => employee.department === selectedDepartment)
   ), [allEmployees, selectedDepartment]);
-  
-  const employeeOfMonth = useMemo(() => {
-    const rankedEmployees = filteredDashboardEmployees
-      .filter((employee) => (employee.employee_allocations || 0) > 0)
-      .sort((left, right) => {
-        const allocationDelta = (right.employee_allocations || 0) - (left.employee_allocations || 0);
-        if (allocationDelta !== 0) {
-          return allocationDelta;
-        }
-
-        return (left.employee_name || '').localeCompare(right.employee_name || '');
-      });
-
-    return rankedEmployees[0] || null;
-  }, [filteredDashboardEmployees]);
 
   if (loading) {
     return (
@@ -409,14 +393,6 @@ function Dashboard() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="dashboard-cards">
             <ExecutiveDashboardCards data={data?.executiveCards} selectedDepartment={selectedDepartment} />
-            <EmployeeMonthCard
-              employee={employeeOfMonth}
-              selectedDepartment={selectedDepartment}
-              onClick={(action) => {
-                if (action === 'nominate') setIsNominationModalOpen(true);
-                else navigate(`/info/employee/${action.employee_id}`, { state: { employee: action } });
-              }}
-            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
@@ -450,7 +426,7 @@ function Dashboard() {
             </div>
 
             {/* Actionable Todo List (Span 1) */}
-            <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col gap-3">
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 opacity-60 grayscale pointer-events-none select-none">
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <ListTodo size={16} className="text-blue-500" />
                 Actionable Todo List

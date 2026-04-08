@@ -118,12 +118,10 @@ const DashboardTables = ({
                     <div className="flex bg-slate-100 p-0.5 rounded-xl overflow-x-auto no-scrollbar">
                         {[
                             { id: 'availability', label: 'Releases', icon: Calendar },
-                            { id: 'skills', label: 'Skills Gap', icon: Award },
                             { id: 'utilization', label: 'Utilization', icon: TrendingUp },
                             { id: 'transitions', label: 'Transitions', icon: Activity },
                             { id: 'optimization', label: 'Bench Aging', icon: Clock },
                             { id: 'certifications', label: 'Certificates', icon: Award },
-                            { id: 'trends', label: 'Growth Trends', icon: BarChart2 },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -139,7 +137,6 @@ const DashboardTables = ({
 
                 <div className="h-5">
                     {activeTab === 'availability' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Resources rolling off projects in 30 days</p>}
-                    {activeTab === 'skills' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Allocated effort versus availability skill coverage</p>}
                     {activeTab === 'utilization' && (
                         <div className="flex items-center gap-4">
                             <button
@@ -160,7 +157,6 @@ const DashboardTables = ({
                     {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Latest project moves with from and to context</p>}
                     {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Bench resources sorted by priority</p>}
                     {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Certification renewals that need attention</p>}
-                    {activeTab === 'trends' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Previous 3 months utilization trend</p>}
                 </div>
             </div>
 
@@ -210,51 +206,6 @@ const DashboardTables = ({
                                     </tr>
                                 );
                             }) : <EmptyTable icon={Calendar} message="No upcoming releases in 30 days." />}
-                        </tbody>
-                    </table>
-                )}
-
-                {activeTab === 'skills' && (
-                    <table className="w-full">
-                        <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
-                                <th className="text-left py-2 px-5">Skill</th>
-                                <th className="text-center py-2">Allocated / Availability</th>
-                                <th className="text-right py-2 px-5">Gap</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {skillsGap.length > 0 ? skillsGap.map((row, idx) => {
-                                const skillGapMeta = getSkillGapMeta(row.allocated, row.availability);
-                                return (
-                                    <tr key={idx} className="group hover:bg-slate-50 transition-colors">
-                                        <td className="py-2.5 px-5">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 rounded-lg bg-slate-50 border border-gray-100 flex items-center justify-center text-blue-500">
-                                                    <Award size={14} />
-                                                </div>
-                                                <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.skill}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-2.5 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Allocated / Availability</span>
-                                                    <div className="flex items-baseline gap-1">
-                                                        <span className="text-slate-700">{row.allocated}</span> / <span className="text-blue-600">{row.availability}</span>
-                                                    </div>
-                                                </div>
-                                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                                    <div className={`h-full rounded-full transition-all duration-700 ${skillGapMeta.bar}`} style={{ width: `${Math.min(100, (row.availability / Math.max(row.allocated, 1)) * 100)}%` }}></div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-2.5 px-5 text-right">
-                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${skillGapMeta.tone}`}>{skillGapMeta.label}</span>
-                                        </td>
-                                    </tr>
-                                );
-                            }) : <EmptyTable icon={Award} message="No skill gap data." />}
                         </tbody>
                     </table>
                 )}
@@ -418,63 +369,6 @@ const DashboardTables = ({
                     </table>
                 )}
 
-                {activeTab === 'trends' && (
-                    <div className="p-8">
-                        <div className="mb-5 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Selected Change</p>
-                            {selectedTrend ? (
-                                <div className="mt-2 flex items-center justify-between gap-4">
-                                    <div>
-                                        <p className="text-sm font-black text-slate-900">{selectedTrend.month}</p>
-                                        <p className="text-[10px] font-medium text-slate-500">
-                                            {previousTrend ? `Compared with ${previousTrend.month}` : 'No previous month available'}
-                                        </p>
-                                    </div>
-                                    <div className={`rounded-xl px-3 py-2 text-right ${trendDelta === null ? 'bg-slate-100 text-slate-500' : trendDelta >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                        <p className="text-lg font-black">{trendDelta === null ? selectedTrend.value : `${trendDelta > 0 ? '+' : ''}${trendDelta}`}</p>
-                                        <p className="text-[9px] font-black uppercase tracking-[0.18em]">{trendDelta === null ? 'Value' : 'Month Change'}</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <p className="mt-2 text-sm font-medium text-slate-400">No trend data available.</p>
-                            )}
-                        </div>
-                        <div className="mb-6 grid grid-cols-3 gap-3">
-                            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
-                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-500">Latest</p>
-                                <p className="mt-1 text-lg font-black text-slate-900">{trendLatest}</p>
-                            </div>
-                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2">
-                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-500">Average</p>
-                                <p className="mt-1 text-lg font-black text-slate-900">{trendAverage}</p>
-                            </div>
-                            <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2">
-                                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-500">Peak</p>
-                                <p className="mt-1 text-lg font-black text-slate-900">{trendPeak}</p>
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-6">
-                            {recentTrends.map((t, i) => (
-                                <button key={i} type="button" onClick={() => setSelectedTrendIndex(i)} className={`flex items-center justify-between rounded-2xl px-2 py-2 text-left transition-all ${selectedTrendIndex === i ? 'bg-blue-50/70 ring-1 ring-blue-100' : 'hover:bg-slate-50'}`}>
-                                    <div className="w-16">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.month}</span>
-                                    </div>
-                                    <div className="flex-1 px-4">
-                                        <div className="w-full h-1.5 bg-slate-50 rounded-full overflow-hidden border border-gray-50">
-                                            <div
-                                                className="h-full bg-blue-500 rounded-full transition-all duration-1000"
-                                                style={{ width: `${(t.value / Math.max(...(recentTrends.map(x => x.value) || [1]), 1)) * 100}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                    <div className="w-10 text-right">
-                                        <span className="text-[11px] font-bold text-slate-800 font-mono">{t.value}</span>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
                 {activeTab === 'riskboard' && (() => {
                     const suggestions = [
                         { priority: 'High', color: 'rose', icon: ShieldAlert, title: 'Assign min. 3 resources to active projects', detail: 'Projects under 3 members are Medium/High risk. Redeploy bench resources to under-staffed projects immediately.' },
@@ -515,9 +409,9 @@ const DashboardTables = ({
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Mod</span>
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Stable</span>
                 </div>
-                <button onClick={() => navigate('/info/analytics')} className="text-[10px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 uppercase tracking-tighter group transition-all">
-                    Full Analytics <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </button>
+                <div className="text-[10px] font-black text-slate-400 flex items-center gap-1 uppercase tracking-tighter opacity-50 cursor-not-allowed">
+                    Full Analytics <ArrowUpRight size={12} />
+                </div>
             </div>
         </div >
     );

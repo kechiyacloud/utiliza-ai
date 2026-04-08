@@ -7,7 +7,7 @@ import {
     updateSimpleClient,
     deleteSimpleClient,
 } from '../../api/entitiesApi';
-import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
+import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 /* ──────────────────────────────────────────────────────────
    INLINE MODAL — Add / Edit / Delete confirmation
@@ -194,6 +194,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         client: '',
         clientId: '',
         status: 'Not Started',
+        subStatus: '',
         billable: 'Billable',
         startDate: '',
         endDate: '',
@@ -221,6 +222,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                 client: project.client || project.client_name || '',
                 clientId: project.client_id || '',
                 status: project.status || 'Not Started',
+                subStatus: project.sub_status || '',
                 billable: project.billable || 'Billable',
                 startDate: project.start_date || project.startDate || '',
                 endDate: project.end_date || project.endDate || '',
@@ -236,6 +238,12 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         const { name, value } = e.target;
         if (name === 'type' && value === 'Internal') {
             setFormData(prev => ({ ...prev, [name]: value, billable: 'Non-Billable' }));
+        } else if (name === 'status') {
+            setFormData(prev => ({
+                ...prev,
+                status: value,
+                subStatus: value === 'In Progress' ? prev.subStatus : ''
+            }));
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
         }
@@ -250,6 +258,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         setSaveError('');
         if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
             setSaveError('End date cannot be earlier than start date.');
+            return;
+        }
+        if (formData.status === 'In Progress' && !formData.subStatus) {
+            setSaveError('Sub Status is required when status is In Progress.');
             return;
         }
         try {
@@ -407,6 +419,24 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     ))}
                                 </select>
                             </div>
+
+                            {formData.status === 'In Progress' && (
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Status</label>
+                                    <select
+                                        name="subStatus"
+                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                        value={formData.subStatus}
+                                        onChange={handleChange}
+                                        required
+                                    >
+                                        <option value="">Select Sub Status</option>
+                                        {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Billable</label>

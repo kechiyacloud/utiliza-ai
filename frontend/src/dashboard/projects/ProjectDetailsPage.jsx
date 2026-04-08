@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search } from 'lucide-react';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import jsPDF from 'jspdf';
@@ -46,26 +47,38 @@ function fmtDate(d) {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function getDynamicWeekLabel(mondayDate, fallbackIndex = 1) {
+    const currentMonday = getMonday(new Date());
+    const diffWeeks = Math.round((getMonday(mondayDate).getTime() - currentMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+    if (diffWeeks === 0) return 'Current Week';
+    if (diffWeeks === 1) return 'Next Week';
+    if (diffWeeks > 1) return `Week +${diffWeeks}`;
+    if (diffWeeks === -1) return 'Previous Week';
+    if (diffWeeks < -1) return `Week ${diffWeeks}`;
+    return `Week ${fallbackIndex}`;
+}
+
 function buildWeekDescriptor(mondayDate, index) {
     const sunday = new Date(mondayDate);
     sunday.setDate(mondayDate.getDate() + 6);
 
     const today = new Date();
     today.setHours(0,0,0,0);
-    const currMonday = getMonday(today);
-    const isPast = mondayDate < currMonday;
-    const isCurrent = mondayDate.getTime() === currMonday.getTime();
-    const isFuture = mondayDate > currMonday;
+    const status = getWeekStatus(mondayDate, sunday, today);
+    const isPast = status === 'previous';
+    const isCurrent = status === 'current';
+    const isFuture = status === 'upcoming';
 
     const wkNum = getISOWeekNumber(mondayDate);
     const yr = mondayDate.getFullYear();
     const yearWeek = `${yr}-${wkNum}`;
 
-    const label = `Week ${index}`;
+    const label = getDynamicWeekLabel(mondayDate, index);
     
     return { 
         label, 
-        dateRange: `${fmtDate(mondayDate)} – ${fmtDate(sunday)}`, 
+        dateRange: `${fmtDate(mondayDate)} - ${fmtDate(sunday)}`, 
         yearWeek, 
         year: yr, 
         weekNum: wkNum, 
@@ -79,46 +92,66 @@ function buildWeekDescriptor(mondayDate, index) {
     };
 }
 
-function generateProjectWeeks(startStr, endStr) {
-    const startDate = parseDate(startStr);
-    const endDate = parseDate(endStr);
-    if (!startDate || !endDate) return [];
-    const startMonday = getMonday(startDate);
-    const endMonday = getMonday(endDate);
+export function getWeekStatus(weekStartDate, weekEndDate, today = new Date()) {
+    const start = new Date(weekStartDate); start.setHours(0,0,0,0);
+    const end = new Date(weekEndDate); end.setHours(23,59,59,999);
+    const t = new Date(today); t.setHours(0,0,0,0);
+    if (end < t) return 'previous';
+    if (start <= t && t <= end) return 'current';
+    return 'upcoming';
+}
 
+function generateWeeksBetween(startMonday, endMonday) {
+    if (!startMonday || !endMonday || startMonday > endMonday) return [];
     const weeks = [];
-    let cur = new Date(startMonday);
+    let cursor = new Date(startMonday);
     let index = 1;
-    while (cur <= endMonday && weeks.length < 400) {
-        weeks.push(buildWeekDescriptor(cur, index));
-        cur.setDate(cur.getDate() + 7);
+    while (cursor <= endMonday && weeks.length < 400) {
+        weeks.push(buildWeekDescriptor(cursor, index));
+        cursor = new Date(cursor);
+        cursor.setDate(cursor.getDate() + 7);
         index += 1;
     }
     return weeks;
 }
 
-function getViewWeeks(mode, startStr, endStr) {
-    const weeks = generateProjectWeeks(startStr, endStr);
-    if (weeks.length === 0) return [];
+function getCurrentFourWeeks(currentMonday) {
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+        const monday = new Date(currentMonday);
+        monday.setDate(currentMonday.getDate() + i * 7);
+        out.push(buildWeekDescriptor(monday, i + 1));
+    }
+    return out;
+}
 
+function getViewWeeks(mode, allocationStartDate, allocationEndDate) {
     const today = new Date();
     today.setHours(0,0,0,0);
+    const currentMonday = getMonday(today);
+    const startDate = parseDate(allocationStartDate);
+    const endDate = parseDate(allocationEndDate);
+    const startMonday = startDate ? getMonday(startDate) : null;
+    const endMonday = endDate ? getMonday(endDate) : null;
 
-    const currentIndex = weeks.findIndex(w => w.start <= today && w.end >= today);
+    if (mode === 'current') {
+        // Current tab always shows exactly current week + next 3 weeks.
+        return getCurrentFourWeeks(currentMonday);
+    }
 
     if (mode === 'previous') {
-        return weeks.filter(week => week.end < today);
+        // Previous tab: allocation start -> current week (read-only in UI).
+        if (!startMonday || startMonday > currentMonday) return [];
+        return generateWeeksBetween(startMonday, currentMonday);
     }
 
-    if (mode === 'next') {
-        return weeks.filter(week => week.end >= today);
+    if (mode === 'upcoming') {
+        // Upcoming tab: current week -> allocation end.
+        if (!endMonday || currentMonday > endMonday) return [];
+        return generateWeeksBetween(currentMonday, endMonday);
     }
 
-    // current: this week + next 3 weeks
-    if (currentIndex === -1) {
-        return weeks.slice(0, 4);
-    }
-    return weeks.slice(currentIndex, currentIndex + 4);
+    return getCurrentFourWeeks(currentMonday);
 }
 
 const WEEK_DEFAULT_HOURS = 40;
@@ -136,9 +169,22 @@ function stripLeadingZeros(val) {
 
 /** Converts an allocation percentage to per-week hours (max 40) */
 function allocPctToHours(pct) {
-    const hours = Math.round((Number(pct) * WEEK_DEFAULT_HOURS) / 100);
-    return Math.min(WEEK_DEFAULT_HOURS, Math.max(0, hours));
+    const hours = (Number(pct) * WEEK_DEFAULT_HOURS) / 100;
+    const rounded = Math.round(hours * 100) / 100;
+    return Math.min(WEEK_DEFAULT_HOURS, Math.max(0, rounded));
 }
+
+const clampPct = (val) => {
+    const num = Number(val);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.min(100, Math.round(num * 100) / 100));
+};
+
+const clampHours = (val) => {
+    const num = Number(val);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.min(WEEK_DEFAULT_HOURS, Math.round(num * 100) / 100));
+};
 
 function parseDate(value) {
     if (!value) return null;
@@ -174,26 +220,48 @@ function getWeeklyHoursForWeek(row = {}, weekDescriptor) {
     }
 
     const rawVal = (row.weekly_hours || {})[weekDescriptor.yearWeek];
-    const baseWeeklyHours = Number(
-        (rawVal === '' || rawVal === undefined)
-            ? (row.allocation || row.allocation_hours || allocPctToHours(row.allocation_pct))
-            : (rawVal || 0)
-    ) || 0;
+    // If explicit weekly hours are provided for this week, use them directly
+    if (rawVal !== undefined && rawVal !== '') {
+        return { withinRange: true, hours: Number(rawVal) || 0, rawVal };
+    }
 
-    // Partial week handling
+    // Derive allocation percent
+    const pct = (() => {
+        if (row.allocation_pct !== undefined && row.allocation_pct !== null) return Number(row.allocation_pct) || 0;
+        const baseWeekly = Number(row.allocation || row.allocation_hours || 0);
+        if (baseWeekly > 0) return Math.min(100, Math.max(0, Math.round((baseWeekly / 40) * 100)));
+        return 0;
+    })();
+
+    // Compute working weekdays overlap (Mon-Fri only)
     const overlapStart = new Date(Math.max(weekStart.getTime(), resStart ? resStart.getTime() : weekStart.getTime()));
     const overlapEnd = new Date(Math.min(weekEnd.getTime(), resEnd ? resEnd.getTime() : weekEnd.getTime()));
-    const daysWorked = Math.max(0, (overlapEnd - overlapStart) / (1000 * 60 * 60 * 24) + 1);
-    const proratedHours = resStart || resEnd ? Math.round((daysWorked / 7) * baseWeeklyHours) : baseWeeklyHours;
 
-    return { withinRange: true, hours: proratedHours, rawVal };
+    const countWeekdays = (start, end) => {
+        let count = 0;
+        const cur = new Date(start);
+        cur.setHours(0, 0, 0, 0);
+        const final = new Date(end);
+        final.setHours(0, 0, 0, 0);
+        while (cur <= final) {
+            const day = cur.getDay(); // 0=Sun,6=Sat
+            if (day !== 0 && day !== 6) count += 1;
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+    };
+
+    const workingDays = countWeekdays(overlapStart, overlapEnd);
+    const hours = workingDays * 8 * (pct / 100);
+
+    return { withinRange: true, hours: Math.round(hours * 100) / 100, rawVal };
 }
 
 function normalizeAllocationRow(row = {}) {
     const normalized = { 
         ...row,
         weekly_hours: row.weekly_hours || {},
-        allocation_pct: row.allocation_percentage ?? row.allocation_pct ?? 0
+        allocation_pct: row.allocation_pct ?? row.allocation_percentage ?? 0
     };
     return normalized;
 }
@@ -435,6 +503,284 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+};
+
+// ─── ImportFileModal ──────────────────────────────────────────────────────────
+const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLocalRows = [] }) => {
+    const [phase, setPhase] = useState('upload'); // 'upload' | 'preview'
+    const [dragOver, setDragOver] = useState(false);
+    const [parsedRows, setParsedRows] = useState([]);
+    const [parseError, setParseError] = useState('');
+    const [confirmed, setConfirmed] = useState(false);
+    const confirmTimerRef = useRef(null);
+    const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setPhase('upload');
+            setDragOver(false);
+            setParsedRows([]);
+            setParseError('');
+            setConfirmed(false);
+            if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+        }
+    }, [isOpen]);
+
+    useEffect(() => () => { if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current); }, []);
+
+    if (!isOpen) return null;
+
+    // Build a name lookup from the employees list and existing localRows
+    const nameLookup = {};
+    (employees || []).forEach(e => {
+        if (e.employee_id) nameLookup[String(e.employee_id)] = e.employee_name || e.name || String(e.employee_id);
+    });
+    (existingLocalRows || []).forEach(r => {
+        if (r.employee_id && r.name) nameLookup[String(r.employee_id)] = r.name;
+    });
+
+    const handleDownloadTemplate = () => {
+        exportToCSV([{
+            employee_id: 'EMP-00001',
+            employee_name: 'John Doe',
+            role_in_project: 'Developer',
+            allocation_percentage: 100,
+            allocation_start_date: '',
+            allocation_end_date: '',
+        }], 'allocation_import_template');
+    };
+
+    const processFile = (file) => {
+        setParseError('');
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+                if (!rawRows.length) {
+                    setParseError('The file appears to be empty.');
+                    return;
+                }
+
+                const processed = rawRows.map((raw, idx) => {
+                    // Normalize keys: lowercase + trim
+                    const norm = {};
+                    Object.keys(raw).forEach(k => { norm[k.toLowerCase().trim()] = raw[k]; });
+
+                    const empId = String(norm['employee_id'] || '').trim();
+                    const errors = [];
+
+                    if (!empId) errors.push('employee_id is required');
+
+                    const rawPct = norm['allocation_percentage'];
+                    const pct = rawPct === '' || rawPct === undefined ? 100 : Number(rawPct);
+                    if (isNaN(pct) || pct < 0 || pct > 100) errors.push('allocation_percentage must be 0–100');
+
+                    const nameFromCSV = String(norm['employee_name'] || '').trim();
+                    const resolvedName = nameLookup[empId] || nameFromCSV || empId || `Row ${idx + 2}`;
+
+                    return {
+                        _rowNum: idx + 2,
+                        employee_id: empId,
+                        name: resolvedName,
+                        role: String(norm['role_in_project'] || '').trim(),
+                        allocation_pct: isNaN(pct) ? 100 : Math.min(100, Math.max(0, pct)),
+                        allocation_start_date: String(norm['allocation_start_date'] || '').trim(),
+                        allocation_end_date: String(norm['allocation_end_date'] || '').trim(),
+                        _errors: errors,
+                    };
+                });
+
+                setParsedRows(processed);
+                setPhase('preview');
+            } catch (err) {
+                setParseError('Failed to parse the file. Please ensure it is a valid CSV or Excel file.');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) processFile(file);
+        e.target.value = '';
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) processFile(file);
+    };
+
+    const handleConfirm = () => {
+        const validRows = parsedRows.filter(r => r._errors.length === 0);
+        validRows.forEach(row => {
+            onAddFromFile({
+                employee_id: row.employee_id,
+                name: row.name,
+                role: row.role || '',
+                allocation_pct: row.allocation_pct,
+                allocation_start_date: row.allocation_start_date,
+                allocation_end_date: row.allocation_end_date,
+                weekly_hours: {},
+            });
+        });
+        setConfirmed(true);
+        confirmTimerRef.current = setTimeout(onClose, 2200);
+    };
+
+    const validCount = parsedRows.filter(r => r._errors.length === 0).length;
+    const errorCount = parsedRows.filter(r => r._errors.length > 0).length;
+
+    return (
+        <div className="fixed inset-0 z-[150] flex flex-col bg-white">
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between px-8 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center">
+                        <Upload size={18} className="text-violet-600" />
+                    </div>
+                    <div>
+                        <h2 className="text-base font-bold text-slate-800">Import Allocation from File</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">Upload a CSV or Excel file to bulk-import resource allocations for this project</p>
+                    </div>
+                </div>
+                <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                    <X size={20} />
+                </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+                {confirmed ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-4">
+                        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <Check size={32} className="text-emerald-600" />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-lg font-bold text-slate-800">{validCount} row{validCount !== 1 ? 's' : ''} added to allocation</p>
+                            <p className="text-sm text-slate-500 mt-1">Click Save Changes to persist</p>
+                        </div>
+                    </div>
+                ) : phase === 'upload' ? (
+                    <div className="max-w-2xl mx-auto flex flex-col gap-6">
+                        {/* Template section */}
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                            <h3 className="text-sm font-bold text-slate-700 mb-1">Step 1 — Download the template</h3>
+                            <p className="text-xs text-slate-500 mb-3">Fill in employee IDs and allocation details, then upload below.</p>
+                            <div className="mb-3 text-xs text-slate-600 leading-relaxed">
+                                <strong>Required column:</strong> <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">employee_id</code><br />
+                                <strong>Optional:</strong> <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">employee_name</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">role_in_project</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_percentage</code> (0–100, default 100), <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_start_date</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_end_date</code> (YYYY-MM-DD)
+                            </div>
+                            <button onClick={handleDownloadTemplate} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors shadow-sm">
+                                <Download size={14} className="text-emerald-500" /> Download Template (.csv)
+                            </button>
+                        </div>
+
+                        {/* Upload section */}
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                            <h3 className="text-sm font-bold text-slate-700 mb-3">Step 2 — Upload your file</h3>
+                            <div
+                                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors ${dragOver ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50/40'}`}
+                                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                                onDragLeave={() => setDragOver(false)}
+                                onDrop={handleDrop}
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <div className="w-12 h-12 rounded-full bg-violet-100 flex items-center justify-center">
+                                    <Upload size={22} className="text-violet-500" />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm font-semibold text-slate-700">Drag & drop or click to browse</p>
+                                    <p className="text-xs text-slate-400 mt-1">Accepts .csv, .xlsx, .xls</p>
+                                </div>
+                                <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
+                            </div>
+                            {parseError && <p className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{parseError}</p>}
+                        </div>
+                    </div>
+                ) : (
+                    // Preview phase
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {validCount > 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">
+                                    <Check size={12} /> {validCount} valid row{validCount !== 1 ? 's' : ''}
+                                </span>
+                            )}
+                            {errorCount > 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-bold">
+                                    <X size={12} /> {errorCount} row{errorCount !== 1 ? 's' : ''} with errors (will be skipped)
+                                </span>
+                            )}
+                        </div>
+                        <div className="rounded-xl border border-slate-200 overflow-hidden">
+                            <table className="w-full text-xs">
+                                <thead className="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Row</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Employee ID</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Name</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Role</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Alloc %</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Start Date</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">End Date</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {parsedRows.map((row) => {
+                                        const hasError = row._errors.length > 0;
+                                        return (
+                                            <tr key={row._rowNum} className={hasError ? 'bg-red-50' : 'hover:bg-slate-50'}>
+                                                <td className="px-4 py-2.5 text-slate-400">{row._rowNum}</td>
+                                                <td className="px-4 py-2.5 font-mono text-slate-700">{row.employee_id || <span className="text-red-400 italic">missing</span>}</td>
+                                                <td className="px-4 py-2.5 text-slate-700">{row.name}</td>
+                                                <td className="px-4 py-2.5 text-slate-500">{row.role || '—'}</td>
+                                                <td className="px-4 py-2.5 text-slate-700">{row.allocation_pct}%</td>
+                                                <td className="px-4 py-2.5 text-slate-500">{row.allocation_start_date || '—'}</td>
+                                                <td className="px-4 py-2.5 text-slate-500">{row.allocation_end_date || '—'}</td>
+                                                <td className="px-4 py-2.5">
+                                                    {hasError
+                                                        ? <span className="text-red-600 font-semibold">{row._errors.join('; ')}</span>
+                                                        : <span className="text-emerald-600 font-semibold">Ready</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            {!confirmed && (
+                <div className="shrink-0 flex justify-between items-center px-8 py-4 border-t border-slate-100 bg-white">
+                    {phase === 'preview' ? (
+                        <>
+                            <button onClick={() => { setPhase('upload'); setParsedRows([]); }} className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                                Back
+                            </button>
+                            <button onClick={handleConfirm} disabled={validCount === 0} className="flex items-center gap-2 px-5 py-2 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                                <Check size={14} /> Add {validCount} Row{validCount !== 1 ? 's' : ''} to Allocation
+                            </button>
+                        </>
+                    ) : (
+                        <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                            Cancel
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -691,6 +1037,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isImportFileModalOpen, setIsImportFileModalOpen] = useState(false);
     const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -781,41 +1128,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 currentRow.allocation_pct = '';
             } else {
                 const cleaned = stripLeadingZeros(value);
-                const rawPct = Number(cleaned);
-                
-                // Edge case handling: prevent negative or > 100
-                if (rawPct < 0 || rawPct > 100) return;
-                
-                // Ensure consistent rounding, e.g. 33.33%
-                const pct = Math.round(rawPct * 100) / 100;
+                const pct = clampPct(cleaned);
                 currentRow.allocation_pct = pct;
-                const hrs = (pct / 100) * WEEK_DEFAULT_HOURS;
-                
-                let exceeded = false;
-                let minRemaining = WEEK_DEFAULT_HOURS;
-                
-                if (currentRow.employee_id) {
-                    visibleWeeks.forEach(wk => { 
-                        if (!isWeekWithinAllocationRange(wk, currentRow)) {
-                            currentRow.weekly_hours[wk.yearWeek] = '';
-                            return;
-                        }
-                        const otherProjHours = getOtherProjectHours(currentRow.employee_id, wk.yearWeek);
-                        const maxAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjHours);
-                        minRemaining = Math.min(minRemaining, maxAllowed);
-                        
-                        const finalHrs = Math.min(hrs, maxAllowed);
-                        if (hrs > maxAllowed) exceeded = true;
-                        currentRow.weekly_hours[wk.yearWeek] = finalHrs; 
-                    });
-                    if (exceeded) {
-                        alert(`You can only allocate up to ${minRemaining} hours. Allocation exceeded! Max allowed is ${WEEK_DEFAULT_HOURS} hours/week`);
-                    }
-                } else {
-                    visibleWeeks.forEach(wk => { 
-                        currentRow.weekly_hours[wk.yearWeek] = isWeekWithinAllocationRange(wk, currentRow) ? hrs : '';
-                    });
-                }
+                const hrs = clampHours((pct / 100) * WEEK_DEFAULT_HOURS);
+
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return; // past weeks stay read-only
+                    currentRow.weekly_hours[wk.yearWeek] = hrs;
+                });
             }
         } else if (field.startsWith('week_')) {
             const yearWeek = field.replace('week_', '');
@@ -823,35 +1144,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 currentRow.weekly_hours[yearWeek] = '';
             } else {
                 const cleaned = stripLeadingZeros(String(value));
-                const parsed = Number(cleaned);
-                if (parsed < 0) return; // Prevent negative values
-                
-                let clamped = Number.isFinite(parsed) ? parsed : 0;
-                
-                // Enforce Cross-Project Hours Limit
-                if (currentRow.employee_id) {
-                    const otherProjHours = getOtherProjectHours(currentRow.employee_id, yearWeek);
-                    const remainingHours = Math.max(0, WEEK_DEFAULT_HOURS - otherProjHours);
-                    if (clamped > remainingHours) {
-                        alert(`You can only allocate up to ${remainingHours} hours. Allocation exceeded! Max allowed is ${WEEK_DEFAULT_HOURS} hours/week`);
-                        clamped = remainingHours;
-                    }
-                } else {
-                    if (clamped > WEEK_DEFAULT_HOURS) {
-                        alert(`Allocation exceeded! Max allowed is ${WEEK_DEFAULT_HOURS} hours/week`);
-                        clamped = WEEK_DEFAULT_HOURS;
-                    }
-                }
-                
+                const clamped = clampHours(cleaned);
                 currentRow.weekly_hours[yearWeek] = clamped;
             }
-            const totalHours = visibleWeeks.reduce((sum, wk) => {
-                const { withinRange } = getWeeklyHoursForWeek(currentRow, wk);
-                return withinRange ? sum + Number(currentRow.weekly_hours[wk.yearWeek] || 0) : sum;
-            }, 0);
-            const activeWeeks = visibleWeeks.filter(wk => isWeekWithinAllocationRange(wk, currentRow)).length;
-            const maxCapacity = WEEK_DEFAULT_HOURS * (activeWeeks || visibleWeeks.length || 0);
-            currentRow.allocation_pct = maxCapacity > 0 ? Math.round((totalHours / maxCapacity) * 10000) / 100 : 0;
+            // Recompute allocation % from this week's hours (bi-directional)
+            const baseHours = Number(currentRow.weekly_hours[yearWeek] || 0);
+            currentRow.allocation_pct = clampPct((baseHours / WEEK_DEFAULT_HOURS) * 100);
         } else {
             currentRow[field] = value;
         }
@@ -1056,6 +1354,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
 
             await axios.put(`/projects/${projectId}/resources`, payload);
             if (onUpdate) await onUpdate();
+            setStatusMessage('Changes saved successfully!');
             setIsEditing(false);
         } catch (error) {
             console.error('Saving allocations failed:', error);
@@ -1136,6 +1435,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
                                 <Users size={14} /> Import Resources
                             </button>
+                            <button onClick={() => setIsImportFileModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-xs font-bold hover:bg-violet-100 transition-colors">
+                                <Upload size={14} /> Import from File
+                            </button>
                             <button onClick={() => setIsDeleteAllModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors">
                                 <Trash2 size={14} /> Clear All Resources
                             </button>
@@ -1189,6 +1491,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 </div>
             )}
 
+            {visibleWeeks.length === 0 && (
+                <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-xs font-medium">
+                    No weeks available for this tab based on the allocation date range.
+                </div>
+            )}
+
             {/* The previous ViewMode toggle was here, now moved up */}
 
             <div className="overflow-x-auto w-full rounded-xl border border-gray-100 shadow-sm bg-white">
@@ -1206,13 +1514,23 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         <span className="ml-1 font-normal text-slate-400 normal-case">(100%=40h)</span>
                                     </th>
                                     {visibleWeeks.map((wk) => (
-                                        <th key={wk.yearWeek} className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider min-w-[110px] border-l border-slate-100 ${
-                                            viewMode === 'previous' ? 'text-rose-600/80 bg-rose-50/30' : 
-                                            viewMode === 'next' ? 'text-emerald-600/80 bg-emerald-50/30' : 
-                                            'text-gray-600'
+                                        <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${
+                                            viewMode === 'previous' ? 'bg-rose-50/20' : 
+                                            viewMode === 'upcoming' ? 'bg-emerald-50/20' : 
+                                            'bg-transparent'
                                         }`}>
-                                            <span className={`block ${wk.isCurrent ? 'text-blue-700' : viewMode === 'previous' ? 'text-rose-700' : viewMode === 'next' ? 'text-emerald-700' : ''}`}>{wk.label}</span>
-                                            <span className={`block text-[10px] font-normal mt-0.5 normal-case ${viewMode === 'previous' ? 'text-rose-400' : viewMode === 'next' ? 'text-emerald-400' : 'text-slate-400'}`}>{wk.dateRange}</span>
+                                            <div className={`mx-auto rounded-md px-3 py-2 leading-tight ${
+                                                wk.isCurrent ? 'bg-[#EEF2FF]' : ''
+                                            }`}>
+                                                <span className={`block text-[13px] font-semibold leading-[1.2] ${
+                                                    wk.isCurrent ? 'text-indigo-700' : 'text-slate-700'
+                                                }`}>
+                                                    {wk.label}
+                                                </span>
+                                                <span className="block mt-1 text-[12px] font-medium leading-[1.25] text-[#6B7280]">
+                                                    {wk.dateRange}
+                                                </span>
+                                            </div>
                                         </th>
                                     ))}
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Total</th>
@@ -1351,13 +1669,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         
                                         const otherProjectHours = withinRange && row.employee_id ? getOtherProjectHours(row.employee_id, wk.yearWeek) : 0;
                                         const remainingAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjectHours);
-                                        // Past weeks or fully allocated (40h+) in other projects are read-only
-                                        const isCellEditable = isEditing && withinRange && !wk.isPast && remainingAllowed > 0;
+                                        // Previous tab is always read-only; Current/Upcoming are editable.
+                                        const isCellEditable = isEditing && viewMode !== 'previous' && withinRange && remainingAllowed > 0;
 
                                         return (
                                             <td key={wk.yearWeek} className={`px-3 py-2.5 text-center border-l ${
                                                 viewMode === 'previous' ? 'border-rose-50/50 bg-rose-50/20' : 
-                                                viewMode === 'next' ? 'border-emerald-50/50 bg-emerald-50/20' : 
+                                                viewMode === 'upcoming' ? 'border-emerald-50/50 bg-emerald-50/20' : 
                                                 'border-slate-100'
                                             } ${isCurrentWeek && !isEditing ? 'bg-blue-50/30' : ''}`}>
                                                 {isCellEditable ? (
@@ -1395,15 +1713,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     !withinRange || safeHours === 0 ? (
                                                         <span className={`text-xs font-medium ${
                                                             viewMode === 'previous' ? 'text-rose-300' : 
-                                                            viewMode === 'next' ? 'text-emerald-300' : 
+                                                            viewMode === 'upcoming' ? 'text-emerald-300' : 
                                                             'text-slate-300'
                                                         }`}>-</span>
                                                     ) : (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className={`text-xs font-bold ${
-                                                                pct >= 100 ? (viewMode === 'previous' ? 'text-rose-700' : viewMode === 'next' ? 'text-emerald-700' : 'text-green-600') : 
+                                                                pct >= 100 ? (viewMode === 'previous' ? 'text-rose-700' : viewMode === 'upcoming' ? 'text-emerald-700' : 'text-green-600') : 
                                                                 isCurrentWeek ? 'text-blue-700' : 
-                                                                (viewMode === 'previous' ? 'text-rose-600' : viewMode === 'next' ? 'text-emerald-600' : 'text-slate-700')
+                                                                (viewMode === 'previous' ? 'text-rose-600' : viewMode === 'upcoming' ? 'text-emerald-600' : 'text-slate-700')
                                                             }`}>
                                                                 {safeHours}h
                                                             </span>
@@ -1411,7 +1729,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                                 <div
                                                                     className={`h-full rounded-full transition-all ${
                                                                         viewMode === 'previous' ? (pct > 0 ? 'bg-rose-400' : 'bg-gray-200') :
-                                                                        viewMode === 'next' ? (pct > 0 ? 'bg-emerald-400' : 'bg-gray-200') :
+                                                                        viewMode === 'upcoming' ? (pct > 0 ? 'bg-emerald-400' : 'bg-gray-200') :
                                                                         barColor
                                                                     }`}
                                                                     style={{ width: `${pct}%` }}
@@ -1482,7 +1800,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             {columnTotals.map((total, idx) => (
                                 <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${
                                     viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' : 
-                                    viewMode === 'next' ? 'text-emerald-700 border-l border-emerald-100 bg-emerald-50/10' : 
+                                    viewMode === 'upcoming' ? 'text-emerald-700 border-l border-emerald-100 bg-emerald-50/10' : 
                                     'text-slate-700 border-l border-slate-200'
                                 } ${visibleWeeks[idx]?.isCurrent ? 'bg-blue-50 text-blue-700' : ''}`}>
                                     {total > 0 ? `${total}h` : '-'}
@@ -1513,6 +1831,24 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 employees={employees}
                 existingEmployeeIds={(localRows || []).map(r => String(r.employee_id)).filter(Boolean)}
             />
+            <ImportFileModal
+                isOpen={isImportFileModalOpen}
+                onClose={() => setIsImportFileModalOpen(false)}
+                onAddFromFile={(newRow) => {
+                    setLocalRows(prev => {
+                        const existingIdx = prev.findIndex(r => String(r.employee_id) === String(newRow.employee_id));
+                        if (existingIdx >= 0) {
+                            const updated = [...prev];
+                            updated[existingIdx] = normalizeAllocationRow({ ...prev[existingIdx], ...newRow });
+                            return updated;
+                        }
+                        return [...prev, normalizeAllocationRow(newRow)];
+                    });
+                    setIsEditing(true);
+                }}
+                employees={employees}
+                existingLocalRows={localRows}
+            />
             <ConfirmDeleteAllModal
                 isOpen={isDeleteAllModalOpen}
                 onCancel={() => setIsDeleteAllModalOpen(false)}
@@ -1528,6 +1864,7 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeLabel = (project?.type || '').toLowerCase() === 'internal' ? 'Internal' : 'Client';
     const projectStatus = project?.status || project?.project_status || 'Not Set';
+    const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const projectStatusKey = projectStatus.toLowerCase();
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     const statusClasses = projectStatusKey === 'completed'
@@ -1562,6 +1899,26 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
             </div>
 
             <div className="flex flex-wrap items-center gap-8 w-full md:w-auto pb-4 md:pb-0 border-b md:border-b-0 border-slate-50">
+                {projectStatusKey === 'in progress' && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                            SOW Status
+                        </span>
+                        <span
+                            className="text-[12px] font-semibold px-2.5 py-1 rounded-full border w-fit"
+                            style={{
+                                backgroundColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#ECFDF3' : '#FEF2F2',
+                                color: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#15803D' : '#B91C1C',
+                                borderColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#BBF7D0' : '#FECACA'
+                            }}
+                        >
+                            {projectSubStatus
+                                ? (projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? 'SOW Signed' : 'SOW Not Signed')
+                                : 'SOW - NA'}
+                        </span>
+                    </div>
+                )}
+
                 <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                         <CalendarDays size={12} /> Timeline
@@ -2012,9 +2369,24 @@ const ProjectDetailsPage = () => {
     const [rolesList, setRolesList] = useState([]);
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
+
+    const allocationStartBoundary = useMemo(() => {
+        const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
+        const parsed = dateValues.map(parseDate).filter(Boolean);
+        if (parsed.length === 0) return null;
+        return new Date(Math.min(...parsed.map((d) => d.getTime())));
+    }, [project?.start_date, resources]);
+
+    const allocationEndBoundary = useMemo(() => {
+        const dateValues = [project?.end_date, ...(resources || []).map((r) => r?.allocation_end_date)];
+        const parsed = dateValues.map(parseDate).filter(Boolean);
+        if (parsed.length === 0) return null;
+        return new Date(Math.max(...parsed.map((d) => d.getTime())));
+    }, [project?.end_date, resources]);
+
     const visibleWeeks = useMemo(() => {
-        return getViewWeeks(viewMode, project?.start_date, project?.end_date);
-    }, [viewMode, project?.start_date, project?.end_date]);
+        return getViewWeeks(viewMode, allocationStartBoundary, allocationEndBoundary);
+    }, [viewMode, allocationStartBoundary, allocationEndBoundary]);
 
     const loadProjectData = async () => {
         try {
@@ -2149,9 +2521,9 @@ const ProjectDetailsPage = () => {
                                     ● Current
                                 </button>
                                 <button 
-                                    onClick={() => setViewMode('next')}
+                                    onClick={() => setViewMode('upcoming')}
                                     className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
-                                        viewMode === 'next' 
+                                        viewMode === 'upcoming' 
                                         ? 'bg-emerald-600 text-white shadow-md scale-105' 
                                         : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
                                     }`}
