@@ -14,6 +14,7 @@ class ClientCreate(BaseModel):
     industry: Optional[str] = "Retail"
     status: Optional[str] = "Stable"
     budget: Optional[float] = None
+    partner_id: Optional[str] = None
 
 class ClientSimple(BaseModel):
     id: str
@@ -210,7 +211,7 @@ def create_client(client: ClientCreate):
         schema = _detect_clients_schema(cur)
 
         if schema == "modern":
-            cur.execute("INSERT INTO clients (name) VALUES (%s) RETURNING id, name", (client.name,))
+            cur.execute("INSERT INTO clients (name, partner_id) VALUES (%s, %s) RETURNING id, name", (client.name, client.partner_id))
             row = cur.fetchone()
             conn.commit()
             return {"id": str(row[0]), "name": row[1]}
@@ -221,10 +222,16 @@ def create_client(client: ClientCreate):
 
         budget_val = float(client.budget) if client.budget else 0.0
 
-        cur.execute("""
-            INSERT INTO clients (client_id, client_name, website_url, industry, status, budget)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (client.id, client.name, client.url, client.industry, client.status, budget_val))
+        if client.partner_id:
+            cur.execute("""
+                INSERT INTO clients (client_id, client_name, website_url, industry, status, budget, partner_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (client.id, client.name, client.url, client.industry, client.status, budget_val, client.partner_id))
+        else:
+            cur.execute("""
+                INSERT INTO clients (client_id, client_name, website_url, industry, status, budget)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (client.id, client.name, client.url, client.industry, client.status, budget_val))
         
         conn.commit()
         return {"detail": "Client created successfully"}

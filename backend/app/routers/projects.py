@@ -374,8 +374,14 @@ def _available_capacity_pct(existing_weekly_load: dict) -> int:
 
 
 def _validate_capacity(existing_weekly_load: dict, new_weekly_load: dict):
+    today = date.today()
+    today_iso = today.isocalendar()
+    current_week = (today_iso[0], today_iso[1])
     over_weeks = []
     for wk, hours in new_weekly_load.items():
+        # Skip past weeks — historical data cannot be changed; only future capacity matters
+        if wk < current_week:
+            continue
         total = hours + existing_weekly_load.get(wk, 0)
         if total > HOURS_PER_FTE + 1e-6:
             over_weeks.append(f"{wk[0]}-W{wk[1]:02d} ({total}h)")
@@ -569,7 +575,7 @@ def _build_resource_record(project_id: str, tm: TeamMemberCreate, allocation_id:
     return record
 
 
-def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_billable: str, replace_allocation_id: Optional[str] = None, project_start: Optional[date] = None, project_end: Optional[date] = None):
+def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_billable: str, replace_allocation_id: Optional[str] = None, project_start: Optional[date] = None, project_end: Optional[date] = None, validate_capacity: bool = True):
     _validate_resource_rows([tm])
 
     employee_id = _resolve_employee_id(cur, tm)
@@ -613,7 +619,8 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
     weekly_map = _build_weekly_hours_from_pct(allocation_pct, alloc_start, alloc_end, overrides=overrides)
     if not weekly_map and alloc_start:
         weekly_map = _build_weekly_hours_from_pct(allocation_pct, alloc_start, alloc_end, overrides=None)
-    _validate_capacity(existing_weekly_load, weekly_map)
+    if validate_capacity:
+        _validate_capacity(existing_weekly_load, weekly_map)
 
     project_tag = _derive_project_tag(tm, project_billable)
 
@@ -1258,6 +1265,7 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
                 replace_allocation_id=None,
                 project_start=project_row[1],
                 project_end=project_row[2],
+                validate_capacity=False,
             )
 
         conn.commit()

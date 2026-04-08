@@ -1147,9 +1147,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 const clamped = clampHours(cleaned);
                 currentRow.weekly_hours[yearWeek] = clamped;
             }
-            // Recompute allocation % from this week's hours (bi-directional)
-            const baseHours = Number(currentRow.weekly_hours[yearWeek] || 0);
-            currentRow.allocation_pct = clampPct((baseHours / WEEK_DEFAULT_HOURS) * 100);
         } else {
             currentRow[field] = value;
         }
@@ -1682,7 +1679,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     <div className="flex flex-col items-center gap-1">
                                                         <input
                                                             type="number"
-                                                            min="1"
+                                                            min="0"
                                                             max={Math.min(40, remainingAllowed)}
                                                             step="0.1"
                                                             value={rawVal === '' ? '' : Math.min(40, safeHours)}
@@ -1694,11 +1691,11 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                                     handleRowChange(ridx, `week_${wk.yearWeek}`, '');
                                                                     return;
                                                                 }
-                                                                const clamped = Math.max(1, Math.min(40, val, remainingAllowed));
+                                                                const clamped = Math.max(0, Math.min(40, val, remainingAllowed));
                                                                 handleRowChange(ridx, `week_${wk.yearWeek}`, clamped);
                                                             }}
                                                             onBlur={(e) => {
-                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 1);
+                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 0);
                                                             }}
                                                             className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${
                                                                 safeHours > WEEK_DEFAULT_HOURS
