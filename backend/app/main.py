@@ -1,9 +1,22 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, employees, dashboard, projects, allocations, clients, partner_clients, availability, feedback
 
 app = FastAPI()
+
+# -------------------- Global Exception Handler (CORS Robustness) --------------------
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error", "detail": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "http://localhost:5173",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # -------------------- CORS --------------------
 allowed_origins = [

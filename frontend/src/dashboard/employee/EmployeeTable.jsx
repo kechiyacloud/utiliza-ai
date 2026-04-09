@@ -48,7 +48,7 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, filters, searchValue, onSearchChange, onFilterClick, contextLabel = 'Employee' }) => {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -110,7 +110,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                     case 'billable':
                         matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable'; break;
                     case 'bench':
-                        matchesCardFilter = emp.employee_status?.toLowerCase() === 'bench'; break;
+                        matchesCardFilter = (emp.employee_allocations || 0) <= 0; break;
                     case 'notice':
                         matchesCardFilter = emp.employee_status?.toLowerCase().includes('notice'); break;
                     case 'new-joiner':
@@ -157,7 +157,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-bold text-gray-800">Employee Directory</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{contextLabel} Directory</h3>
                     <span className="text-xs text-gray-400 font-medium">
                         {filteredEmployees.length} {filters?.cardFilter === 'bench' ? 'bench ' : ''}employees
                     </span>
@@ -168,7 +168,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Search name, skill, status..."
+                            placeholder="Find an employee or skill..."
                             className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all"
                             value={searchValue || ''}
                             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}

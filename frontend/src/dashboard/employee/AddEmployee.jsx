@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
 import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList } from '../../api/employeeApi';
+import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
 
@@ -20,12 +21,15 @@ const AddEmployee = () => {
         project_id: '',
         project_role: '',
         project_allocation: 0,
+        daily_hours: 0,
         project_start_date: '',
         project_end_date: ''
     });
     const [showPreview, setShowPreview] = useState(false); // Track if preview tab should be visible
     const [completedSections, setCompletedSections] = useState([]); // Track which sections are completed
     const [allEmployees, setAllEmployees] = useState([]);
+    const [allProjects, setAllProjects] = useState([]);
+    const [editingProjectIndex, setEditingProjectIndex] = useState(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -153,6 +157,18 @@ const AddEmployee = () => {
         loadEmployees();
     }, []);
 
+    useEffect(() => {
+        const loadProjects = async () => {
+            try {
+                const res = await fetchProjectsData();
+                setAllProjects(res?.data?.projects || []);
+            } catch (err) {
+                console.error('Failed to load projects list', err);
+            }
+        };
+        loadProjects();
+    }, []);
+
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
         { id: 'professional', label: 'Professional', icon: Briefcase },
@@ -257,26 +273,88 @@ const AddEmployee = () => {
     };
 
     const handleProjectChange = (field, value) => {
-        setCurrentProject(prev => ({ ...prev, [field]: value }));
+        if (field === 'project_allocation') {
+            const pct = parseInt(value) || 0;
+            const hours = (pct / 100) * 8;
+            setCurrentProject(prev => ({ 
+                ...prev, 
+                project_allocation: pct,
+                daily_hours: Math.round(hours * 100) / 100
+            }));
+        } else if (field === 'daily_hours') {
+            const hours = parseFloat(value) || 0;
+            const pct = (hours / 8) * 100;
+            setCurrentProject(prev => ({ 
+                ...prev, 
+                daily_hours: hours,
+                project_allocation: Math.round(pct)
+            }));
+        } else {
+            setCurrentProject(prev => ({ ...prev, [field]: value }));
+        }
     };
 
     const addProject = () => {
         if (currentProject.project_id && currentProject.project_allocation > 0) {
-            setFormData(prev => ({
-                ...prev,
-                projects: [...prev.projects, { ...currentProject }]
-            }));
+            if (editingProjectIndex !== null) {
+                // Update existing project
+                setFormData(prev => {
+                    const updated = [...prev.projects];
+                    updated[editingProjectIndex] = { ...currentProject };
+                    return { ...prev, projects: updated };
+                });
+                setEditingProjectIndex(null);
+            } else {
+                // Add new project
+                setFormData(prev => ({
+                    ...prev,
+                    projects: [...prev.projects, { ...currentProject }]
+                }));
+            }
+            
+            // Reset form
             setCurrentProject({
                 project_id: '',
                 project_role: '',
                 project_allocation: 0,
+                daily_hours: 0,
                 project_start_date: '',
                 project_end_date: ''
             });
         }
     };
 
+    const handleEditProject = (index) => {
+        const projectToEdit = formData.projects[index];
+        const hours = (projectToEdit.project_allocation / 100) * 8;
+        setCurrentProject({ 
+            ...projectToEdit,
+            daily_hours: Math.round(hours * 100) / 100
+        });
+        setEditingProjectIndex(index);
+        
+        // Scroll to project form area for better UX
+        const projectForm = document.getElementById('project-assignment-form');
+        if (projectForm) {
+            projectForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    const cancelProjectEdit = () => {
+        setEditingProjectIndex(null);
+        setCurrentProject({
+            project_id: '',
+            project_role: '',
+            project_allocation: 0,
+            project_start_date: '',
+            project_end_date: ''
+        });
+    };
+
     const removeProject = (index) => {
+        if (editingProjectIndex === index) {
+            cancelProjectEdit();
+        }
         setFormData(prev => ({
             ...prev,
             projects: prev.projects.filter((_, i) => i !== index)
@@ -431,7 +509,7 @@ const AddEmployee = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="john.doe@company.com"
+                        placeholder="john.doe@organization.com"
                         required
                     />
                 </div>
@@ -801,8 +879,10 @@ const AddEmployee = () => {
             </div>
 
             {/* Current Project Form */}
-            <div className="p-4 border border-gray-300 rounded-lg bg-gray-50">
-                <h4 className="text-sm font-bold text-gray-700 mb-3">Add Project Assignment</h4>
+            <div id="project-assignment-form" className="p-4 border border-gray-300 rounded-lg bg-gray-50">
+                <h4 className="text-sm font-bold text-gray-700 mb-3">
+                    {editingProjectIndex !== null ? 'Edit Project Assignment' : 'Add Project Assignment'}
+                </h4>
 
                 <div className="space-y-3">
                     <div>
@@ -813,15 +893,15 @@ const AddEmployee = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="">Select Project</option>
-                            <option value="PRJ001">Project Alpha - Web Development</option>
-                            <option value="PRJ002">Project Beta - Mobile App</option>
-                            <option value="PRJ003">Project Gamma - Cloud Migration</option>
-                            < option value="PRJ004">Project Delta - Data Analytics</option>
-                            <option value="PRJ005">Project Epsilon - AI Integration</option>
+                            {allProjects.map(proj => (
+                                <option key={proj.id} value={proj.id}>
+                                    {proj.name} ({proj.id})
+                                </option>
+                            ))}
                         </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project</label>
                             <input
@@ -833,11 +913,23 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day</label>
+                            <input
+                                type="number"
+                                value={currentProject.daily_hours}
+                                onChange={(e) => handleProjectChange('daily_hours', e.target.value)}
+                                min="0"
+                                max="8"
+                                step="0.5"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent font-semibold"
+                            />
+                        </div>
+                        <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>
                             <input
                                 type="number"
                                 value={currentProject.project_allocation}
-                                onChange={(e) => handleProjectChange('project_allocation', parseInt(e.target.value) || 0)}
+                                onChange={(e) => handleProjectChange('project_allocation', e.target.value)}
                                 min="0"
                                 max="100"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -866,14 +958,26 @@ const AddEmployee = () => {
                         </div>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={addProject}
-                        disabled={!currentProject.project_id || currentProject.project_allocation <= 0}
-                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
-                    >
-                        + Add Project
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={addProject}
+                            disabled={!currentProject.project_id || currentProject.project_allocation <= 0}
+                            className={`px-4 py-2 text-white rounded text-sm font-medium transition-colors ${editingProjectIndex !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-gray-300 disabled:cursor-not-allowed`}
+                        >
+                            {editingProjectIndex !== null ? 'Update Assignment' : '+ Add Project'}
+                        </button>
+                        
+                        {editingProjectIndex !== null && (
+                            <button
+                                type="button"
+                                onClick={cancelProjectEdit}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300 font-medium transition-colors"
+                            >
+                                Cancel Edit
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -885,16 +989,30 @@ const AddEmployee = () => {
                         {formData.projects.map((project, index) => (
                             <div key={index} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
                                 <div className="flex-1">
-                                    <p className="text-sm font-semibold text-gray-800">{project.project_id}</p>
-                                    <p className="text-xs text-gray-600">{project.project_role} · {project.project_allocation}% allocation</p>
+                                    <p className="text-sm font-semibold text-gray-800">
+                                        {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
+                                    </p>
+                                    <p className="text-xs text-gray-600">
+                                        {project.project_role} · {project.project_allocation}% allocation 
+                                        ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)
+                                    </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => removeProject(index)}
-                                    className="px-3 py-1 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200 transition-colors"
-                                >
-                                    Remove
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleEditProject(index)}
+                                        className="px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 transition-colors"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeProject(index)}
+                                        className="px-3 py-1 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200 transition-colors"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -1004,9 +1122,11 @@ const AddEmployee = () => {
                         <tbody>
                             {formData.projects.map((project, i) => (
                                 <tr key={i} className="border-t">
-                                    <td className="p-2 border">{project.project_id}</td>
+                                    <td className="p-2 border">
+                                        {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
+                                    </td>
                                     <td className="p-2 border">{project.project_role}</td>
-                                    <td className="p-2 border">{project.project_allocation}%</td>
+                                    <td className="p-2 border">{project.project_allocation}% ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)</td>
                                     <td className="p-2 border text-xs">{project.project_start_date} to {project.project_end_date || 'Ongoing'}</td>
                                 </tr>
                             ))}

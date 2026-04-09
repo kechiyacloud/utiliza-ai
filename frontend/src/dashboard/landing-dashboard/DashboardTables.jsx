@@ -24,7 +24,8 @@ const DashboardTables = ({
     trends = [],
     highUtilizationEmployee = [],
     highUtilizationProject = [],
-    forcedTab = null
+    forcedTab = null,
+    contextLabel = 'Organization'
 }) => {
     const [activeTab, setActiveTab] = useState('availability');
     const [utilizationSubTab, setUtilizationSubTab] = useState('employee');
@@ -114,7 +115,7 @@ const DashboardTables = ({
             {/* Tab Header */}
             <div className="px-5 pt-4 pb-2 border-b border-gray-50 bg-slate-50/30">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
-                    <h3 className="text-base font-bold text-slate-800 tracking-tight">Workforce Pulse</h3>
+                    <h3 className="text-base font-bold text-slate-800 tracking-tight">{contextLabel} Highlights</h3>
                     <div className="flex bg-slate-100 p-0.5 rounded-xl overflow-x-auto no-scrollbar">
                         {[
                             { id: 'availability', label: 'Releases', icon: Calendar },
@@ -122,6 +123,7 @@ const DashboardTables = ({
                             { id: 'transitions', label: 'Transitions', icon: Activity },
                             { id: 'optimization', label: 'Bench Aging', icon: Clock },
                             { id: 'certifications', label: 'Certificates', icon: Award },
+                            { id: 'growth', label: 'Growth Trends', icon: BarChart2 },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -136,27 +138,27 @@ const DashboardTables = ({
                 </div>
 
                 <div className="h-5">
-                    {activeTab === 'availability' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Resources rolling off projects in 30 days</p>}
+                    {activeTab === 'availability' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">People finishing projects in the next 30 days</p>}
                     {activeTab === 'utilization' && (
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => setUtilizationSubTab('employee')}
                                 className={`text-[9px] font-black uppercase tracking-widest transition-colors ${utilizationSubTab === 'employee' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}
                             >
-                                High Utilization Employee
+                                Hardest Working People
                             </button>
                             <div className="w-px h-2 bg-slate-200"></div>
                             <button
                                 onClick={() => setUtilizationSubTab('project')}
                                 className={`text-[9px] font-black uppercase tracking-widest transition-colors ${utilizationSubTab === 'project' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-500'}`}
                             >
-                                High Utilization Project
+                                Most Active Projects
                             </button>
                         </div>
                     )}
-                    {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Latest project moves with from and to context</p>}
-                    {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Bench resources sorted by priority</p>}
-                    {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Certification renewals that need attention</p>}
+                    {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Recent project changes: where people moved from and where they went</p>}
+                    {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Available people sorted by how long they've been waiting for a project</p>}
+                    {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">People whose certificates are expiring soon</p>}
                 </div>
             </div>
 
@@ -239,7 +241,7 @@ const DashboardTables = ({
                                         <span className="text-blue-600 font-black text-[11px]">{row.allocation}%</span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={TrendingUp} message="No highly allocated employees found." />}
+                            )) : <EmptyTable icon={TrendingUp} message="No highly allocated employees found." colSpan={3} />}
                         </tbody>
                     </table>
                 )}
@@ -268,7 +270,7 @@ const DashboardTables = ({
                                         </span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={BarChart2} message="No high allocation projects found." />}
+                            )) : <EmptyTable icon={BarChart2} message="No high allocation projects found." colSpan={3} />}
                         </tbody>
                     </table>
                 )}
@@ -307,7 +309,7 @@ const DashboardTables = ({
                                         <span className="text-slate-400 font-mono text-[9px] font-bold">{formatTransitionDate(row.date)}</span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={History} message="No recent transitions." />}
+                            )) : <EmptyTable icon={History} message="No recent transitions." colSpan={3} />}
                         </tbody>
                     </table>
                 )}
@@ -316,27 +318,40 @@ const DashboardTables = ({
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
                             <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
-                                <th className="text-left py-2 px-5">Resource</th>
-                                <th className="text-center py-2">Bench Time</th>
-                                <th className="text-right py-2 px-5">Risk</th>
+                                <th className="text-left py-2 px-5">Resource (2026 Sentiment)</th>
+                                <th className="text-center py-2">Bench Sentinel</th>
+                                <th className="text-right py-2 px-5">Pulse Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {benchAging.length > 0 ? benchAging.map((row, idx) => (
                                 <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
                                     <td className="py-2.5 px-5">
-                                        <span className="font-bold text-slate-800 text-xs uppercase tracking-tight leading-none">{row.name}</span>
+                                        <span className="font-bold text-slate-800 text-[11px] uppercase tracking-tight leading-none">{row.name}</span>
                                     </td>
-                                    <td className="py-2.5 text-center">
-                                        <span className="text-[11px] font-bold text-slate-700 font-mono leading-none">{row.days} Days</span>
+                                    <td className="py-2.5 text-center px-4">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-tight">
+                                                <span className={row.days_in_year > 30 ? 'text-rose-600' : 'text-blue-600'}>
+                                                    {row.days_in_year} Days in 2026
+                                                </span>
+                                                <span className="text-slate-400">{row.year_percentage}%</span>
+                                            </div>
+                                            <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-500 ${row.days_in_year > 30 ? 'bg-rose-500' : 'bg-blue-500'}`}
+                                                    style={{ width: `${row.year_percentage}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${row.days > 30 ? 'bg-rose-50 text-rose-500 border-rose-100' : row.days > 15 ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>
-                                            {row.days > 30 ? 'CRITICAL' : row.days > 15 ? 'MODERATE' : 'STABLE'}
+                                        <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase shadow-sm border ${row.days_in_year > 30 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                            {row.days_in_year > 30 ? 'Deployment Critical' : 'Recent Bench'}
                                         </span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={Clock} message="All resources are currently active." />}
+                            )) : <EmptyTable icon={Clock} message="All resources are currently active." colSpan={3} />}
                         </tbody>
                     </table>
                 )}
@@ -364,9 +379,59 @@ const DashboardTables = ({
                                         <span className="text-slate-400 font-mono text-[9px] font-bold">{formatDate(row.expiryDate || row.expiry_date)}</span>
                                     </td>
                                 </tr>
-                            )) : <EmptyTable icon={Award} message="No certification expiry records." />}
+                            )) : <EmptyTable icon={Award} message="No certification expiry records." colSpan={2} />}
                         </tbody>
                     </table>
+                )}
+
+                {activeTab === 'growth' && (
+                    <div className="p-5 flex flex-col h-full">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-1">Utilization Speed</span>
+                                <h4 className="text-xl font-black text-slate-800 tracking-tighter">
+                                    {trendLatest}% <span className={`text-xs ml-1 ${trendDelta >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {trendDelta >= 0 ? '+' : ''}{trendDelta}%
+                                    </span>
+                                </h4>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Peak</span>
+                                    <span className="text-xs font-bold text-slate-700">{trendPeak}%</span>
+                                </div>
+                                <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Avg</span>
+                                    <span className="text-xs font-bold text-slate-700">{trendAverage}%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col gap-3">
+                            {recentTrends.length > 0 ? recentTrends.map((trend, idx) => (
+                                <div 
+                                    key={idx}
+                                    onClick={() => setSelectedTrendIndex(idx)}
+                                    className={`p-3 rounded-2xl border transition-all cursor-pointer ${selectedTrendIndex === idx ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedTrendIndex === idx ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-slate-100 text-slate-400'}`}>
+                                                <TrendingUp size={14} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{trend.month} Status</span>
+                                                <span className="text-xs font-bold text-slate-800">Growth Progress</span>
+                                            </div>
+                                        </div>
+                                        <span className={`text-sm font-black ${selectedTrendIndex === idx ? 'text-blue-600' : 'text-slate-700'}`}>
+                                            {trend.value}%
+                                        </span>
+                                    </div>
+                                </div>
+                            )) : <EmptyTable icon={BarChart2} message="Insufficient trend data available." colSpan={1} />}
+                        </div>
+                    </div>
                 )}
 
                 {activeTab === 'riskboard' && (() => {
@@ -405,11 +470,9 @@ const DashboardTables = ({
 
             <div className="px-5 py-3 bg-slate-50/50 border-t border-gray-50 flex items-center justify-between">
                 <div className="flex items-center gap-3 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Crit</span>
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Mod</span>
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Stable</span>
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Immediate Action Required</span>
                 </div>
-                <div className="text-[10px] font-black text-slate-400 flex items-center gap-1 uppercase tracking-tighter opacity-50 cursor-not-allowed">
+                <div className="text-[10px] font-black text-blue-600 flex items-center gap-1 uppercase tracking-tighter cursor-pointer hover:underline" onClick={() => navigate('/info/employees/list')}>
                     Full Analytics <ArrowUpRight size={12} />
                 </div>
             </div>
@@ -417,14 +480,18 @@ const DashboardTables = ({
     );
 };
 
-const EmptyTable = ({ icon: Icon, message }) => (
-    <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center">
-        <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
-            <Icon size={24} className="opacity-20 text-slate-400" />
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-widest">{message}</p>
-        <p className="text-[9px] font-medium mt-0.5">Check back later for updates</p>
-    </div>
+const EmptyTable = ({ icon: Icon, message, colSpan = 4 }) => (
+    <tr>
+        <td colSpan={colSpan}>
+            <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center">
+                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
+                    <Icon size={24} className="opacity-20 text-slate-400" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest">{message}</p>
+                <p className="text-[9px] font-medium mt-0.5">Check back later for updates</p>
+            </div>
+        </td>
+    </tr>
 );
 
 export default DashboardTables;

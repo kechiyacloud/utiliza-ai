@@ -300,7 +300,7 @@ const AutoReportsSection = () => (
                 </div>
                 <div>
                     <p className={labelCls}>Delivery Email</p>
-                    <input type="email" className={`${inputCls} max-w-xs`} placeholder="you@company.com" readOnly />
+                    <input type="email" className={`${inputCls} max-w-xs`} placeholder="you@organization.com" readOnly />
                 </div>
                 <button disabled className="flex items-center gap-2 px-5 py-2.5 bg-mainTheme text-white text-sm font-semibold rounded-xl opacity-50 cursor-not-allowed">
                     <FileText size={15} /> Schedule Report

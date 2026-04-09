@@ -816,7 +816,7 @@ def projects_list():
                 p.client_id,
                 p.partner_id
             FROM projects p
-            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
+            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
             LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id

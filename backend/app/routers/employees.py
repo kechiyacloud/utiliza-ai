@@ -16,6 +16,7 @@ def _sync_employee_allocations(cur, employee_ids):
             SELECT SUM(pa.allocation_percentage)
             FROM projects_allocation pa
             WHERE pa.employee_id = p.employee_id
+              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
         ), 0),
         employee_status = CASE
             WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
@@ -23,16 +24,19 @@ def _sync_employee_allocations(cur, employee_ids):
                 SELECT SUM(pa2.allocation_percentage)
                 FROM projects_allocation pa2
                 WHERE pa2.employee_id = p.employee_id
+                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
             ), 0) <= 0 THEN 'Bench'
             WHEN COALESCE((
                 SELECT SUM(pa2.allocation_percentage)
                 FROM projects_allocation pa2
                 WHERE pa2.employee_id = p.employee_id
+                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
             ), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
             WHEN COALESCE((
                 SELECT SUM(pa2.allocation_percentage)
                 FROM projects_allocation pa2
                 WHERE pa2.employee_id = p.employee_id
+                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
             ), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
             ELSE 'Allocated'
         END
@@ -109,6 +113,7 @@ def get_bench_employee_count():
                   SELECT SUM(pa.allocation_percentage)
                   FROM projects_allocation pa
                   WHERE pa.employee_id = m.employee_id
+                    AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
               ), 0) <= 0
         """)
         count = cur.fetchone()[0]
@@ -167,6 +172,7 @@ def get_all_employees():
                         ELSE 0 
                     END) as priority_rank
                 FROM projects_allocation
+                WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
                 GROUP BY employee_id
             ),
             DynAlloc AS (
@@ -514,6 +520,7 @@ def get_employee_by_id(employee_id: str):
                     ELSE 0 
                 END) as priority_rank
             FROM projects_allocation
+            WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
             GROUP BY employee_id
         ),
         DynAlloc AS (

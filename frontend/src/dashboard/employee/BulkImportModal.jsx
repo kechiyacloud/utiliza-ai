@@ -63,7 +63,7 @@ const CSV_TEMPLATE_HEADERS = [
 ];
 
 const CSV_SAMPLE_ROW = [
-  'EMP001', 'John Doe', 'john.doe@company.com', '9876543210', '2024-01-15',
+  'EMP001', 'John Doe', 'john.doe@organization.com', '9876543210', '2024-01-15',
   'Senior Developer', 'Engineering', 'Chennai', 'Hybrid', 'Full Time',
   'React,Node.js,PostgreSQL'
 ];
