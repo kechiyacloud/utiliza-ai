@@ -268,8 +268,8 @@ function Dashboard() {
   const dynamicKpiData = [
     { title: `${contextLabel} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
     { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
-    { title: "Upcoming Bench (30d)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } }
+    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: UsersIcon, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
+    { title: "Upcoming Bench (30d)", value: _metrics?.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -407,7 +407,11 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
+<<<<<<< HEAD
                     Allocate vs. Available
+=======
+                    Allocate vs Available
+>>>>>>> feat/prod-test1
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
@@ -428,12 +432,23 @@ function Dashboard() {
             </div>
 
             {/* Actionable Todo List (Span 1) */}
-            <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 opacity-60 grayscale pointer-events-none select-none">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <ListTodo size={16} className="text-blue-500" />
-                Actionable Todo List
-                <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
-              </h2>
+            <div className="relative bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 overflow-hidden">
+              {/* Coming Soon Overlay */}
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 backdrop-blur-[3px] rounded-2xl p-6">
+                <div className="bg-white p-3 rounded-full shadow-sm border border-slate-100 mb-3">
+                  <ListTodo size={28} className="text-blue-500" />
+                </div>
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest mb-1 shadow-white">Coming Soon</h3>
+                <p className="text-xs font-semibold text-slate-600 shadow-white">Intelligent task management is under development.</p>
+              </div>
+
+              {/* Blurred Content */}
+              <div className="opacity-40 blur-[3px] flex flex-col gap-3 pointer-events-none select-none h-full">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <ListTodo size={16} className="text-blue-500" />
+                  Actionable Todo List
+                  <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
+                </h2>
 
               <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
                 <span className="font-semibold">Admin controls are enabled for this board.</span>
@@ -530,6 +545,7 @@ function Dashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
               </div>
             </div>
           </div>

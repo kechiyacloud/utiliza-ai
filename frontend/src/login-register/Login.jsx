@@ -31,12 +31,13 @@ function Login() {
     setLoading(true)
 
     try {
-      await api.post("/login", {
+      const response = await api.post("/login", {
         email: formData.email,
         password: formData.password
       })
 
       localStorage.setItem("userEmail", formData.email);
+      localStorage.setItem("token", response.data.token);
       navigate("/info")
 
     } catch (err) {

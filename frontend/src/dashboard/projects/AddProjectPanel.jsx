@@ -7,6 +7,7 @@ import {
     fetchAutocompleteClients,
     fetchClientsByPartner,
     createSimpleClient,
+    createFullClient,
     updateSimpleClient,
     deleteSimpleClient,
     fetchPartnerClients,
@@ -255,6 +256,144 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                             }`}>
                         {isDelete ? <><Trash2 size={14} /> Delete</> :
                          mode === 'edit' ? <><Check size={14} /> Update</> :
+                         <><Plus size={14} /> Add</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) => {
+    const [formData, setFormData] = useState({ name: initialName || '', industry: 'Retail', status: 'Stable', budget: '', url: '' });
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setFormData({ name: initialName || '', industry: 'Retail', status: 'Stable', budget: '', url: '' });
+            if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    }, [isOpen, initialName]);
+
+    if (!isOpen) return null;
+
+    const isDelete = mode === 'delete';
+    const isEdit = mode === 'edit';
+    const title = isDelete ? `Delete Client` : isEdit ? `Edit Client` : `Add Client`;
+    const accentColor = isDelete ? 'red' : isEdit ? 'blue' : 'emerald';
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
+            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg mx-4 overflow-hidden animate-in">
+                <div className={`px-6 pt-6 pb-4 border-b border-gray-100`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
+                            {isDelete ? <Trash2 size={18} className={`text-${accentColor}-500`} /> :
+                             isEdit ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
+                             <Plus size={18} className={`text-${accentColor}-500`} />}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                {isDelete ? `This action cannot be undone.` : `Enter client details.`}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+                    {error && (
+                        <div className="mb-2 flex items-center gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+                            <AlertCircle size={16} className="shrink-0" /> {error}
+                        </div>
+                    )}
+
+                    {isDelete ? (
+                        <p className="text-sm text-gray-600">
+                            Are you sure you want to delete <strong className="text-gray-900">"{initialName}"</strong>?
+                        </p>
+                    ) : (
+                        <>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Client Name *</label>
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="Enter client name"
+                                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white focus:border-blue-300 transition-all font-medium text-gray-800"
+                                />
+                            </div>
+                            {mode === 'add' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Industry</label>
+                                        <input
+                                            type="text"
+                                            value={formData.industry}
+                                            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                                            placeholder="e.g. Retail"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none transition-all font-medium text-gray-800"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status</label>
+                                        <select
+                                            value={formData.status}
+                                            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none transition-all font-medium text-gray-800"
+                                        >
+                                            <option value="Stable">Stable</option>
+                                            <option value="Growing">Growing</option>
+                                            <option value="At Risk">At Risk</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Budget ($)</label>
+                                        <input
+                                            type="number"
+                                            value={formData.budget}
+                                            onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                                            placeholder="0"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none transition-all font-medium text-gray-800"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Website URL</label>
+                                        <input
+                                            type="text"
+                                            value={formData.url}
+                                            onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                                            placeholder="https://"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none transition-all font-medium text-gray-800"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div className="px-6 pb-6 pt-2 flex justify-end gap-3 bg-white">
+                    <button type="button" onClick={onCancel}
+                        className="px-5 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 font-bold text-sm hover:bg-gray-50 transition-all">
+                        Cancel
+                    </button>
+                    <button type="button"
+                        onClick={() => onConfirm(isDelete ? initialName : formData)}
+                        className={`px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all shadow-lg flex items-center gap-2
+                            ${isDelete
+                              ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
+                              : isEdit
+                                  ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-200'
+                                  : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
+                            }`}
+                    >
+                        {isDelete ? <><Trash2 size={14} /> Delete</> :
+                         isEdit ? <><Check size={14} /> Update</> :
                          <><Plus size={14} /> Add</>}
                     </button>
                 </div>
@@ -824,10 +963,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     const closeModal = () => setModal({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
 
-    const handleModalConfirm = async (name) => {
+    const handleModalConfirm = async (nameOrData) => {
         const isClient = modal.entityType === 'client';
         const selectedId = isClient ? formData.clientId : formData.partnerId;
-        const trimmedName = (name || '').trim();
+        const isObject = typeof nameOrData === 'object' && nameOrData !== null;
+        const trimmedName = isObject ? (nameOrData.name || '').trim() : (nameOrData || '').trim();
 
         if (modal.mode !== 'delete' && !trimmedName) {
             setModal(prev => ({ ...prev, error: 'Name cannot be empty.' }));
@@ -836,13 +976,23 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
         try {
             if (modal.mode === 'add') {
-                const created = isClient
-                    ? await createSimpleClient(trimmedName)
-                    : await createPartnerClient(trimmedName);
-                await loadEntities();
                 if (isClient) {
+                    const isPartnerClientProject = formData.type === 'Client' && formData.clientType === 'Partner Client';
+                    const clientData = {
+                        id: `CL-${Date.now()}`, // simple random ID logic
+                        name: trimmedName,
+                        url: isObject && nameOrData.url ? nameOrData.url : null,
+                        industry: isObject && nameOrData.industry ? nameOrData.industry : 'Retail',
+                        status: isObject && nameOrData.status ? nameOrData.status : 'Stable',
+                        budget: isObject && nameOrData.budget ? parseFloat(nameOrData.budget) : null,
+                        partner_id: isPartnerClientProject ? formData.partnerId : null,
+                    };
+                    const created = await createFullClient(clientData);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, clientId: String(created.id), clientName: created.name }));
                 } else {
+                    const created = await createPartnerClient(trimmedName);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, partnerId: String(created.id), partnerName: created.name }));
                 }
             } else if (modal.mode === 'edit') {
@@ -1217,10 +1367,9 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handlePartnerSelect}
                                                 placeholder="Select Partner"
                                                 label="partners"
-                                                disabled
                                             />
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Add Partner">
+                                            <button type="button" onClick={() => openModal('add', 'partner')}
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Partner">
                                                 <Plus size={12} /> Add
                                             </button>
                                             <button type="button" disabled
@@ -1246,12 +1395,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handleClientSelect}
                                                 placeholder={isPartnerClient && hasPartnerMappedClients && !formData.partnerId ? 'Select Partner first' : 'Select Client'}
                                                 label="clients"
-                                                disabled
+                                                disabled={isPartnerClient && !formData.partnerId}
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
                                                 loadOptions={fetchAutocompleteClients}
                                             />
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Add Client">
+                                            <button type="button" onClick={() => openModal('add', 'client')} disabled={isPartnerClient && !formData.partnerId}
+                                                className={`px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold ${isPartnerClient && !formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-emerald-100 transition-colors'} flex items-center gap-1`} title="Add Client">
                                                 <Plus size={12} /> Add
                                             </button>
                                             <button type="button" disabled
@@ -1535,17 +1684,29 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 </div>
             </div>
 
-            {/* Entity Modal */}
-            <EntityModal
-                key={`${modal.mode}-${modal.entityType}-${modal.name}-${modal.isOpen ? 'open' : 'closed'}`}
-                isOpen={modal.isOpen}
-                mode={modal.mode}
-                entityLabel={entityLabel}
-                initialName={modal.name}
-                onConfirm={handleModalConfirm}
-                onCancel={closeModal}
-                error={modal.error}
-            />
+            {/* Entity Modals */}
+            {modal.entityType === 'client' ? (
+                <ClientModal
+                    key={`${modal.mode}-${modal.entityType}-${modal.name}-${modal.isOpen ? 'open' : 'closed'}`}
+                    isOpen={modal.isOpen}
+                    mode={modal.mode}
+                    initialName={modal.name}
+                    onConfirm={handleModalConfirm}
+                    onCancel={closeModal}
+                    error={modal.error}
+                />
+            ) : (
+                <EntityModal
+                    key={`${modal.mode}-${modal.entityType}-${modal.name}-${modal.isOpen ? 'open' : 'closed'}`}
+                    isOpen={modal.isOpen}
+                    mode={modal.mode}
+                    entityLabel={entityLabel}
+                    initialName={modal.name}
+                    onConfirm={handleModalConfirm}
+                    onCancel={closeModal}
+                    error={modal.error}
+                />
+            )}
         </>
     );
 };

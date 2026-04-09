@@ -28,6 +28,11 @@ export const createClientForPartner = async (name, partnerId) => {
     return res.data;
 };
 
+export const createFullClient = async (clientData) => {
+    const res = await api.post("/clients", clientData);
+    return res.data;
+};
+
 export const updateSimpleClient = async (id, name) => {
     const res = await api.put(`/clients/simple/${id}`, { name });
     return res.data;

@@ -1,7 +1,21 @@
+import re
 from fastapi import APIRouter, HTTPException
 from app.database import get_db_connection, release_db_connection
-from app.auth_utils import hash_password, verify_password
+from app.auth_utils import hash_password, verify_password, create_access_token
 from pydantic import BaseModel
+
+
+def _validate_password_strength(password: str):
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one special character (!@#$%^&*)")
 
 router = APIRouter()
 
@@ -31,6 +45,9 @@ def register_user(data: RegisterRequest):
                 status_code=409,
                 detail="User already exists"
             )
+
+        # Enforce password strength
+        _validate_password_strength(password)
 
         # Hash password
         hashed_password = hash_password(password)
@@ -104,11 +121,14 @@ def login_user(data: LoginRequest):
                 detail="Invalid email or password"
             )
 
+        token = create_access_token(user_id, email)
+
         print("Login successful")
 
         return {
             "message": "Login successful",
-            "user_id": user_id
+            "user_id": user_id,
+            "token": token
         }
 
     except HTTPException as e:

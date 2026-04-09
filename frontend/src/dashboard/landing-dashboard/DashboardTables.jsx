@@ -495,3 +495,4 @@ const EmptyTable = ({ icon: Icon, message, colSpan = 4 }) => (
 );
 
 export default DashboardTables;
+export default DashboardTables;
