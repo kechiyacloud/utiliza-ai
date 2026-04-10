@@ -318,7 +318,7 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 disabled={disabled}
-                className={`w-full p-2.5 bg-gray-50/80 border rounded-lg text-xs outline-none text-left font-semibold transition-all flex items-center justify-between gap-2 shadow-sm
+                className={`w-full p-3 bg-gray-50/80 border rounded-lg text-xs outline-none text-left font-semibold transition-all flex items-center justify-between gap-2 shadow-sm
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
                     ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-400 shadow-blue-50/50' : 'border-gray-200 hover:border-blue-300 hover:bg-white'}`}
             >
@@ -345,7 +345,7 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
                             />
                         </div>
                     </div>
-                    <div className="max-h-56 overflow-y-auto py-1 custom-scrollbar">
+                    <div className="max-h-72 overflow-y-auto py-1 custom-scrollbar">
                         {filtered.length === 0 ? (
                             <div className="px-4 py-8 text-center">
                                 <Search size={20} className="mx-auto text-slate-200 mb-2" />
@@ -1058,6 +1058,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         setLocalRows([...localRows, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' })]);
     };
 
+    const handleInsertRowAfter = (index) => {
+        const newRows = [...localRows];
+        newRows.splice(index + 1, 0, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' }));
+        setLocalRows(newRows);
+    };
+
     const getRowTotal = (row) => {
         return visibleWeeks.reduce((sum, wk) => {
             const { withinRange, hours } = getWeeklyHoursForWeek(row, wk);
@@ -1500,7 +1506,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 <table className="min-w-[1200px] text-sm">
                     <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200">
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[180px]">
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[230px]">
                                         <div className="flex items-center gap-1.5"><Users size={13} /> Resource</div>
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[140px]">Role</th>
@@ -1543,13 +1549,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                 </td>
                             </tr>
                         )}
-                        {displayRows.map((row) => {
+                        {displayRows.map((row, rowIdx) => {
                             const ridx = row._sourceIndex;
+                            const isLastRow = rowIdx === displayRows.length - 1;
                             const rowTotal = getRowTotal(row);
                             const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
                             return (
-                                <tr key={ridx} className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
-                                    <td className="px-4 py-3 font-semibold text-slate-800 min-w-[180px]">
+                                <React.Fragment key={ridx}>
+                                <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
+                                    <td className="px-4 py-3 font-semibold text-slate-800 min-w-[230px]">
                                         {isEditing ? (
                                             <SearchableDropdown 
                                                 items={employees}
@@ -1779,6 +1787,20 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         </td>
                                     )}
                                 </tr>
+                                {isEditing && isLastRow && (
+                                    <tr className="border-0 bg-transparent">
+                                        <td className="px-4 py-2 min-w-[230px]">
+                                            <button
+                                                onClick={handleAddRow}
+                                                className="flex items-center gap-1.5 text-blue-500 text-xs font-bold hover:text-blue-700 transition-colors"
+                                            >
+                                                <Plus size={18} /> Add Resource
+                                            </button>
+                                        </td>
+                                        <td colSpan={9 + visibleWeeks.length}></td>
+                                    </tr>
+                                )}
+                                </React.Fragment>
                             );
                         })}
                         {localRows.length > 0 && displayRows.length === 0 && (

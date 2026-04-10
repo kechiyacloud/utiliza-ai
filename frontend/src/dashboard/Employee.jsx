@@ -144,9 +144,12 @@ function Employee() {
     });
   }, [allEmployees, combinedFilters]);
 
+  // Dynamic context Label
+  const contextLabel = combinedFilters.departments?.length > 0 ? 'Team' : 'Organization';
+
   // Derived stats from the filtered group
   const totalEmployeesCount = baseGroup.length;
-  const benchEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length;
+  const benchEmployeesCount = baseGroup.filter(e => (e.employee_allocations || 0) <= 0).length;
   const noticeEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
 
   return (
@@ -162,8 +165,8 @@ function Employee() {
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Employee Management</h1>
-          <p className="text-gray-500">Manage your workforce, track status, and view details.</p>
+          <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Management</h1>
+          <p className="text-gray-500">See how your {contextLabel.toLowerCase()} is doing and manage people records.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -281,7 +284,7 @@ function Employee() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
-          label="Total Employees"
+          label={`Total ${contextLabel === 'Team' ? 'Team' : 'Talent'}`}
           value={totalEmployeesCount}
           icon={Users}
           colorClass="bg-blue-500"
@@ -291,7 +294,7 @@ function Employee() {
           onClick={() => setCardFilter(null)}
         />
         <StatCard
-          label="Bench Employees"
+          label="Available Now"
           value={benchEmployeesCount}
           icon={BriefcaseBusiness}
           colorClass="bg-orange-500"
@@ -301,7 +304,7 @@ function Employee() {
           onClick={() => setCardFilter('bench')}
         />
         <StatCard
-          label="Notice Period"
+          label="Leaving Soon"
           value={noticeEmployeesCount}
           icon={Hourglass}
           colorClass="bg-red-500"
@@ -312,7 +315,7 @@ function Employee() {
         />
         <NewJoinerCard employees={baseGroup} isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
         <StatCard
-          label="Skills Overview"
+          label="Skill Summary"
           value="Tap to View"
           icon={Award}
           colorClass="bg-purple-500"
@@ -325,6 +328,7 @@ function Employee() {
       {/* Employee Table */}
       <div className='flex-1 w-full mt-4'>
         <EmployeeTable
+          contextLabel={contextLabel}
           employees={allEmployees}
           loading={loading}
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}

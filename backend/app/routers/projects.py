@@ -493,6 +493,8 @@ def _derive_project_tag(tm: TeamMemberCreate, project_billable: str) -> str:
         return "Non-Billable"
     if tm.billable_shadow == "Billable":
         return "Billable"
+    if tm.billable_shadow and "non" in tm.billable_shadow.lower():
+        return "Non-Billable"
     # Fallback: derive from project-level flag
     return "Non-Billable" if "non" in (project_billable or "").lower() else "Billable"
 
@@ -823,7 +825,7 @@ def projects_list():
                 p.client_id,
                 p.partner_id
             FROM projects p
-            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
+            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
             LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
@@ -971,7 +973,8 @@ def project_resources(project_id: str):
                 pa.allocation_percentage,
                 wa.allocation_year,
                 wa.week_number,
-                COALESCE(wa.allocated_hours, 0)
+                COALESCE(wa.allocated_hours, 0),
+                pa.project_tags
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
@@ -999,6 +1002,8 @@ def project_resources(project_id: str):
         for r in rows:
             emp_id = r[3]
             if emp_id not in resources_dict:
+                raw_tag = (r[11] or "").strip().lower()
+                billable_shadow = "Non-billable" if raw_tag == "non-billable" else "Billable"
                 resources_dict[emp_id] = {
                     "employee_id": emp_id,
                     "name": r[0] if r[0] else "Unknown Resource",
@@ -1009,6 +1014,7 @@ def project_resources(project_id: str):
                     "allocation_start_date": str(r[5]) if r[5] else None,
                     "allocation_end_date": str(r[6]) if r[6] else None,
                     "allocation_percentage": r[7] or 0,
+                    "billable_shadow": billable_shadow,
                     "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
                     "weekly_hours": {},
                     "_has_weekly_data": False,

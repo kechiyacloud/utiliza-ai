@@ -34,11 +34,11 @@ def allocation_metrics(
         tr_query = "SELECT COUNT(*) FROM employee_master em LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id"
         tr_where = list(where_clauses)
         if resource_type == 'Billable Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable')")
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
         elif resource_type == 'Internal Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable')")
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
         elif resource_type == 'Bench Strength':
-            tr_where.append("p.employee_status = 'Bench'")
+            tr_where.append("COALESCE((SELECT SUM(pa3.allocation_percentage) FROM projects_allocation pa3 WHERE pa3.employee_id = em.employee_id AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
             
         if tr_where:
             tr_query += " WHERE " + " AND ".join(tr_where)
@@ -51,6 +51,7 @@ def allocation_metrics(
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             WHERE LOWER(pa.project_tags) = 'billable'
+              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
         """
         b_where = list(where_clauses)
         if resource_type == 'Bench Strength':
@@ -64,8 +65,9 @@ def allocation_metrics(
         non_billable_query = """
             SELECT COUNT(DISTINCT pa.employee_id)
             FROM projects_allocation pa
-            JOIN employee_master em ON pa.employee_id = em.employee_id
+            JOIN employee_master em pa.employee_id = em.employee_id
             WHERE LOWER(pa.project_tags) = 'non-billable'
+              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
         """
         nb_where = list(where_clauses)
         if resource_type == 'Bench Strength':
@@ -76,7 +78,12 @@ def allocation_metrics(
         non_billable_count = cur.fetchone()[0]
 
         # 4. Bench Strength
-        bench_query = "SELECT COUNT(*) FROM employee_master_pro p JOIN employee_master em ON p.employee_id = em.employee_id WHERE p.employee_status = 'Bench'"
+        bench_query = """
+            SELECT COUNT(*) FROM employee_master em
+            LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
+            WHERE em.date_of_resign IS NULL
+              AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = em.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+        """
         ben_where = list(where_clauses)
         if resource_type == 'Billable Only' or resource_type == 'Internal Only':
              ben_where.append("1=0")
@@ -93,6 +100,7 @@ def allocation_metrics(
                 SELECT COALESCE(SUM(pa.allocation_percentage), 0) / NULLIF((SELECT COUNT(*) FROM employee_master em {0}), 0)
                 FROM projects_allocation pa
                 JOIN employee_master em ON pa.employee_id = em.employee_id
+                WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
             """.format(" WHERE " + " AND ".join(where_clauses) if where_clauses else "")
             
             # Need params twice for SUM and for NULLIF subquery
@@ -110,9 +118,10 @@ def allocation_metrics(
                     FROM projects_allocation pa
                     JOIN employee_master em ON pa.employee_id = em.employee_id
                     WHERE LOWER(pa.project_tags) = 'billable'
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                     {0}
                     GROUP BY pa.employee_id
-                    HAVING COUNT(DISTINCT pa.project_id) > 1
+                    HAVING SUM(pa.allocation_percentage) > 100
                 ) overalloc
             """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
             cur.execute(overalloc_query, tuple(params))
@@ -153,8 +162,8 @@ def allocation_projects(
             SELECT
                 pa.project_id,
                 p.project_name,
-                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'billable' THEN pa.employee_id END) AS billable_count,
-                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'non-billable' THEN pa.employee_id END) AS non_billable_count
+                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS billable_count,
+                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'non-billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS non_billable_count
             FROM projects_allocation pa
             JOIN projects p ON pa.project_id = p.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
@@ -175,7 +184,7 @@ def allocation_projects(
         elif resource_type == 'Internal Only':
             where_clauses.append("LOWER(pa.project_tags) = 'non-billable'")
         elif resource_type == 'Bench Strength':
-            where_clauses.append("ppro.employee_status = 'Bench'")
+            where_clauses.append("COALESCE((SELECT SUM(pa4.allocation_percentage) FROM projects_allocation pa4 WHERE pa4.employee_id = em.employee_id AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
 
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
@@ -223,6 +232,7 @@ def project_employees(project_id: str):
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             WHERE pa.project_id = %s
+              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
             ORDER BY em.employee_name
         """, (project_id,))
 
@@ -266,7 +276,7 @@ def organization_utilization(
             SELECT COALESCE(AVG(pa.allocation_percentage), 0) 
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
-            JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
+            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
         """
         where_clauses = []
         params = []

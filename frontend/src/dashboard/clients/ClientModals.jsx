@@ -77,13 +77,13 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                     <div className="grid grid-cols-2 gap-6">
                         {/* Website URL + Auto-Fetch */}
                         <div className="col-span-2">
-                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Company Domain / URL</label>
+                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Organization Domain / URL</label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <input
                                         type="text"
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3 text-white focus:outline-none focus:border-[#3BA9FB]/50 placeholder:text-white/10 text-sm transition-all"
-                                        placeholder="company.com"
+                                        placeholder="organization.com"
                                         value={formData.website}
                                         onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                                     />
@@ -109,7 +109,7 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Company Legal Name</label>
+                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Organization Legal Name</label>
                             <input
                                 type="text"
                                 required
@@ -327,7 +327,7 @@ export const EditClientModal = ({ isOpen, onClose, client, onSave }) => {
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-2 gap-6">
                         <div className="col-span-2">
-                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Company Legal Name</label>
+                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Organization Legal Name</label>
                             <input
                                 type="text"
                                 required

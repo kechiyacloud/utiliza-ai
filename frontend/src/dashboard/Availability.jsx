@@ -855,6 +855,8 @@ const Availability = () => {
                 onClose={() => setIsFilterOpen(false)}
                 pendingDept={pendingDept}
                 setPendingDept={setPendingDept}
+                pendingLocation={pendingLocation}
+                setPendingLocation={setPendingLocation}
                 pendingProjects={pendingProjects}
                 setPendingProjects={setPendingProjects}
                 pendingStartMonth={pendingStartMonth}

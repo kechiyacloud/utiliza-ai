@@ -143,7 +143,7 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Company Utilization</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Organization Utilization</h1>
             <p className="text-sm text-gray-500">Deep dive into organization-wide availability and active projects.</p>
           </div>
         </div>

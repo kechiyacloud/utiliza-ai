@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, User, Download } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Download, Users, Briefcase, Zap, TrendingUp } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getEmployeeList } from '../../api/employeeApi';
 import EmployeeStatusTag from '../../components/EmployeeStatusTag';
@@ -28,6 +28,32 @@ const calculateTenure = (joiningDate) => {
     const monthStr = months > 0 ? `${months} Mo${months > 1 ? 's' : ''}` : '';
 
     return [yearStr, monthStr].filter(Boolean).join(' ');
+};
+
+const StatCard = ({ icon: Icon, value, label, colorTheme = 'blue' }) => {
+    const themeStyles = {
+        blue: { bg: 'bg-blue-50', text: 'text-blue-500', border: 'border-blue-100' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-500', border: 'border-emerald-100' },
+        rose: { bg: 'bg-rose-50', text: 'text-rose-500', border: 'border-rose-100' },
+        amber: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100' },
+        slate: { bg: 'bg-slate-50', text: 'text-slate-500', border: 'border-slate-100' }
+    };
+    const theme = themeStyles[colorTheme] || themeStyles.blue;
+
+    return (
+        <div className={`bg-white p-4 rounded-2xl shadow-sm border ${theme.border} flex flex-col items-start relative overflow-hidden flex-1`}>
+            <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full blur-3xl opacity-20 ${theme.bg}`}></div>
+            <div className="flex w-full items-start justify-between z-10 mb-2">
+                <div className={`p-1.5 rounded-lg ${theme.bg} ${theme.text}`}>
+                    <Icon size={20} strokeWidth={2.5} />
+                </div>
+            </div>
+            <div className="relative z-10">
+                <h3 className="text-2xl font-bold text-slate-900 tracking-tight leading-none mb-1">{value || 0}</h3>
+                <p className="text-slate-500 text-[10px] font-bold tracking-wider uppercase">{label}</p>
+            </div>
+        </div>
+    );
 };
 
 
@@ -97,6 +123,22 @@ export default function EmployeeMasterList() {
         fetchEmployees();
     }, [sortOrder, location.state?.cardFilter, location.state?.departmentFilter, location.state?.search]);
 
+    const stats = React.useMemo(() => {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+        return {
+            total: employees.length,
+            onProjects: employees.filter(emp => (emp.billable || '').toLowerCase() === 'billable').length,
+            onBench: employees.filter(emp => (emp.employee_status || '').toLowerCase() === 'bench').length,
+            newJoiners: employees.filter(emp => {
+                const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
+                return joiningDate && joiningDate >= thirtyDaysAgo;
+            }).length
+        };
+    }, [employees]);
+
+    const contextLabel = location.state?.departmentFilter ? 'Team' : 'Organization';
+
     const toggleSortOrder = () => {
         setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
     };
@@ -104,7 +146,7 @@ export default function EmployeeMasterList() {
     if (loading) {
         return (
             <div className="p-6 h-full flex items-center justify-center">
-                <p className="text-gray-400 text-lg">Loading employee master list...</p>
+                <p className="text-gray-400 text-lg">Loading {contextLabel.toLowerCase()} records...</p>
             </div>
         );
     }
@@ -126,14 +168,42 @@ export default function EmployeeMasterList() {
                     )}
                     <div>
                         <h1 className="text-2xl font-bold text-gray-800">
-                            Employee Master List{filterLabel}
+                            {contextLabel} Master List{filterLabel}
                         </h1>
-                        <p className="text-gray-500 text-sm">Detailed records including joining dates and tenure.</p>
+                        <p className="text-gray-500 text-sm">A full list of employees showing when they started.</p>
                     </div>
                 </div>
-                <div className="text-sm text-gray-500 font-medium">
-                    Total: <span className="text-gray-800 font-bold">{employees.length}</span> Employees
+                <div className="text-sm text-gray-500 font-medium bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                    {contextLabel === 'Team' ? 'Team Size' : 'Total Talent'}: <span className="text-gray-800 font-bold">{employees.length}</span>
                 </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
+                <StatCard 
+                    icon={Users} 
+                    value={stats.total} 
+                    label={`Total ${contextLabel === 'Team' ? 'Team' : 'Talent'}`} 
+                    colorTheme="slate" 
+                />
+                <StatCard 
+                    icon={Briefcase} 
+                    value={stats.onProjects} 
+                    label="On Projects" 
+                    colorTheme="blue" 
+                />
+                <StatCard 
+                    icon={Zap} 
+                    value={stats.onBench} 
+                    label="Available Now" 
+                    colorTheme="rose" 
+                />
+                <StatCard 
+                    icon={TrendingUp} 
+                    value={stats.newJoiners} 
+                    label="Joined Recently" 
+                    colorTheme="emerald" 
+                />
             </div>
 
             {/* Table Container */}

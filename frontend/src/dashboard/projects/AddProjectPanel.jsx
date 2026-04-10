@@ -1083,6 +1083,24 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }));
     };
 
+    const handleInsertMemberAt = (index) => {
+        setFormData(prev => {
+            const newTeam = [...prev.teamMembers];
+            newTeam.splice(index + 1, 0, {
+                employee_id: '',
+                name: '',
+                role: '',
+                location: 'Remote',
+                allocation_pct: '',
+                allocation_start_date: '',
+                allocation_end_date: '',
+                billable_shadow: 'Billable',
+                weekly_hours: {},
+            });
+            return { ...prev, teamMembers: newTeam };
+        });
+    };
+
     /* Auto-fill weekly hours based on allocation_pct and date range */
     const autoFillWeeks = (index, updatedMember) => {
         const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
@@ -1521,7 +1539,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             <thead>
                                                 <tr className="bg-blue-50/70 border-b border-slate-200">
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[160px]">Name</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[220px]">Name</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
@@ -1552,10 +1570,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {formData.teamMembers.map((member, idx) => (
-                                                    <tr key={idx} className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
+                                                {formData.teamMembers.map((member, idx) => {
+                                                    const isLastMember = idx === formData.teamMembers.length - 1;
+                                                    return (
+                                                    <React.Fragment key={idx}>
+                                                    <tr className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
                                                         <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
-                                                        <td className="px-2 py-2 min-w-[160px]">
+                                                        <td className="px-2 py-2 min-w-[220px]">
                                                             <SearchableDropdown
                                                                 items={employeeOptions}
                                                                 selectedId={member.employee_id}
@@ -1660,7 +1681,24 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                             </button>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                    {isLastMember && (
+                                                    <tr className="border-0 bg-transparent">
+                                                        <td className="px-3 py-2 text-center text-slate-300 text-xs">{formData.teamMembers.length + 1}</td>
+                                                        <td className="px-2 py-2 min-w-[220px]">
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAddTeamMember}
+                                                                className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold hover:text-emerald-800 transition-colors"
+                                                            >
+                                                                <Plus size={18} /> Add Team Member
+                                                            </button>
+                                                        </td>
+                                                        <td colSpan={7 + visibleWeeks.length + (hasMoreWeeks ? 1 : 0)}></td>
+                                                    </tr>
+                                                    )}
+                                                    </React.Fragment>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>

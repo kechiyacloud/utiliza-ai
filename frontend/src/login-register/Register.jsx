@@ -1,8 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { CD_Blue } from '../Assets.jsx'
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import api from "../api/axios"
+
+const PASSWORD_RULES = [
+  { label: 'At least 8 characters',         test: (p) => p.length >= 8 },
+  { label: 'One uppercase letter (A–Z)',     test: (p) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a–z)',     test: (p) => /[a-z]/.test(p) },
+  { label: 'One number (0–9)',               test: (p) => /\d/.test(p) },
+  { label: 'One special character (!@#$%…)', test: (p) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
+]
 
 function Register() {
   const navigate = useNavigate()
@@ -18,6 +26,17 @@ function Register() {
     confirmPassword: ''
   })
 
+  const rules = {
+    length: formData.password.length >= 8,
+    upper: /[A-Z]/.test(formData.password),
+    lower: /[a-z]/.test(formData.password),
+    digit: /\d/.test(formData.password),
+    special: /[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]]/.test(formData.password),
+  }
+  const isStrong = Object.values(rules).every(Boolean)
+  const passwordsMatch = formData.password === formData.confirmPassword && formData.confirmPassword.length > 0
+  const canSubmit = isStrong && passwordsMatch
+
   const handleChange = (e) => {
     setFormData(prev => ({
       ...prev,
@@ -25,8 +44,16 @@ function Register() {
     }))
   }
 
+  const passwordRulesPassed = PASSWORD_RULES.every(r => r.test(formData.password))
+  const showStrengthChecklist = formData.password.length > 0
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (!passwordRulesPassed) {
+      setError("Please meet all password requirements before continuing")
+      return
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
@@ -71,8 +98,24 @@ function Register() {
         <button type="button" onClick={() => setShowPassword(!showPassword)} className="input-password-icon" >
           {showPassword ? ( <EyeOff size={16} strokeWidth={1.6} /> ) : ( <Eye size={16} strokeWidth={1.6} /> )}
         </button>
-        
+
       </div>
+
+      {showStrengthChecklist && (
+        <ul className="flex flex-col gap-1 px-1">
+          {PASSWORD_RULES.map((rule) => {
+            const passed = rule.test(formData.password)
+            return (
+              <li key={rule.label} className={`flex items-center gap-2 text-xs font-medium ${passed ? 'text-emerald-400' : 'text-red-400'}`}>
+                {passed
+                  ? <CheckCircle2 size={13} className="flex-shrink-0" />
+                  : <XCircle size={13} className="flex-shrink-0" />}
+                {rule.label}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <div className="relative input-field">
 
@@ -97,7 +140,11 @@ function Register() {
         </div>
       )}
 
-      <button type="submit" className="form-button">
+      <button
+        type="submit"
+        className="form-button disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={!canSubmit || loading}
+      >
         Register
       </button>
     </form>

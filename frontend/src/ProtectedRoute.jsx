@@ -2,9 +2,9 @@
 import { Navigate, Outlet } from 'react-router-dom'
 
 function ProtectedRoute() {
-  const isAuthenticated = Boolean(
-    localStorage.getItem('token')   // OR cookie check
-  )
+  const token = localStorage.getItem('token')
+  const isAuthenticated =
+    Boolean(token) && token !== 'undefined' && token !== 'null'
 
   return isAuthenticated
     ? <Outlet />

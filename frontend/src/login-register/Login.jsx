@@ -31,11 +31,16 @@ function Login() {
     setLoading(true)
 
     try {
-      await api.post("/login", {
+      const response = await api.post("/login", {
         email: formData.email,
         password: formData.password
       })
 
+      if (!response.data.token) {
+        throw new Error("Login failed: no token received from server")
+      }
+
+      localStorage.setItem("token", response.data.token);
       localStorage.setItem("userEmail", formData.email);
       navigate("/info")
 

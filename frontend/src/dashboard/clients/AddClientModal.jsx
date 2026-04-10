@@ -68,13 +68,13 @@ const AddClientModal = ({ isOpen, onClose, onAdd }) => {
 
                     {step === 1 && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            {/* Company Name */}
+                            {/* Organization Name */}
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-400 uppercase">Company Name *</label>
+                                <label className="text-xs font-bold text-gray-400 uppercase">Organization Name *</label>
                                 <input
                                     type="text"
                                     name="name"
-                                    placeholder="Enter company name"
+                                    placeholder="Enter organization name"
                                     className="p-3 bg-gray-800 border border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-gray-200 placeholder-gray-500"
                                     value={formData.name}
                                     onChange={handleChange}
@@ -116,7 +116,7 @@ const AddClientModal = ({ isOpen, onClose, onAdd }) => {
                                 type="button"
                                 onClick={() => {
                                     if (formData.name) setStep(2);
-                                    else alert("Please enter the company name first");
+                                    else alert("Please enter the organization name first");
                                 }}
                                 className="w-full py-3 mt-4 flex items-center justify-center gap-2 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-lg shadow-blue-500/20 transition-all"
                             >

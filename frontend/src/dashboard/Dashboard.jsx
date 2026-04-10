@@ -263,8 +263,10 @@ function Dashboard() {
   // Map Backend Executive Metrics to UI Arrays
   const _metrics = data?.executiveMetrics || {};
 
+  const contextLabel = selectedDepartment === 'Overall' ? 'Organization' : 'Team';
+
   const dynamicKpiData = [
-    { title: "Company Utilization", value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
+    { title: `${contextLabel} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
     { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
     { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: UsersIcon, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
     { title: "Upcoming Bench (30d)", value: _metrics?.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } }
@@ -274,7 +276,7 @@ function Dashboard() {
 
   const dynamicAllocationData = [
     { name: 'Billable', value: _metrics.billable_headcount || 0, color: '#3b82f6' },
-    { name: 'Internal', value: _metrics.internal_headcount || 0, color: '#10b981' },
+    { name: 'Non-billable', value: _metrics.internal_headcount || 0, color: '#10b981' },
     { name: 'Bench', value: _metrics.bench_headcount || 0, color: '#f59e0b' },
     { name: 'Notice Period', value: _metrics.notice_period || 0, color: '#ef4444' },
   ].filter(item => item.value > 0);
@@ -322,7 +324,7 @@ function Dashboard() {
               Dashboard
             </h1>
             <p className="mt-1.5 text-sm font-medium text-slate-500">
-              Strategic overview of workforce utilization, financials, and project health.
+              See how your {contextLabel.toLowerCase()} is doing, track project progress, and check overall health.
             </p>
           </div>
 
@@ -407,7 +409,7 @@ function Dashboard() {
                     <BarChart2 size={16} className="text-blue-500" />
                     Allocate vs Available
                   </h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Monthly allocated FTE vs remaining active availability</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
@@ -418,8 +420,8 @@ function Dashboard() {
                     <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="availability" name="Availability" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocated" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -553,7 +555,7 @@ function Dashboard() {
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <PieChartIcon size={18} className="text-indigo-500" />
-                Workforce Allocation
+                {contextLabel} Allocation
               </h2>
               <div className="h-[200px] w-full relative">
                 <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
@@ -618,12 +620,12 @@ function Dashboard() {
                 </h2>
                 <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-1 max-h-[260px]">
+              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
                 <table className="w-full">
-                    <thead className="sticky top-0 bg-white z-10">
-                        <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
-                            <th className="text-left py-2 px-5">Employee</th>
-                            <th className="text-left py-2 px-5">Skill Set</th>
+                    <thead className="sticky top-0 z-10">
+                        <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                            <th className="text-left py-2 px-5 bg-white">Employee</th>
+                            <th className="text-left py-2 px-5 bg-white">Skill Set</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -667,6 +669,7 @@ function Dashboard() {
           {/* Operational Insights Tables */}
           <div className="w-full mt-2 pb-8">
             <DashboardTables
+              contextLabel={contextLabel}
               availability={data?.resourceAvailability || []}
               skillsGap={data?.skillsGap || []}
               transitions={data?.recentTransitions || []}
