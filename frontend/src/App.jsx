@@ -58,9 +58,9 @@ function App() {
             <Route path='verify' element={withSuspense(<Verify />, 'Loading verification...')} />
           </Route>
 
-          {/* DASHBOARD — protected: requires valid token in localStorage */}
-          <Route element={<ProtectedRoute />}>
-            <Route path='/info' element={withSuspense(<MainDashboard />, 'Loading workspace...')}>
+          {/* DASHBOARD — protected: requires login token */}
+          <Route path='/info' element={<ProtectedRoute />}>
+            <Route element={withSuspense(<MainDashboard />, 'Loading workspace...')}>
               <Route index element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
               <Route path='dashboard' element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
               <Route path='projects' element={withSuspense(<Projects />, 'Loading projects...')} />

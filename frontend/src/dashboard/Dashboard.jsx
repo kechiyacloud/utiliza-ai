@@ -407,11 +407,7 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-<<<<<<< HEAD
-                    Allocate vs. Available
-=======
                     Allocate vs Available
->>>>>>> feat/prod-test1
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>

@@ -26,6 +26,17 @@ function Register() {
     confirmPassword: ''
   })
 
+  const rules = {
+    length: formData.password.length >= 8,
+    upper: /[A-Z]/.test(formData.password),
+    lower: /[a-z]/.test(formData.password),
+    digit: /\d/.test(formData.password),
+    special: /[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]]/.test(formData.password),
+  }
+  const isStrong = Object.values(rules).every(Boolean)
+  const passwordsMatch = formData.password === formData.confirmPassword && formData.confirmPassword.length > 0
+  const canSubmit = isStrong && passwordsMatch
+
   const handleChange = (e) => {
     setFormData(prev => ({
       ...prev,
@@ -129,7 +140,11 @@ function Register() {
         </div>
       )}
 
-      <button type="submit" className="form-button">
+      <button
+        type="submit"
+        className="form-button disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={!canSubmit || loading}
+      >
         Register
       </button>
     </form>

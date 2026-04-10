@@ -36,8 +36,12 @@ function Login() {
         password: formData.password
       })
 
-      localStorage.setItem("userEmail", formData.email);
+      if (!response.data.token) {
+        throw new Error("Login failed: no token received from server")
+      }
+
       localStorage.setItem("token", response.data.token);
+      localStorage.setItem("userEmail", formData.email);
       navigate("/info")
 
     } catch (err) {
