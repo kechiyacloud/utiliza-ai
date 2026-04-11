@@ -36,8 +36,8 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
                             {isDelete ? <Trash2 size={18} className={`text-${accentColor}-500`} /> :
-                             mode === 'edit' ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
-                             <Plus size={18} className={`text-${accentColor}-500`} />}
+                                mode === 'edit' ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
+                                    <Plus size={18} className={`text-${accentColor}-500`} />}
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-gray-800">{title}</h3>
@@ -90,8 +90,8 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                                     : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
                             }`}>
                         {isDelete ? <><Trash2 size={14} /> Delete</> :
-                         mode === 'edit' ? <><Check size={14} /> Update</> :
-                         <><Plus size={14} /> Add</>}
+                            mode === 'edit' ? <><Check size={14} /> Update</> :
+                                <><Plus size={14} /> Add</>}
                     </button>
                 </div>
             </div>

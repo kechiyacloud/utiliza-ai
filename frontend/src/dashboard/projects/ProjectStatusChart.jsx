@@ -104,8 +104,8 @@ const ProjectStatusChart = ({ projects }) => {
                             </div>
 
                             <div className="mt-2 inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-full transition-colors duration-200 flex-wrap"
-                                 style={{ maxWidth: "100%" }}
-                                 aria-label="Progress summary">
+                                style={{ maxWidth: "100%" }}
+                                aria-label="Progress summary">
                                 <span className={`${getBadgeStyle(pct)} inline-flex items-center gap-1 px-3 py-1 rounded-full`}>
                                     <span className="text-[11px] font-semibold">{daysLeft} days left</span>
                                     <span className="text-[12px] font-extrabold">• {pct}% completed</span>

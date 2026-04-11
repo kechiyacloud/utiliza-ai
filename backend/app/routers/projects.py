@@ -150,8 +150,8 @@ PROJECT_STATUS_ALIASES = {
 VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "Completed"}
 VALID_SUB_STATUSES = {"SOW_SIGNED": "SOW Signed", "SOW_NOT_SIGNED": "SOW Not Signed"}
 PROJECT_TYPE_ALIASES = {
-    "client": "Client",
-    "external": "Client",
+    "client": "External",
+    "external": "External",
     "internal": "Internal",
     "partner": "Partner",
     "poc": "POC",
@@ -224,7 +224,7 @@ def _normalize_project_type(value: Optional[str], strict: bool = True) -> Option
         return PROJECT_TYPE_ALIASES[key]
 
     if strict:
-        raise HTTPException(status_code=422, detail="Project type must be Client, Internal, Partner, or POC.")
+        raise HTTPException(status_code=422, detail="Project type must be External, Internal, Partner, or POC.")
     return normalized
 
 
@@ -750,47 +750,75 @@ def _build_simple_pdf(lines: List[str]) -> bytes:
 
 
 @router.get("/overview")
-def projects_overview():
+def projects_overview(department: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM projects")
+        where_clause = ""
+        join_clause = ""
+        params = []
+        
+        if department and department.lower() != 'all':
+            join_clause = """
+                JOIN projects_allocation pa ON p.project_id = pa.project_id
+                JOIN employee_master em ON pa.employee_id = em.employee_id
+            """
+            where_clause = "AND em.department = %s"
+            params = [department]
+
+        # 1. Total Projects
+        cur.execute(f"SELECT COUNT(DISTINCT p.project_id) FROM projects p {join_clause} WHERE 1=1 {where_clause}", tuple(params))
         total = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
-        """)
+        # 2. Ongoing
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
+            {where_clause}
+        """, tuple(params))
         ongoing = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
-        """)
+        # 3. Completed
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
+            {where_clause}
+        """, tuple(params))
         completed = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('not started', 'planned', 'upcoming') OR start_date > CURRENT_DATE
-        """)
+        # 4. Upcoming
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
+            {where_clause}
+        """, tuple(params))
         upcoming = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) IN ('internal', 'poc')
-        """)
+        # 5. Internal
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_type) IN ('internal', 'poc')
+            {where_clause}
+        """, tuple(params))
         internal = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) = 'client'
-        """)
-        client = cur.fetchone()[0]
+        # 6. External
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_type) = 'external'
+            {where_clause}
+        """, tuple(params))
+        external = cur.fetchone()[0]
 
         return {
             "total_projects": total,
             "internal_projects": internal,
-            "client_projects": client,
+            "external_projects": external,
             "ongoing_projects": ongoing,
             "upcoming_projects": upcoming,
             "completed_projects": completed,
@@ -804,11 +832,17 @@ def projects_overview():
 
 
 @router.get("/list")
-def projects_list():
+def projects_list(department: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        where_clause = ""
+        params = []
+        if department and department.lower() != 'all':
+            where_clause = "HAVING STRING_AGG(DISTINCT em.department, ', ') LIKE %s"
+            params = [f"%{department}%"]
+
+        cur.execute(f"""
             SELECT
                 p.project_id,
                 p.project_name,
@@ -830,8 +864,9 @@ def projects_list():
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
             GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
+            {where_clause}
             ORDER BY p.start_date DESC NULLS LAST
-        """)
+        """, tuple(params))
         rows = cur.fetchall()
 
         return [

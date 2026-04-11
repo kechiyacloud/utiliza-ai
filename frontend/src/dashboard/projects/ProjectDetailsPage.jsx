@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload } from 'lucide-react';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
@@ -1438,9 +1438,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
                                 <Users size={14} /> Import Resources
                             </button>
-                            <button onClick={() => setIsImportFileModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-xs font-bold hover:bg-violet-100 transition-colors">
-                                <Upload size={14} /> Import from File
-                            </button>
                             <button onClick={() => setIsDeleteAllModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors">
                                 <Trash2 size={14} /> Clear All Resources
                             </button>
@@ -1917,61 +1914,8 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-8 w-full md:w-auto pb-4 md:pb-0 border-b md:border-b-0 border-slate-50">
-                {projectStatusKey === 'in progress' && (
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                            SOW Status
-                        </span>
-                        <span
-                            className="text-[12px] font-semibold px-2.5 py-1 rounded-full border w-fit"
-                            style={{
-                                backgroundColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#ECFDF3' : '#FEF2F2',
-                                color: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#15803D' : '#B91C1C',
-                                borderColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#BBF7D0' : '#FECACA'
-                            }}
-                        >
-                            {projectSubStatus
-                                ? (projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? 'SOW Signed' : 'SOW Not Signed')
-                                : 'SOW - NA'}
-                        </span>
-                    </div>
-                )}
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <CalendarDays size={12} /> Timeline
-                    </span>
-                    <span className="text-sm font-bold text-slate-700">
-                        {project.startDate || project.start_date || 'N/A'} - {project.endDate || project.end_date || 'TBD'}
-                    </span>
-                </div>
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <Users size={12} /> Team Size
-                    </span>
-                    <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-black text-slate-800">{headcount}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Resources</span>
-                    </div>
-                </div>
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <Activity size={12} /> Billing
-                    </span>
-                    <span
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold border w-fit"
-                        style={{
-                            backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
-                            color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
-                            borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
-                        }}
-                    >
-                        {project.type} ({project.billable || 'Non-Billable'})
-                    </span>
-                </div>
+            <div className="flex flex-col items-end gap-2">
+                {/* Header metadata removed here as per user request to avoid duplication with cards below */}
             </div>
         </div>
     );
@@ -2017,68 +1961,63 @@ const ConfirmDeleteAllModal = ({ isOpen, onCancel, onConfirm, isDeleting }) => {
 };
 
 const ProjectHealthCard = ({ project, resources }) => {
-    const totalWeeklyHours = resources.reduce((sum, r) => sum + Number(r.w4 || 0), 0);
+    // 1. SOW Status
+    const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
+    const isSowSigned = projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed';
+    const sowStatusText = project.status === 'In Progress' 
+        ? (isSowSigned ? 'SOW Signed' : 'SOW Not Signed')
+        : 'SOW - NA';
+
+    // 2. Timeline
+    const startDate = project.start_date || project.startDate || 'TBD';
+    const endDate = project.end_date || project.endDate || 'TBD';
+    const timeline = `${startDate} - ${endDate}`;
+
+    // 3. Team Size
     const headcount = resources.length;
-    
-    // Theoretical 100% capacity for currently allocated team (assuming 40h/week each)
-    const totalCapacity = headcount * 40;
-    const utilizationPct = totalCapacity > 0 ? Math.round((totalWeeklyHours / totalCapacity) * 100) : 0;
+
+    // 4. Billing
+    const billingText = project.billable ? `${project.type} (${project.billable})` : (project.billing_type || project.billingType || 'Not Set');
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-100 flex flex-col justify-between min-h-[110px]">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Project Health</span>
-                    <Activity size={16} className="opacity-80" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">SOW Status</span>
+                    <FileText size={16} className="text-blue-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black flex items-baseline gap-1">
-                        On Track
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    </div>
-                    <p className="text-[10px] opacity-70 font-medium">Last updated today</p>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {sowStatusText}
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Headcount</span>
-                    <Users size={16} className="text-blue-500" />
+            <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-widest">Timeline</span>
+                    <CalendarDays size={16} className="text-indigo-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black text-slate-800">{headcount}</div>
-                    <div className="flex items-center text-[10px] text-emerald-600 font-bold">
-                        <span>Active Team Members</span>
-                    </div>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {timeline}
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weekly Effort</span>
-                    <Clock size={16} className="text-indigo-500" />
+            <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest">Team Size</span>
+                    <Users size={16} className="text-emerald-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black text-slate-800">{totalWeeklyHours}h</div>
-                    <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
-                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${utilizationPct}%` }} />
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">{utilizationPct}% Overall Utilization</p>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {headcount} Resources
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next Milestone</span>
-                    <Zap size={16} className="text-amber-500" />
+            <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-amber-600/70 uppercase tracking-widest">Billing</span>
+                    <CreditCard size={16} className="text-amber-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-sm font-bold text-slate-800 truncate">Final Review Sync</div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                        <div className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-bold border border-amber-100">
-                            {project.endDate || project.end_date || 'TBD'}
-                        </div>
-                    </div>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {billingText}
                 </div>
             </div>
         </div>

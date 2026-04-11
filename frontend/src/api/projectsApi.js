@@ -1,10 +1,11 @@
 import api from "./axios";
 
-export const fetchProjectsData = async () => {
+export const fetchProjectsData = async (department = 'All') => {
     try {
+        const params = department && department !== 'All' ? { params: { department } } : {};
         const [overviewRes, listRes] = await Promise.all([
-            api.get('/projects/overview').catch(() => ({ data: {} })),
-            api.get('/projects/list').catch(() => ({ data: [] }))
+            api.get('/projects/overview', params).catch(() => ({ data: {} })),
+            api.get('/projects/list', params).catch(() => ({ data: [] }))
         ]);
 
         const o = overviewRes?.data || {};
@@ -15,7 +16,7 @@ export const fetchProjectsData = async () => {
             stats: {
                 totalProjects: o.total_projects || 0,
                 internalProjects: o.internal_projects || 0,
-                clientProjects: o.client_projects || 0,
+                externalProjects: o.external_projects || 0,
                 ongoing: o.ongoing_projects || 0,
                 partnerCount: o.partner_projects || 0,
                 completedProjects: o.completed_projects || 0,
@@ -32,7 +33,7 @@ export const fetchProjectsData = async () => {
                 else if (s === "on hold" || s === "delayed") pillColor = { backgroundColor: '#FEE2E2', color: '#991B1B' };
                 else if (s === "not started" || s === "planned") pillColor = { backgroundColor: '#FEF3C7', color: '#92400E' };
 
-                // Backend already maps billable to 'Client' or 'Internal' in the list endpoint
+                // Backend already maps billable to 'External' or 'Internal' in the list endpoint
                 const type = p.type || 'Internal';
                 const clientName = p.client_name || type;
 
@@ -65,7 +66,7 @@ export const fetchProjectsData = async () => {
         return {
             data: {
                 stats: {
-                    totalProjects: 0, internalProjects: 0, clientProjects: 0, ongoing: 0, partnerCount: 0, completedProjects: 0
+                    totalProjects: 0, internalProjects: 0, externalProjects: 0, ongoing: 0, partnerCount: 0, completedProjects: 0
                 },
                 projects: []
             }
