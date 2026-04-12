@@ -14,6 +14,55 @@ import ProjectStatusChart from './ProjectStatusChart';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
+const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
+    return (
+        <div className={`${size} rounded-full border border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+            {avatar_url ? (
+                <img 
+                    src={avatar_url} 
+                    alt={name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '';
+                        e.target.parentElement.innerHTML = `<span class="text-[8px] font-bold text-slate-400 font-sans">${name?.[0]?.toUpperCase() || '?'}</span>`;
+                    }}
+                />
+            ) : (
+                <span className="text-[8px] font-bold text-slate-400 font-sans">{name?.[0]?.toUpperCase() || '?'}</span>
+            )}
+        </div>
+    );
+};
+
+const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
+    if (!resources || resources.length === 0) return null;
+    
+    const displayMembers = resources.slice(0, 3);
+    const remainingCount = Math.max((totalCount || resources.length) - displayMembers.length, 0);
+
+    return (
+        <div className="flex -space-x-1.5 overflow-hidden items-center group/stack cursor-pointer">
+            {displayMembers.map((user, i) => {
+                const avatar = user.avatar_url || user.photo_url || user.profile_image;
+                return (
+                    <AvatarCircle 
+                        key={user.id || user.employee_id || i} 
+                        name={user.name || user.employee_name || 'Unknown'} 
+                        avatar_url={avatar} 
+                        size={size}
+                    />
+                );
+            })}
+            {remainingCount > 0 && (
+                <div className={`${size} rounded-full border border-white bg-blue-50 flex items-center justify-center text-[7px] font-black text-blue-600 shadow-sm z-10 transition-transform group-hover/stack:translate-x-0.5`}>
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const calculateProjectProgress = (project) => {
     const today = new Date();
     const start = new Date(project.startDate || project.start_date);
@@ -42,46 +91,6 @@ const getStatusBadgeStyle = (pct) => {
     return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
 };
 
-const AvatarStack = ({ members, totalCount }) => {
-    if (!members || members.length === 0) return null;
-    
-    const displayMembers = members.slice(0, 3);
-    const remainingCount = totalCount - displayMembers.length;
-
-    return (
-        <div className="flex -space-x-2 overflow-hidden items-center mr-2">
-            {displayMembers.map((member, i) => (
-                <div 
-                    key={member.id || i} 
-                    className="relative group/avatar"
-                    title={member.name}
-                >
-                    <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
-                        {member.photo_url ? (
-                            <img 
-                                src={member.photo_url} 
-                                alt={member.name} 
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = '';
-                                    e.target.parentElement.innerHTML = `<span class="text-[10px] font-bold text-slate-400">${member.name?.[0].toUpperCase()}</span>`;
-                                }}
-                            />
-                        ) : (
-                            <span className="text-[10px] font-bold text-slate-400">{member.name?.[0].toUpperCase()}</span>
-                        )}
-                    </div>
-                </div>
-            ))}
-            {remainingCount > 0 && (
-                <div className="w-7 h-7 rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 shadow-sm z-10">
-                    +{remainingCount}
-                </div>
-            )}
-        </div>
-    );
-};
 
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     const progress = calculateProjectProgress(project);
@@ -126,14 +135,20 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                 <div className="space-y-1.5">
                     <div className="flex justify-between items-center px-0.5">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
-                        <span className="text-[10px] font-bold text-slate-600">{progress.pct}%</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-600">{progress.pct}%</span>
+                            <AvatarStack 
+                                resources={project.team_members || project.resources || project.allocations || []} 
+                                totalCount={project.resource_count || (project.team_members || project.resources || []).length || 0} 
+                                size="w-5 h-5" 
+                            />
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <AvatarStack members={project.team_members} totalCount={project.resource_count} />
                         <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                             <div 
-                                className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(progress.pct)}`}
-                                style={{ width: `${progress.pct}%` }}
+                                className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(calculateProjectProgress(project).pct)}`}
+                                style={{ width: `${calculateProjectProgress(project).pct}%` }}
                             />
                         </div>
                     </div>
@@ -145,7 +160,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                             <Users size={12} />
                             <span className="text-sm font-normal uppercase">Team</span>
                         </div>
-                        <p className="text-sm font-normal text-gray-700">{project.resource_count || 0} Members</p>
+                        <p className="text-sm font-normal text-gray-700">{project.resource_count || project.resources || 0} Members</p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
                         <div className="flex items-center gap-1.5 text-slate-500">
@@ -180,7 +195,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('table'); // 'table', 'grid', or 'chart'
+    const [activeView, setActiveView] = useState('grid'); // Only 'grid' remains
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'billable', 'non-billable', 'internal', 'name'
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -269,22 +284,27 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             const dateB = new Date(b.startDate || b.start_date || 0);
             return dateB - dateA;
         }
-        if (sortBy === 'oldest') {
-            const dateA = new Date(a.startDate || a.start_date || 0);
-            const dateB = new Date(b.startDate || b.start_date || 0);
-            return dateA - dateB;
-        }
-        if (sortBy === 'name') {
+        if (sortBy === 'alphabetical') {
             return (a.name || '').localeCompare(b.name || '');
         }
+        if (sortBy === 'finishing-soon') {
+            const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
+            const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
+            return dateA - dateB;
+        }
+        if (sortBy === 'finishing-last') {
+            const dateA = new Date(a.endDate || a.end_date || 0).getTime();
+            const dateB = new Date(b.endDate || b.end_date || 0).getTime();
+            return dateB - dateA;
+        }
         if (sortBy === 'billable') {
-            const aVal = (a.billable || '').toLowerCase() === 'billable' ? 0 : 1;
-            const bVal = (b.billable || '').toLowerCase() === 'billable' ? 0 : 1;
+            const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
+            const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
             return aVal - bVal;
         }
         if (sortBy === 'non-billable') {
-            const aVal = (a.billable || '').toLowerCase().includes('non') ? 0 : 1;
-            const bVal = (b.billable || '').toLowerCase().includes('non') ? 0 : 1;
+            const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
+            const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
             return aVal - bVal;
         }
         if (sortBy === 'internal') {
@@ -419,45 +439,53 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         <div className="w-full space-y-6">
             <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 w-full relative min-h-[600px]">
 
-                {/* Header (Tabs and Filter) */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-50 pb-6 mb-8 gap-6">
-                {/* Left Side: View Toggles */}
-                <div className="flex items-center p-1 bg-slate-50 rounded-2xl border border-slate-100">
-                    <button
+            {/* Single Line Header Layout */}
+            <div className="flex flex-wrap md:flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4">
+                {/* Left Side: Navigation & Grid Toggle */}
+                <div className="flex items-center gap-5 shrink-0">
+                    <button 
                         onClick={() => setActiveView('table')}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold uppercase transition-all font-sans ${activeView === 'table' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                        className={`text-sm font-medium tracking-tight transition-colors ${
+                            activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                        }`}
                     >
-                        <List size={16} />
-                        Table
+                        {tableTitle} ({filteredProjects.length})
                     </button>
-                    <button
-                        onClick={() => setActiveView('grid')}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'grid' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
-                    >
-                        <LayoutGrid size={16} />
-                        Grid
-                    </button>
-                    <button
+
+                    <div className="w-[1px] h-6 bg-slate-200" />
+
+                    <button 
                         onClick={() => setActiveView('chart')}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'chart' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                        className={`text-sm font-medium tracking-tight transition-colors ${
+                            activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                        }`}
                     >
-                        <PieChart size={16} />
-                        Analytics
+                        Project Status Bar
+                    </button>
+
+                    <div className="w-[1px] h-6 bg-slate-200" />
+
+                    <button 
+                        onClick={() => setActiveView('grid')}
+                        className={`text-sm font-medium tracking-tight transition-colors ${
+                            activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        Grid
                     </button>
                 </div>
 
-                {/* Right Side: Search and Export */}
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative group">
+                {/* Right Side: Search, Export, Filter, Sort */}
+                <div className="flex items-center gap-3 shrink-0">
+                     <div className="relative group">
                         <button 
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-semibold uppercase text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm font-sans"
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
                         >
                             <Download size={14} />
                             Export
                             <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
                         </button>
-
                         {isExportMenuOpen && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
@@ -476,12 +504,12 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         )}
                     </div>
 
-                    <div className="relative flex-1 md:w-72">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={18} />
+                    <div className="relative w-64 md:w-56 lg:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Search projects..."
-                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-200 transition-all font-normal text-gray-700 placeholder:text-slate-400 font-sans"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all text-gray-700 placeholder:text-slate-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -489,32 +517,32 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     
                     <button
                         onClick={() => setIsFilterPanelOpen(true)}
-                        className={`p-3 rounded-2xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-4 ring-blue-50' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                        className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
                     >
-                        <Filter size={20} />
-                        {isFilterActive && <span className="ml-2 w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                        <Filter size={18} />
+                        {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
                     </button>
 
                     <div className="relative group">
                         <button 
                             onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
                         >
                             Sort
                             <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
                         </button>
-
                         {isSortMenuOpen && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
                                 <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
                                     {[
                                         { id: 'newest', label: 'Newest First' },
-                                        { id: 'oldest', label: 'Oldest First' },
-                                        { id: 'name', label: 'A-Z Project Name' },
-                                        { id: 'billable', label: 'Billable First' },
-                                        { id: 'non-billable', label: 'Non-billable First' },
-                                        { id: 'internal', label: 'Internal Only' },
+                                        { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
+                                        { id: 'billable', label: 'Billable' },
+                                        { id: 'non-billable', label: 'Non-Billable' },
+                                        { id: 'internal', label: 'Internal' },
+                                        { id: 'finishing-soon', label: 'Finishing Soon' },
+                                        { id: 'finishing-last', label: 'Finishing Last' },
                                     ].map((opt) => (
                                         <button 
                                             key={opt.id}
@@ -533,7 +561,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     {isFilterActive && (
                         <button
                             onClick={handleClearFilters}
-                            className="px-4 py-3 text-[10px] font-normal uppercase tracking-widest bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 hover:bg-rose-100 transition-all"
+                            className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
                         >
                             Reset
                         </button>
@@ -541,25 +569,17 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 </div>
             </div>
 
-            <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-gray-800 tracking-tight flex items-center gap-3 font-sans">
-                    {tableTitle}
-                    <span className="text-sm font-normal bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase font-sans">
-                        {filteredProjects.length} Projects
-                    </span>
-                </h2>
-            </div>
-
                 {activeView === 'table' && (
                     <div className="overflow-x-auto rounded-2xl border border-slate-50">
                         <table className="w-full font-sans">
                             <thead>
                                 <tr className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-slate-50">
-                                    <th className="py-5 pl-6">Project Details</th>
+                                    <th className="text-left py-5 pl-6">Project Details</th>
                                     <th className="text-center py-5">Status</th>
                                     <th className="text-center py-5">Type</th>
-                                    <th className="text-center py-5">Team Size</th>
-                                    <th className="w-20 pr-6"></th>
+                                    <th className="text-center py-5">Billable</th>
+                                    <th className="text-center py-5">Resource</th>
+                                    <th className="text-center py-5 px-6">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -596,35 +616,64 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                             </span>
                                         </td>
                                         <td className="py-5 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <div className="mb-1">
-                                                    <AvatarStack members={project.team_members} totalCount={project.resource_count} />
+                                            {(() => {
+                                                const val = project.billable || project.is_billable;
+                                                const isBll = val === true || val === 'true' || (typeof val === 'string' && val.toLowerCase() === 'billable');
+                                                const isNonBll = val === false || val === 'false' || (typeof val === 'string' && val.toLowerCase() === 'non-billable');
+
+                                                if (isBll) {
+                                                    return (
+                                                        <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-emerald-100 bg-emerald-50 text-emerald-600 font-sans">
+                                                            Billable
+                                                        </span>
+                                                    );
+                                                } else if (isNonBll) {
+                                                    return (
+                                                        <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-amber-100 bg-amber-50 text-amber-600 font-sans">
+                                                            Non-Billable
+                                                        </span>
+                                                    );
+                                                }
+                                                return (
+                                                    <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-slate-100 bg-slate-50 text-slate-500 font-sans">
+                                                        N/A
+                                                    </span>
+                                                );
+                                            })()}
+                                        </td>
+                                        <td className="py-5 text-center align-middle">
+                                            <div className="flex flex-col items-center justify-center">
+                                                <div className="text-slate-800 font-bold text-lg">
+                                                    {project.resource_count || project.resources || 0}
                                                 </div>
-                                                <span className="text-sm text-slate-500 font-normal uppercase mt-1">Resources: {project.resource_count || 0}</span>
                                             </div>
                                         </td>
-                                        <td className="py-5 pr-6">
-                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleEditClick(project);
-                                                    }}
-                                                    className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                                    title="Edit Project"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setProjectToDelete(project);
-                                                    }}
-                                                    className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                                                    title="Delete Project"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                        <td className="py-5 px-6 align-middle min-w-[120px]">
+                                            <div className="flex items-center w-full">
+                                                <div className="flex-1 flex justify-center">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleEditClick(project);
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                        title="Edit Project"
+                                                    >
+                                                        <Pencil size={18} />
+                                                    </button>
+                                                </div>
+                                                <div className="flex-1 flex justify-end">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setProjectToDelete(project);
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                                        title="Delete Project"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
