@@ -28,8 +28,13 @@ export const STATUS_OPTIONS = [
     'Active',
     'Bench',
     'Notice Period',
-    'Allocated'
+    'Allocated',
+    'PIP',
+    'Resigned'
 ];
+
+// Statuses that must be manually set by admin (not auto-calculated from allocation)
+export const MANUAL_STATUS_OPTIONS = ['Notice period', 'PIP', 'Resigned'];
 
 export const PROJECT_STATUS_OPTIONS = [
     'Not Started',

@@ -11,6 +11,8 @@ const AllocationBar = ({ percentage, status }) => {
     const s = (status || '').toLowerCase().trim();
     let color = 'bg-emerald-500'; // default: Allocated
     if (s.includes('notice')) color = 'bg-red-400';
+    else if (s.includes('pip')) color = 'bg-yellow-400';
+    else if (s.includes('resign')) color = 'bg-gray-300';
     else if (s === 'bench') color = 'bg-orange-400';
     else if (s === 'partially bench') color = 'bg-blue-400';
     else if (s === 'partially allocated') color = 'bg-purple-400';

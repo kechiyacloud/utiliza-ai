@@ -3,6 +3,7 @@ import { Search, Mail, Phone, MapPin, Briefcase, Calendar, X, BarChart2, Network
 import { getEmployeeList } from '../api/employeeApi';
 import { fetchDashboardData } from '../api/dashboardApi';
 import OrganizationInsights from './OrganizationInsights';
+import { useDataRefresh } from '../context';
 
 const Organization = () => {
     const [departments, setDepartments] = useState([]);
@@ -15,11 +16,13 @@ const Organization = () => {
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
 
+    const { refreshKey } = useDataRefresh();
+
     // Fetch Data
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const employees = await getEmployeeList();
+                const employees = await getEmployeeList(refreshKey > 0);
 
                 // Group employees by department
                 const deptMap = {};
@@ -60,7 +63,7 @@ const Organization = () => {
             }
         };
         fetchData();
-    }, []);
+    }, [refreshKey]);
 
     useEffect(() => {
         if (viewMode !== 'insights' || metrics || metricsLoading) {

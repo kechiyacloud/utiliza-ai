@@ -18,6 +18,20 @@ export const getEmployeeTag = (status) => {
             dot: 'bg-red-500',
         };
     }
+    if (s.includes('pip')) {
+        return {
+            label: 'PIP',
+            color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+            dot: 'bg-yellow-500',
+        };
+    }
+    if (s.includes('resign')) {
+        return {
+            label: 'Resigned',
+            color: 'bg-gray-100 text-gray-500 border-gray-200',
+            dot: 'bg-gray-400',
+        };
+    }
     if (s === 'partially allocated') {
         return {
             label: 'Partially allocated',

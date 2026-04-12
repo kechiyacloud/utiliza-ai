@@ -82,8 +82,7 @@ export const fetchAllocationData = async (filters = {}) => {
             data: {
                 metrics,
                 projects,
-                orgUtilization,
-                ...allocationStaticData
+                orgUtilization
             }
         };
     } catch (error) {
@@ -99,7 +98,7 @@ export const fetchAllocationData = async (filters = {}) => {
                     overallocated: { value: 0, label: "Overallocated", isAlert: false }
                 },
                 projects: [],
-                ...allocationStaticData
+                orgUtilization: { used: 0, available: 100, breakdown: [] }
             }
         };
     }

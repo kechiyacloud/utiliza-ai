@@ -10,13 +10,12 @@ function Login() {
 
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  const successMessage = location.state?.message || null
-
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   })
+
+  const successMessage = location.state?.message || null
 
   const handleChange = (e) => {
     setFormData(prev => ({
@@ -40,8 +39,8 @@ function Login() {
         throw new Error("Login failed: no token received from server")
       }
 
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("userEmail", formData.email);
+      sessionStorage.setItem("token", response.data.token);
+      sessionStorage.setItem("userEmail", formData.email);
       navigate("/info")
 
     } catch (err) {

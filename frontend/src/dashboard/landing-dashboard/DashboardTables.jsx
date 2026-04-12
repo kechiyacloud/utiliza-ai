@@ -13,7 +13,7 @@ import {
     AlertCircle,
     CheckCircle2
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const DashboardTables = ({
     availability = [],
@@ -31,6 +31,7 @@ const DashboardTables = ({
     const [utilizationSubTab, setUtilizationSubTab] = useState('employee');
     const [selectedTrendIndex, setSelectedTrendIndex] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const recentTrends = (trends || []).slice(-3);
 
     useEffect(() => {
@@ -223,7 +224,7 @@ const DashboardTables = ({
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {highUtilizationEmployee.length > 0 ? highUtilizationEmployee.map((row, idx) => (
-                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/info/employee/${row.id}`)}>
+                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/info/employee/${row.id}`, { state: { from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state || null } } })}>
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
                                             <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500 border border-slate-200 uppercase">

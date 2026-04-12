@@ -46,7 +46,7 @@ const labelCls = 'block text-xs font-bold text-gray-500 uppercase tracking-wider
 // ─────────────────────────────────────────────
 
 const ProfileSection = ({ employeeData, loading, notLinked }) => {
-    const email = localStorage.getItem('userEmail') || '';
+    const email = sessionStorage.getItem('userEmail') || '';
     const username = email.split('@')[0] || 'User';
 
     if (loading) {
@@ -146,7 +146,7 @@ const FeedbackSection = ({ employeeData }) => {
         setStatus(null);
         setErrorMsg('');
 
-        const email = localStorage.getItem('userEmail') || '';
+        const email = sessionStorage.getItem('userEmail') || '';
         try {
             await submitFeedback({
                 employee_id: employeeData?.employee_id || null,
@@ -340,7 +340,7 @@ function Settings() {
             setEmpLoading(true);
             setEmpNotLinked(false);
             try {
-                const email = localStorage.getItem('userEmail');
+                const email = sessionStorage.getItem('userEmail');
                 if (!email) { setEmpNotLinked(true); return; }
 
                 const idRes = await api.get(`/employee/by-email/${email}`);

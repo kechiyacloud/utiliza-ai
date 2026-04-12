@@ -29,13 +29,14 @@ const clearEmployeeCache = () => {
 };
 
 // Fetch all employees list
-export const getEmployeeList = async (forceUpdate = false) => {
+export const getEmployeeList = async (forceUpdate = false, includeResigned = false) => {
     try {
-        if (!forceUpdate && employeeListCache && (Date.now() - employeeListCacheTime < 5 * 60 * 1000)) {
+        // Cache only applies for default view (no resigned employees)
+        if (!includeResigned && !forceUpdate && employeeListCache && (Date.now() - employeeListCacheTime < 5 * 60 * 1000)) {
             return employeeListCache;
         }
 
-        const res = await api.get('/employees/list');
+        const res = await api.get('/employees/list', { params: { include_resigned: includeResigned } });
         const rawData = Array.isArray(res?.data) ? res.data : [];
 
         const enriched = rawData.map(emp => {
@@ -61,10 +62,12 @@ export const getEmployeeList = async (forceUpdate = false) => {
                 employee_type: normalizedType,
                 location: emp.location ? emp.location.replace(/^India - /, '') : emp.location,
             };
-        }).filter(emp => !emp.date_of_resign);
+        });
 
-        employeeListCache = enriched;
-        employeeListCacheTime = Date.now();
+        if (!includeResigned) {
+            employeeListCache = enriched;
+            employeeListCacheTime = Date.now();
+        }
 
         return enriched;
 

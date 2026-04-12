@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign,
-  PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X
+  PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, Plus, Trophy,
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, X
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -12,27 +12,23 @@ import {
   BarChart, Bar, Legend
 } from 'recharts';
 
-import { 
-  fetchDashboardData, 
-  fetchTodos, 
-  addTodo, 
-  toggleTodo, 
-  clearTodo, 
-  exportRiskBoard, 
-  updateTodo, 
+import {
+  fetchDashboardData,
+  fetchTodos,
+  addTodo,
+  toggleTodo,
+  clearTodo,
+  exportRiskBoard,
+  updateTodo,
   clearDashboardCache,
-  fetchDepartments 
+  fetchDepartments
 } from '../api/dashboardApi';
 import { getEmployeeList } from '../api/employeeApi';
-import { createProject } from '../api/projectsApi';
-import { createClient } from '../api/clientApi';
-
+import { useDataRefresh } from '../context';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
-import AddProjectPanel from './projects/AddProjectPanel';
-import AddClientModal from './clients/AddClientModal';
 import DashboardTables from './landing-dashboard/DashboardTables';
 import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import NominationModal from './employee/NominationModal';
@@ -63,8 +59,6 @@ function Dashboard() {
   const navigate = useNavigate();
 
   // Interaction States
-  const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
-  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isSplitViewOpen, setIsSplitViewOpen] = useState(false);
   const [isNominationModalOpen, setIsNominationModalOpen] = useState(false);
 
@@ -86,14 +80,15 @@ function Dashboard() {
   const [todoToDelete, setTodoToDelete] = useState(null);
   const [isDeletingTodo, setIsDeletingTodo] = useState(false);
   const [editingTodoId, setEditingTodoId] = useState(null);
+  const { refreshKey } = useDataRefresh();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         // Parallel fetch for all initial dashboard requirements
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
-          fetchDashboardData(false, selectedDepartment),
-          getEmployeeList(),
+          fetchDashboardData(refreshKey > 0, selectedDepartment),
+          getEmployeeList(refreshKey > 0),
           fetchTodos(),
           fetchDepartments()
         ]);
@@ -107,7 +102,7 @@ function Dashboard() {
         if (empListRes.status === 'fulfilled') {
           setAllEmployees(empListRes.value);
         }
-        
+
         if (todosRes.status === 'fulfilled') {
           setTodos(todosRes.value);
         }
@@ -122,7 +117,7 @@ function Dashboard() {
       }
     };
     loadData();
-  }, [selectedDepartment]);
+  }, [selectedDepartment, refreshKey]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
 
@@ -223,43 +218,6 @@ function Dashboard() {
     }
   }, [loading]);
 
-  const handleAddProject = async (projectData) => {
-    try {
-      const payload = {
-        project_id: (projectData.name.replace(/\s+/g, '-').toUpperCase() + '-' + Math.floor(Math.random() * 1000)).substring(0, 20),
-        project_name: projectData.name,
-        project_status: projectData.status,
-        billable: projectData.type === 'Client' ? 'Yes' : 'No',
-        start_date: projectData.startDate || null,
-        end_date: projectData.endDate || null
-      };
-      await createProject(payload);
-
-      setIsProjectPanelOpen(false);
-      clearDashboardCache();
-      const res = await fetchDashboardData(true, selectedDepartment);
-      setData(res.data);
-      if (res.todos) setTodos(res.todos);
-    } catch (e) {
-      console.error("Failed to add project", e);
-      alert("Failed to create project");
-    }
-  };
-
-  const handleAddClient = async (clientData) => {
-    try {
-      await createClient(clientData);
-      setIsClientModalOpen(false);
-      clearDashboardCache();
-      const res = await fetchDashboardData(true, selectedDepartment);
-      setData(res.data);
-      if (res.todos) setTodos(res.todos);
-    } catch (e) {
-      console.error("Failed to add client", e);
-      alert("Failed to create client");
-    }
-  };
-
   // Map Backend Executive Metrics to UI Arrays
   const _metrics = data?.executiveMetrics || {};
 
@@ -287,7 +245,7 @@ function Dashboard() {
   const dynamicBenchIndividualSkills = Array.isArray(_metrics?.bench_individual_skills) && _metrics.bench_individual_skills.length > 0 ? _metrics.bench_individual_skills : [];
   const dynamicAlerts = Array.isArray(_metrics?.alerts) && _metrics.alerts.length > 0 ? _metrics.alerts : [];
   const dynamicProjectsAtRisk = Array.isArray(_metrics?.projects_at_risk) && _metrics.projects_at_risk.length > 0 ? _metrics.projects_at_risk : [];
-  
+
   const filteredDashboardEmployees = useMemo(() => (
     selectedDepartment === 'Overall'
       ? allEmployees
@@ -340,25 +298,11 @@ function Dashboard() {
               ))}
             </select>
             <button
-              onClick={() => navigate('/info/employee/add')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
-            >
-              <UserCog size={18} />
-              Add Employee
-            </button>
-            <button
-              onClick={() => setIsProjectPanelOpen(true)}
+              onClick={() => navigate('/info/projects')}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200"
             >
               <Plus size={18} />
               Add Project
-            </button>
-            <button
-              onClick={() => setIsClientModalOpen(true)}
-              className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-            >
-              <UserPlus size={18} className="text-slate-500" />
-              Add Client
             </button>
           </div>
         </div>
@@ -407,7 +351,7 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Allocate vs Available
+                    Allocated vs Available
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
@@ -420,8 +364,8 @@ function Dashboard() {
                     <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="availability" name="Available" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="allocated" name="Allocated" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -446,102 +390,102 @@ function Dashboard() {
                   <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
                 </h2>
 
-              <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
-                <span className="font-semibold">Admin controls are enabled for this board.</span>
-                <span className="font-black uppercase tracking-wider text-blue-600">{editingTodoId ? 'Editing task' : 'Live task manager'}</span>
-              </div>
+                <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
+                  <span className="font-semibold">Admin controls are enabled for this board.</span>
+                  <span className="font-black uppercase tracking-wider text-blue-600">{editingTodoId ? 'Editing task' : 'Live task manager'}</span>
+                </div>
 
-              {/* Add Task Input */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newTodoText}
-                  onChange={e => setNewTodoText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
-                  placeholder="Add a new task..."
-                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
-                />
-                <button
-                  onClick={handleAddTodo}
-                  disabled={todoLoading || !newTodoText.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50"
-                >
-                  <Send size={13} />
-                  {editingTodoId ? 'Save' : 'Add'}
-                </button>
-                {editingTodoId && (
+                {/* Add Task Input */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTodoText}
+                    onChange={e => setNewTodoText(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
+                    placeholder="Add a new task..."
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
+                  />
                   <button
-                    onClick={cancelTodoEditing}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50"
+                    onClick={handleAddTodo}
+                    disabled={todoLoading || !newTodoText.trim()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50"
                   >
-                    <X size={13} />
+                    <Send size={13} />
+                    {editingTodoId ? 'Save' : 'Add'}
                   </button>
-                )}
-              </div>
-
-              {/* Todo Items */}
-              <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
-                {todos.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
-                )}
-                {todos.map((todo) => (
-                  <div
-                    key={todo.id}
-                    className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
-                      ? 'bg-slate-50 border-slate-100 opacity-60'
-                      : 'bg-white border-gray-100 hover:border-blue-200 shadow-xs hover:shadow-sm'
-                      }`}
-                  >
+                  {editingTodoId && (
                     <button
-                      onClick={() => handleToggleTodo(todo.id)}
-                      className={`mt-0.5 flex-shrink-0 transition-colors ${todo.status === 'completed' ? 'text-emerald-500' : 'text-slate-300 hover:text-blue-500'
+                      onClick={cancelTodoEditing}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Todo Items */}
+                <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
+                  {todos.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
+                  )}
+                  {todos.map((todo) => (
+                    <div
+                      key={todo.id}
+                      className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
+                        ? 'bg-slate-50 border-slate-100 opacity-60'
+                        : 'bg-white border-gray-100 hover:border-blue-200 shadow-xs hover:shadow-sm'
                         }`}
                     >
-                      <CheckCircle2 size={18} strokeWidth={2} />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-                        }`}>
-                        {todo.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${todo.type === 'critical' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                          todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                            'bg-blue-50 text-blue-600 border border-blue-100'
-                          }`}>{todo.type}</span>
-                        <span className="text-[9px] text-slate-400">{todo.time}</span>
+                      <button
+                        onClick={() => handleToggleTodo(todo.id)}
+                        className={`mt-0.5 flex-shrink-0 transition-colors ${todo.status === 'completed' ? 'text-emerald-500' : 'text-slate-300 hover:text-blue-500'
+                          }`}
+                      >
+                        <CheckCircle2 size={18} strokeWidth={2} />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                          }`}>
+                          {todo.message}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${todo.type === 'critical' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                            todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                              'bg-blue-50 text-blue-600 border border-blue-100'
+                            }`}>{todo.type}</span>
+                          <span className="text-[9px] text-slate-400">{todo.time}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
+                          <button
+                            onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
+                            className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                            title="Take Action"
+                          >
+                            <ArrowUpRight size={16} />
+                          </button>
+                        )}
+                        {!todo.isSystemSuggestion && (
+                          <button
+                            onClick={() => startEditingTodo(todo)}
+                            className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
+                            title="Edit task"
+                          >
+                            <SquarePen size={15} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => promptDeleteTodo(todo)}
+                          className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
+                          title="Delete task"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
-                        <button
-                          onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
-                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                          title="Take Action"
-                        >
-                          <ArrowUpRight size={16} />
-                        </button>
-                      )}
-                      {!todo.isSystemSuggestion && (
-                        <button
-                          onClick={() => startEditingTodo(todo)}
-                          className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
-                          title="Edit task"
-                        >
-                          <SquarePen size={15} />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => promptDeleteTodo(todo)}
-                        className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
-                        title="Delete task"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -622,37 +566,37 @@ function Dashboard() {
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
                 <table className="w-full">
-                    <thead className="sticky top-0 z-10">
-                        <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
-                            <th className="text-left py-2 px-5 bg-white">Employee</th>
-                            <th className="text-left py-2 px-5 bg-white">Skill Set</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
-                            <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
-                                <td className="py-2.5 px-5">
-                                    <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
-                                </td>
-                                <td className="py-2.5 px-5">
-                                    <div className="flex flex-wrap gap-1">
-                                        {row.skills.split(', ').map((skill, sIdx) => (
-                                            <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
-                                                {skill}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </td>
-                            </tr>
-                        )) : (
-                          <tr>
-                            <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
-                                <ShieldAlert opacity={0.5} size={24} />
-                                No resources currently on bench with skills listed.
-                            </td>
-                          </tr>
-                        )}
-                    </tbody>
+                  <thead className="sticky top-0 z-10">
+                    <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                      <th className="text-left py-2 px-5 bg-white">Employee</th>
+                      <th className="text-left py-2 px-5 bg-white">Skill Set</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
+                      <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
+                        <td className="py-2.5 px-5">
+                          <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
+                        </td>
+                        <td className="py-2.5 px-5">
+                          <div className="flex flex-wrap gap-1">
+                            {row.skills.split(', ').map((skill, sIdx) => (
+                              <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                          <ShieldAlert opacity={0.5} size={24} />
+                          No resources currently on bench with skills listed.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -685,19 +629,6 @@ function Dashboard() {
 
       </div>
 
-      {/* Interaction Components */}
-      <AddProjectPanel
-        isOpen={isProjectPanelOpen}
-        onClose={() => setIsProjectPanelOpen(false)}
-        onAdd={handleAddProject}
-      />
-
-      <AddClientModal
-        isOpen={isClientModalOpen}
-        onClose={() => setIsClientModalOpen(false)}
-        onSubmit={handleAddClient}
-      />
-
       <WorkforceSplitView
         isOpen={isSplitViewOpen}
         onClose={() => setIsSplitViewOpen(false)}
@@ -705,12 +636,12 @@ function Dashboard() {
       />
 
       {isNominationModalOpen && (
-        <NominationModal 
-          onClose={() => setIsNominationModalOpen(false)} 
+        <NominationModal
+          onClose={() => setIsNominationModalOpen(false)}
           onSuccess={() => {
             // Simplified refresh: reload the page to see new data
             window.location.reload();
-          }} 
+          }}
         />
       )}
     </div>

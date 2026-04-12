@@ -1589,8 +1589,16 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                             />
                                         ) : (
                                             row.employee_id ? (
-                                                <Link
+                                                    <Link
                                                     to={`/info/employee/${row.employee_id}`}
+                                                    state={{
+                                                        from: {
+                                                            pathname: location.pathname,
+                                                            search: location.search,
+                                                            hash: location.hash,
+                                                            state: location.state || null
+                                                        }
+                                                    }}
                                                     className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
                                                 >
                                                     {row.name || '-'}

@@ -64,11 +64,12 @@ export default function EmployeeMasterList() {
     const [loading, setLoading] = useState(true);
     const [sortOrder, setSortOrder] = useState('desc'); // 'desc' for newest first
     const [filterLabel, setFilterLabel] = useState("");
+    const [includeResigned, setIncludeResigned] = useState(false);
 
     useEffect(() => {
         const fetchEmployees = async () => {
             try {
-                const data = await getEmployeeList();
+                const data = await getEmployeeList(false, includeResigned);
                 // Sort by date of joining (newest first by default)
                 const sorted = [...data].sort((a, b) => {
                     const dateA = a.date_of_joining ? new Date(a.date_of_joining) : new Date(0);
@@ -121,7 +122,7 @@ export default function EmployeeMasterList() {
             }
         };
         fetchEmployees();
-    }, [sortOrder, location.state?.cardFilter, location.state?.departmentFilter, location.state?.search]);
+    }, [sortOrder, location.state?.cardFilter, location.state?.departmentFilter, location.state?.search, includeResigned]);
 
     const stats = React.useMemo(() => {
         const now = new Date();
@@ -173,8 +174,20 @@ export default function EmployeeMasterList() {
                         <p className="text-gray-500 text-sm">A full list of employees showing when they started.</p>
                     </div>
                 </div>
-                <div className="text-sm text-gray-500 font-medium bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
-                    {contextLabel === 'Team' ? 'Team Size' : 'Total Talent'}: <span className="text-gray-800 font-bold">{employees.length}</span>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIncludeResigned(prev => !prev)}
+                        className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                            includeResigned
+                                ? 'bg-gray-100 text-gray-700 border-gray-300'
+                                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                        }`}
+                    >
+                        {includeResigned ? 'Hide Resigned' : 'Show Resigned'}
+                    </button>
+                    <div className="text-sm text-gray-500 font-medium bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                        {contextLabel === 'Team' ? 'Team Size' : 'Total Talent'}: <span className="text-gray-800 font-bold">{employees.length}</span>
+                    </div>
                 </div>
             </div>
 

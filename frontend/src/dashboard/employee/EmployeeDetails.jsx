@@ -13,7 +13,7 @@ import {
     Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
@@ -92,6 +92,7 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 
 const EmployeeDetails = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
     // State
     const [userData, setUserData] = useState(null);
@@ -102,6 +103,16 @@ const EmployeeDetails = () => {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const SKILLS_PREVIEW_COUNT = 7;
+    const returnTarget = location.state?.from;
+
+    const handleGoBack = () => {
+        if (returnTarget?.pathname) {
+            const targetPath = `${returnTarget.pathname}${returnTarget.search || ''}${returnTarget.hash || ''}`;
+            navigate(targetPath, { state: returnTarget.state || null });
+            return;
+        }
+        navigate(-1);
+    };
 
     useEffect(() => {
         const fetchEmployeeDetails = async () => {
@@ -201,7 +212,7 @@ const EmployeeDetails = () => {
             <div className="p-6 bg-slate-50 min-h-screen flex flex-col items-center justify-center gap-4">
                 <div className="text-red-500 font-medium">{error || "Employee not found"}</div>
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={handleGoBack}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
@@ -322,7 +333,7 @@ const EmployeeDetails = () => {
             {/* Back Button */}
             <div>
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={handleGoBack}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />

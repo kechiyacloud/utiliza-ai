@@ -13,6 +13,22 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 
 HOURS_PER_FTE = 40  # 100% allocation per week
 
+
+def _projects_has_column(cur, column_name: str) -> bool:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'projects'
+              AND column_name = %s
+        )
+        """,
+        (column_name,),
+    )
+    return bool(cur.fetchone()[0])
+
 class ProjectDetailsUpdate(BaseModel):
     budget: Optional[str] = None
     billing_type: Optional[str] = None
@@ -124,6 +140,7 @@ class ProjectCreate(BaseModel):
     end_date: Optional[date] = None
     team_members: List[TeamMemberCreate] = []
     sub_status: Optional[str] = None
+    skill_names: List[str] = []
 
 
 VALID_PROJECT_TYPES = {"client", "internal", "partner", "poc"}
@@ -754,38 +771,62 @@ def projects_overview():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        has_project_status = _projects_has_column(cur, "project_status")
+        has_start_date = _projects_has_column(cur, "start_date")
+        has_project_type = _projects_has_column(cur, "project_type")
+
         cur.execute("SELECT COUNT(*) FROM projects")
         total = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
-        """)
-        ongoing = cur.fetchone()[0]
+        if has_project_status:
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
+            """)
+            ongoing = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
-        """)
-        completed = cur.fetchone()[0]
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
+            """)
+            completed = cur.fetchone()[0]
+        else:
+            ongoing = 0
+            completed = 0
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('not started', 'planned', 'upcoming') OR start_date > CURRENT_DATE
-        """)
-        upcoming = cur.fetchone()[0]
+        if has_project_status and has_start_date:
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_status) IN ('not started', 'planned', 'upcoming') OR start_date > CURRENT_DATE
+            """)
+            upcoming = cur.fetchone()[0]
+        elif has_project_status:
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_status) IN ('not started', 'planned', 'upcoming')
+            """)
+            upcoming = cur.fetchone()[0]
+        elif has_start_date:
+            cur.execute("SELECT COUNT(*) FROM projects WHERE start_date > CURRENT_DATE")
+            upcoming = cur.fetchone()[0]
+        else:
+            upcoming = 0
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) IN ('internal', 'poc')
-        """)
-        internal = cur.fetchone()[0]
+        if has_project_type:
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_type) IN ('internal', 'poc')
+            """)
+            internal = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) = 'client'
-        """)
-        client = cur.fetchone()[0]
+            cur.execute("""
+                SELECT COUNT(*) FROM projects
+                WHERE LOWER(project_type) = 'client'
+            """)
+            client = cur.fetchone()[0]
+        else:
+            internal = 0
+            client = 0
 
         return {
             "total_projects": total,
@@ -949,6 +990,32 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
         raise
     except Exception as e:
         conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.get("/{project_id}/skills")
+def get_project_skills(project_id: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Project not found")
+        cur.execute("""
+            SELECT s.skill_id, s.skill_name
+            FROM project_skills ps
+            JOIN skills s ON ps.skill_id = s.skill_id
+            WHERE ps.project_id = %s
+            ORDER BY s.skill_name
+        """, (project_id,))
+        rows = cur.fetchall()
+        return [{"skill_id": r[0], "skill_name": r[1]} for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
@@ -1439,6 +1506,29 @@ def create_project(project: ProjectCreate):
                     print(f"Warning: Team member '{tm.name}' not found in employee_master - skipping allocation.")
                     continue
                 raise
+
+        # Upsert skills and link to project
+        for raw_skill in project.skill_names:
+            skill_name = _normalize_text(raw_skill)
+            if not skill_name:
+                continue
+            cur.execute(
+                "SELECT skill_id FROM skills WHERE LOWER(TRIM(skill_name)) = LOWER(%s) LIMIT 1",
+                (skill_name,)
+            )
+            skill_row = cur.fetchone()
+            if skill_row:
+                skill_id = skill_row[0]
+            else:
+                cur.execute(
+                    "INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id",
+                    (skill_name,)
+                )
+                skill_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO project_skills (project_id, skill_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (project.project_id, skill_id)
+            )
 
         conn.commit()
         return {"message": "Project created successfully", "project_id": project.project_id}

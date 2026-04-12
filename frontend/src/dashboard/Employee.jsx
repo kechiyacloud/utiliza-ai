@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useDataRefresh } from '../context'
 import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
@@ -90,6 +91,7 @@ function Employee() {
       prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
     );
   };
+  const { refreshKey } = useDataRefresh();
 
   useEffect(() => {
     let mounted = true
@@ -98,7 +100,7 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList()
+        const data = await getEmployeeList(refreshKey > 0)
         if (!mounted) return
 
         setAllEmployees(data)
@@ -111,7 +113,7 @@ function Employee() {
 
     fetchAllData()
     return () => { mounted = false }
-  }, [])
+  }, [refreshKey])
 
   // Combined filters passed to EmployeeTable — dept chips override the filter drawer's dept selection
   const combinedFilters = {
@@ -331,7 +333,19 @@ function Employee() {
           contextLabel={contextLabel}
           employees={allEmployees}
           loading={loading}
-          onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
+          onEmployeeClick={(emp) =>
+            navigate(`/info/employee/${emp.employee_id || '123'}`, {
+              state: {
+                employee: emp,
+                from: {
+                  pathname: location.pathname,
+                  search: location.search,
+                  hash: location.hash,
+                  state: location.state || null
+                }
+              }
+            })
+          }
           onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
           onEmployeeDelete={(deletedId) => {
             setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));

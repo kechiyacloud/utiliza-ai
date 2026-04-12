@@ -658,7 +658,7 @@ def dashboard_executive_metrics():
             WITH months AS (
                 SELECT generate_series(DATE_TRUNC('month', CURRENT_DATE), DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months', INTERVAL '1 month') AS month_start
             )
-            SELECT TO_CHAR(mo.month_start, 'Mon'), COUNT(DISTINCT pa.employee_id)
+            SELECT TO_CHAR(mo.month_start, 'Mon'), COALESCE(SUM(pa.allocation_percentage)/100.0, 0)
             FROM months mo
             LEFT JOIN projects_allocation pa ON pa.allocation_start_date<=(mo.month_start+INTERVAL '1 month'-INTERVAL '1 day') AND (pa.allocation_end_date>=mo.month_start OR pa.allocation_end_date IS NULL)
             GROUP BY mo.month_start ORDER BY mo.month_start

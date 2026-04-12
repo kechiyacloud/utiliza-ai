@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useDataRefresh } from '../context';
 import { ArrowLeft, Upload } from 'lucide-react';
 import ImportAllocationModal from './allocation/ImportAllocationModal';
 import AllocationMetrics from './allocation/AllocationMetrics';
@@ -33,6 +34,7 @@ function Allocations() {
   const [possibleProjects, setPossibleProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const { refreshKey } = useDataRefresh();
 
   // Fetch Logic
   useEffect(() => {
@@ -52,7 +54,7 @@ function Allocations() {
       }
     };
     loadData();
-  }, [filters]); // Re-fetch when filters change
+  }, [filters, refreshKey]); // Re-fetch when filters or refreshKey change
 
   // Handle URL Hash Scrolling
   useEffect(() => {
@@ -218,7 +220,7 @@ function Allocations() {
             onClose={() => setSelectedProject(null)}
           />
         ) : (
-          <DepartmentAllocationChart />
+          <DepartmentAllocationChart filters={filters} />
         )}
       </div>
 
