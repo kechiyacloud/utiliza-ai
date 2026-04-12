@@ -68,7 +68,7 @@ function Projects() {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50">
+    <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
       {/* Overview Section */}
       <ProjectsOverview
         stats={data?.stats}

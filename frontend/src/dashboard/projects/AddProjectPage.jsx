@@ -10,7 +10,7 @@ const AddProjectPage = () => {
     };
 
     return (
-        <div className="w-full h-full overflow-y-auto bg-white">
+        <div className="w-full h-full overflow-y-auto bg-white projects-poppins-container">
             <AddProjectPanel
                 isOpen={true}
                 pageMode={true}

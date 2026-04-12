@@ -24,20 +24,19 @@ const ProjectStatusChart = ({ projects }) => {
 
     const getColor = (progress, hasStarted) => {
         if (!hasStarted) return { bar: 'bg-gray-300', text: 'text-gray-500' };
-        if (progress <= 30) return { bar: 'bg-yellow-400', text: 'text-yellow-700' };
-        if (progress <= 60) return { bar: 'bg-orange-400', text: 'text-orange-700' };
-        if (progress <= 90) return { bar: 'bg-blue-500', text: 'text-blue-50' };
-        return { bar: 'bg-emerald-500', text: 'text-emerald-50' };
+        if (progress <= 30) return { bar: 'bg-emerald-500', text: 'text-emerald-700' };
+        if (progress <= 60) return { bar: 'bg-amber-400', text: 'text-amber-700' };
+        return { bar: 'bg-red-500', text: 'text-red-700' };
     };
 
     const getBadgeStyle = (progress) => {
         if (progress <= 30) {
-            return "bg-yellow-100 text-yellow-800 shadow-sm";
+            return "bg-emerald-100 text-emerald-800 shadow-sm";
         }
         if (progress <= 60) {
-            return "bg-orange-500 text-white shadow-sm";
+            return "bg-amber-500 text-white shadow-sm";
         }
-        return "bg-emerald-500 text-white shadow-sm";
+        return "bg-red-500 text-white shadow-sm";
     };
 
     const filteredProjects = useMemo(() => {

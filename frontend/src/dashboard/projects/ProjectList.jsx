@@ -14,7 +14,77 @@ import ProjectStatusChart from './ProjectStatusChart';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
+const calculateProjectProgress = (project) => {
+    const today = new Date();
+    const start = new Date(project.startDate || project.start_date);
+    const end = new Date(project.endDate || project.end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return { pct: 0, daysLeft: 0 };
+    const msDay = 1000 * 60 * 60 * 24;
+    const totalDuration = Math.max((end - start) / msDay, 1);
+    const elapsed = Math.max((today - start) / msDay, 0);
+    let pct = Math.round((elapsed / totalDuration) * 100);
+    if (today < start) pct = 0;
+    if (today > end) pct = 100;
+    pct = Math.min(Math.max(pct, 0), 100);
+    const daysLeft = Math.max(Math.ceil((end - today) / msDay), 0);
+    return { pct, daysLeft };
+};
+
+const getProgressColorClasses = (pct) => {
+    if (pct <= 30) return 'bg-emerald-500';
+    if (pct <= 60) return 'bg-amber-400';
+    return 'bg-red-500';
+};
+
+const getStatusBadgeStyle = (pct) => {
+    if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' }; // Green
+    if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' }; // Amber
+    return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
+};
+
+const AvatarStack = ({ members, totalCount }) => {
+    if (!members || members.length === 0) return null;
+    
+    const displayMembers = members.slice(0, 3);
+    const remainingCount = totalCount - displayMembers.length;
+
+    return (
+        <div className="flex -space-x-2 overflow-hidden items-center mr-2">
+            {displayMembers.map((member, i) => (
+                <div 
+                    key={member.id || i} 
+                    className="relative group/avatar"
+                    title={member.name}
+                >
+                    <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
+                        {member.photo_url ? (
+                            <img 
+                                src={member.photo_url} 
+                                alt={member.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = '';
+                                    e.target.parentElement.innerHTML = `<span class="text-[10px] font-bold text-slate-400">${member.name?.[0].toUpperCase()}</span>`;
+                                }}
+                            />
+                        ) : (
+                            <span className="text-[10px] font-bold text-slate-400">{member.name?.[0].toUpperCase()}</span>
+                        )}
+                    </div>
+                </div>
+            ))}
+            {remainingCount > 0 && (
+                <div className="w-7 h-7 rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 shadow-sm z-10">
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
+    const progress = calculateProjectProgress(project);
     return (
         <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300">
             <div className="flex justify-between items-start mb-4">
@@ -23,10 +93,10 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                         {project.icon || project.name?.[0]?.toUpperCase()}
                     </div>
                     <div>
-                        <h3 className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors line-clamp-1 truncate max-w-[160px] font-sans" title={project.name}>
+                        <h3 className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors line-clamp-1 truncate max-w-[160px]" title={project.name}>
                             {project.name}
                         </h3>
-                        <p className="text-sm text-slate-500 font-sans tracking-tight">
+                        <p className="text-sm text-slate-500 tracking-tight">
                             {project.project_id || project.id}
                         </p>
                     </div>
@@ -43,43 +113,57 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
 
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                    <span className="text-sm font-normal text-slate-500 font-sans">Status</span>
+                    <span className="text-sm font-normal text-slate-500">Status</span>
                     <span 
-                        className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider font-sans"
-                        style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
-                            backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
-                            color: project.status === 'Completed' ? '#1E40AF' : '#166534'
-                        }}
+                        className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider whitespace-nowrap"
+                        style={getStatusBadgeStyle(progress.pct)}
                     >
                         {formatStatus(project)}
                     </span>
+                </div>
+
+                {/* Progress Bar with Avatars */}
+                <div className="space-y-1.5">
+                    <div className="flex justify-between items-center px-0.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
+                        <span className="text-[10px] font-bold text-slate-600">{progress.pct}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <AvatarStack members={project.team_members} totalCount={project.resource_count} />
+                        <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(progress.pct)}`}
+                                style={{ width: `${progress.pct}%` }}
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
                         <div className="flex items-center gap-1.5 text-slate-500">
                             <Users size={12} />
-                            <span className="text-sm font-normal font-sans uppercase">Team</span>
+                            <span className="text-sm font-normal uppercase">Team</span>
                         </div>
-                        <p className="text-sm font-normal text-gray-700 font-sans">{project.resource_count || 0} Members</p>
+                        <p className="text-sm font-normal text-gray-700">{project.resource_count || 0} Members</p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
                         <div className="flex items-center gap-1.5 text-slate-500">
                             <Calendar size={12} />
-                            <span className="text-sm font-normal font-sans uppercase">Type</span>
+                            <span className="text-sm font-normal uppercase">Type</span>
                         </div>
-                        <p className="text-sm font-normal text-gray-700 font-sans">{project.type}</p>
+                        <p className="text-sm font-normal text-gray-700">{project.type}</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-sm text-slate-500 font-normal font-sans">
+                <div className="flex items-center gap-2 text-sm text-slate-500 font-normal">
                     <Info size={12} className="text-blue-400" />
-                    <span>Client: <span className="font-normal text-gray-700">{project.client || '—'}</span></span>
+                    <span>Client: <span className="font-normal text-gray-700">{project.client_name || project.client || '—'}</span></span>
                 </div>
 
                 <button 
                     onClick={() => onView(project)}
-                    className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600 font-sans"
+                    className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600"
                 >
                     View Details
                     <ExternalLink size={14} />
@@ -98,6 +182,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [activeView, setActiveView] = useState('table'); // 'table', 'grid', or 'chart'
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'billable', 'non-billable', 'internal', 'name'
+    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -177,6 +263,36 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
         return matchesSearchTerm && matchesName && matchesResource && matchesStatus && 
                matchesResourceType && matchesDate && matchesCardFilter;
+    }).sort((a, b) => {
+        if (sortBy === 'newest') {
+            const dateA = new Date(a.startDate || a.start_date || 0);
+            const dateB = new Date(b.startDate || b.start_date || 0);
+            return dateB - dateA;
+        }
+        if (sortBy === 'oldest') {
+            const dateA = new Date(a.startDate || a.start_date || 0);
+            const dateB = new Date(b.startDate || b.start_date || 0);
+            return dateA - dateB;
+        }
+        if (sortBy === 'name') {
+            return (a.name || '').localeCompare(b.name || '');
+        }
+        if (sortBy === 'billable') {
+            const aVal = (a.billable || '').toLowerCase() === 'billable' ? 0 : 1;
+            const bVal = (b.billable || '').toLowerCase() === 'billable' ? 0 : 1;
+            return aVal - bVal;
+        }
+        if (sortBy === 'non-billable') {
+            const aVal = (a.billable || '').toLowerCase().includes('non') ? 0 : 1;
+            const bVal = (b.billable || '').toLowerCase().includes('non') ? 0 : 1;
+            return aVal - bVal;
+        }
+        if (sortBy === 'internal') {
+            const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
+            const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
+            return aVal - bVal;
+        }
+        return 0;
     });
 
     const tableTitle = (() => {
@@ -379,6 +495,41 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         {isFilterActive && <span className="ml-2 w-2 h-2 rounded-full bg-white animate-pulse"></span>}
                     </button>
 
+                    <div className="relative group">
+                        <button 
+                            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                        >
+                            Sort
+                            <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isSortMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
+                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                    {[
+                                        { id: 'newest', label: 'Newest First' },
+                                        { id: 'oldest', label: 'Oldest First' },
+                                        { id: 'name', label: 'A-Z Project Name' },
+                                        { id: 'billable', label: 'Billable First' },
+                                        { id: 'non-billable', label: 'Non-billable First' },
+                                        { id: 'internal', label: 'Internal Only' },
+                                    ].map((opt) => (
+                                        <button 
+                                            key={opt.id}
+                                            onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }} 
+                                            className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            {opt.label}
+                                            {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
                     {isFilterActive && (
                         <button
                             onClick={handleClearFilters}
@@ -431,11 +582,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                         </td>
                                         <td className="py-5 text-center">
                                             <span 
-                                                className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans"
-                                                style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
-                                                    backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
-                                                    color: project.status === 'Completed' ? '#1E40AF' : '#166534'
-                                                }}
+                                                className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
+                                                style={getStatusBadgeStyle(calculateProjectProgress(project).pct)}
                                             >
                                                 {formatStatus(project)}
                                             </span>
@@ -449,8 +597,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                         </td>
                                         <td className="py-5 text-center">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-base font-normal text-blue-600 leading-none">{project.resource_count || 0}</span>
-                                                <span className="text-sm text-slate-500 font-normal uppercase mt-1 font-sans">Resources</span>
+                                                <div className="mb-1">
+                                                    <AvatarStack members={project.team_members} totalCount={project.resource_count} />
+                                                </div>
+                                                <span className="text-sm text-slate-500 font-normal uppercase mt-1">Resources: {project.resource_count || 0}</span>
                                             </div>
                                         </td>
                                         <td className="py-5 pr-6">

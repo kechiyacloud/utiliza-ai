@@ -92,6 +92,52 @@ function buildWeekDescriptor(mondayDate, index) {
     };
 }
 
+const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
+    return (
+        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+            {photo_url ? (
+                <img 
+                    src={photo_url} 
+                    alt={name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '';
+                        e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-slate-400">${name?.[0].toUpperCase()}</span>`;
+                    }}
+                />
+            ) : (
+                <span className="text-xs font-bold text-slate-400">{name?.[0].toUpperCase()}</span>
+            )}
+        </div>
+    );
+};
+
+const AvatarStack = ({ members, totalCount, size = 'w-8 h-8' }) => {
+    if (!members || members.length === 0) return null;
+    
+    const displayMembers = members.slice(0, 4);
+    const remainingCount = totalCount - displayMembers.length;
+
+    return (
+        <div className="flex -space-x-3 overflow-hidden items-center group/stack cursor-pointer">
+            {displayMembers.map((member, i) => (
+                <AvatarCircle 
+                    key={member.id || member.employee_id || i} 
+                    name={member.name} 
+                    photo_url={member.photo_url} 
+                    size={size}
+                />
+            ))}
+            {remainingCount > 0 && (
+                <div className={`${size} rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 shadow-sm z-10 transition-transform group-hover/stack:translate-x-1`}>
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export function getWeekStatus(weekStartDate, weekEndDate, today = new Date()) {
     const start = new Date(weekStartDate); start.setHours(0,0,0,0);
     const end = new Date(weekEndDate); end.setHours(23,59,59,999);
@@ -1586,14 +1632,20 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                             />
                                         ) : (
                                             row.employee_id ? (
-                                                <Link
-                                                    to={`/info/employee/${row.employee_id}`}
-                                                    className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
-                                                >
-                                                    {row.name || '-'}
-                                                </Link>
+                                                <div className="flex items-center gap-3">
+                                                    <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
+                                                    <Link
+                                                        to={`/info/employee/${row.employee_id}`}
+                                                        className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
+                                                    >
+                                                        {row.name || '-'}
+                                                    </Link>
+                                                </div>
                                             ) : (
-                                                row.name || '-'
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
+                                                    <span>{row.name || '-'}</span>
+                                                </div>
                                             )
                                         )}
                                     </td>
@@ -1875,21 +1927,36 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     );
 };
 
+const calculateProjectProgress = (project) => {
+    const today = new Date();
+    const start = new Date(project.startDate || project.start_date || project.start);
+    const end = new Date(project.endDate || project.end_date || project.end);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const msDay = 1000 * 60 * 60 * 24;
+    const totalDuration = Math.max((end - start) / msDay, 1);
+    const elapsed = Math.max((today - start) / msDay, 0);
+    let pct = Math.round((elapsed / totalDuration) * 100);
+    if (today < start) pct = 0;
+    if (today > end) pct = 100;
+    return Math.min(Math.max(pct, 0), 100);
+};
+
+const getStatusBadgeClasses = (pct) => {
+    if (pct <= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    if (pct <= 60) return 'bg-amber-50 text-amber-700 border-amber-100';
+    return 'bg-rose-50 text-rose-700 border-rose-100';
+};
+
 const OngoingProjectInfoCard = ({ project, resources }) => {
     const headcount = resources.length;
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeLabel = (project?.type || '').toLowerCase() === 'internal' ? 'Internal' : 'Client';
     const projectStatus = project?.status || project?.project_status || 'Not Set';
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
-    const projectStatusKey = projectStatus.toLowerCase();
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
-    const statusClasses = projectStatusKey === 'completed'
-        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-        : projectStatusKey === 'in progress'
-            ? 'bg-blue-50 text-blue-700 border-blue-100'
-            : projectStatusKey === 'on hold'
-                ? 'bg-amber-50 text-amber-700 border-amber-100'
-                : 'bg-slate-50 text-slate-700 border-slate-200';
+    
+    const progressPct = calculateProjectProgress(project);
+    const statusClasses = getStatusBadgeClasses(progressPct);
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -1910,6 +1977,18 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                             <Briefcase size={14} className="text-slate-400" />
                             {project.client || 'No client selected'}
                         </span>
+                        <div className="ml-2 flex items-center gap-3">
+                            <AvatarStack 
+                                members={resources.map(r => ({ name: r.name, photo_url: r.photo_url, id: r.employee_id }))} 
+                                totalCount={headcount} 
+                                size="w-9 h-9"
+                            />
+                            {headcount > 0 && (
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                                    {headcount} Team Members
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2430,13 +2509,13 @@ const ProjectDetailsPage = () => {
     }
 
     return (
-        <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30">
+        <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
             <div className="mb-5">
                 <button
                     onClick={() => navigate('/info/projects')}
                     className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mb-4 w-fit"
                 >
-                    <ArrowLeft size={16} /> Back to Dashboard
+                    <ArrowLeft size={16} /> Back to Project Overview
                 </button>
 
                 <OngoingProjectInfoCard project={project} resources={resources} />

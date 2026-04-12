@@ -852,7 +852,18 @@ def projects_list(department: Optional[str] = None):
                 p.start_date,
                 p.end_date,
                 COUNT(DISTINCT pa.employee_id) AS resource_count,
-                STRING_AGG(DISTINCT em.employee_name, ', ') AS resource_names,
+                (
+                    SELECT JSON_AGG(json_row)
+                    FROM (
+                        SELECT JSON_BUILD_OBJECT('name', em2.employee_name, 'id', em2.employee_id, 'photo_url', em2.photo_url) AS json_row
+                        FROM projects_allocation pa2
+                        JOIN employee_master em2 ON pa2.employee_id = em2.employee_id
+                        WHERE pa2.project_id = p.project_id
+                          AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                        ORDER BY pa2.allocation_percentage DESC
+                        LIMIT 6
+                    ) AS limited_members
+                ) AS team_members,
                 c.client_name,
                 pr.partner_name,
                 p.billable,
@@ -879,7 +890,7 @@ def projects_list(department: Optional[str] = None):
                 "start_date": r[5],
                 "end_date": r[6],
                 "resource_count": r[7],
-                "resource_names": r[8] if r[8] else "",
+                "team_members": r[8] if r[8] else [],
                 "client_name": r[9],
                 "partner_name": r[10],
                 "billable": r[11] if r[11] else "Unknown",
@@ -1009,7 +1020,8 @@ def project_resources(project_id: str):
                 wa.allocation_year,
                 wa.week_number,
                 COALESCE(wa.allocated_hours, 0),
-                pa.project_tags
+                pa.project_tags,
+                em.photo_url
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
@@ -1050,6 +1062,7 @@ def project_resources(project_id: str):
                     "allocation_end_date": str(r[6]) if r[6] else None,
                     "allocation_percentage": r[7] or 0,
                     "billable_shadow": billable_shadow,
+                    "photo_url": r[12],
                     "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
                     "weekly_hours": {},
                     "_has_weekly_data": False,

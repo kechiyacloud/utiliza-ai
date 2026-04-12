@@ -634,7 +634,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     const entityLabel = modal.entityType === 'client' ? 'Client' : 'Partner';
 
     return (
-        <>
+        <div className="projects-poppins-container">
             <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
             {/* Full Screen Page Overlay */}
@@ -961,7 +961,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                 onCancel={closeModal}
                 error={modal.error}
             />
-        </>
+        </div>
     );
 };
 

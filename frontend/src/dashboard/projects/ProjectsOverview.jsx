@@ -12,20 +12,20 @@ const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
                 : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-md'
             }`}
         >
-            <div className="flex justify-between items-start">
-                <div className={`p-1.5 rounded-lg transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
+            <div className="flex justify-between items-start flex-row-reverse w-full">
+                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
                     <Icon size={16} />
                 </div>
                 {active && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div>
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse absolute top-4 left-4"></div>
                 )}
             </div>
 
-            <div className="flex flex-col">
-                <p className={`text-sm font-normal translation-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
+            <div className="flex flex-col mt-auto">
+                <p className={`text-xl font-semibold transition-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
                     {value}
                 </p>
-                <p className="text-sm font-normal text-slate-500">
+                <p className="text-sm font-medium text-slate-500">
                     {label}
                 </p>
             </div>
@@ -61,8 +61,8 @@ const ProjectsOverview = ({
                         </button>
                     )}
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-800 font-sans tracking-tight">Projects Overview</h1>
-                        <p className="text-slate-500 text-sm mt-1 font-normal font-sans">
+                        <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">Projects Overview</h1>
+                        <p className="text-slate-500 text-sm mt-1 font-normal">
                             {selectedDepartment === '' || selectedDepartment === 'All Departments' ? 'All Organization Projects' : `${selectedDepartment} Department`}
                         </p>
                     </div>
@@ -77,7 +77,7 @@ const ProjectsOverview = ({
                         <select
                             value={selectedDepartment}
                             onChange={(e) => onDepartmentChange(e.target.value)}
-                            className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm font-sans"
+                            className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
                         >
                             <option value="">All Department</option>
                             {departments.map((dept) => (
@@ -91,7 +91,7 @@ const ProjectsOverview = ({
 
                     <button
                         onClick={() => navigate('/info/projects/add')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1 font-sans"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1"
                     >
                         <span>+</span> Add New Project
                     </button>

@@ -541,13 +541,13 @@ function ImportResourcesPage() {
     const projectName = project?.name || project?.project_name || 'Project';
 
     return (
-        <div className="p-6 h-full w-full overflow-y-auto bg-slate-50/30">
+        <div className="p-6 h-full w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
             <div className="mb-5">
                 <button
                     onClick={() => navigate('/info/projects')}
                     className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mb-4 w-fit"
                 >
-                    <ArrowLeft size={16} /> Back to Dashboard
+                    <ArrowLeft size={16} /> Back to Project Overview
                 </button>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4">

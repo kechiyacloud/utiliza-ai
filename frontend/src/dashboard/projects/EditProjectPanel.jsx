@@ -29,9 +29,9 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
     const accentColor = isDelete ? 'red' : mode === 'edit' ? 'blue' : 'emerald';
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
-            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden animate-in">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 projects-poppins-container">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative z-[121] w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
                 <div className={`px-6 pt-6 pb-4 border-b border-gray-100`}>
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
