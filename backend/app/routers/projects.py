@@ -1556,8 +1556,13 @@ def create_project(project: ProjectCreate):
 
         conn.commit()
         return {"message": "Project created successfully", "project_id": project.project_id}
-    except psycopg2.errors.UniqueViolation:
+    except psycopg2.errors.UniqueViolation as exc:
         conn.rollback()
+        diag = exc.diag.constraint_name or ""
+        if "project_name" in diag:
+            raise HTTPException(status_code=409, detail=f"A project with the name '{project.project_name}' already exists for this client.")
+        if "allocation" in diag:
+            raise HTTPException(status_code=409, detail="Duplicate resource allocation detected.")
         raise HTTPException(status_code=409, detail=f"Project ID '{project.project_id}' already exists.")
     except HTTPException:
         conn.rollback()

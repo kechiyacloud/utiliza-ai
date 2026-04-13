@@ -14,6 +14,7 @@ import {
     deletePartnerClient,
 } from '../../api/entitiesApi';
 import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
+import { ALL_SKILLS } from '../../data/skills';
 
 /* ──────────────────────────────────────────────────────────
    HELPERS — for Last 4 Weeks visualization
@@ -380,19 +381,44 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     const [entityError, setEntityError] = useState('');
 
     // --- Skills State ---
-    const [skillInput, setSkillInput] = useState('');
     const [skills, setSkills] = useState([]);
+    const [isSkillsOpen, setIsSkillsOpen] = useState(false);
+    const [skillSearch, setSkillSearch] = useState('');
+    const skillsDropdownRef = useRef(null);
 
-    const addSkill = () => {
-        const trimmed = skillInput.trim();
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (skillsDropdownRef.current && !skillsDropdownRef.current.contains(e.target)) {
+                setIsSkillsOpen(false);
+            }
+        };
+        if (isSkillsOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isSkillsOpen]);
+
+    const toggleSkill = (skill) => {
+        setSkills(prev =>
+            prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+        );
+    };
+
+    const addCustomSkill = () => {
+        const trimmed = skillSearch.trim();
         if (!trimmed || skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) return;
         setSkills(prev => [...prev, trimmed]);
-        setSkillInput('');
+        setSkillSearch('');
     };
 
-    const removeSkill = (index) => {
-        setSkills(prev => prev.filter((_, i) => i !== index));
+    const removeSkill = (skill) => {
+        setSkills(prev => prev.filter(s => s !== skill));
     };
+
+    const filteredSkills = ALL_SKILLS.filter(
+        s => s.toLowerCase().includes(skillSearch.toLowerCase()) && !skills.includes(s)
+    );
+    const customSkillTyped = skillSearch.trim() &&
+        !ALL_SKILLS.some(s => s.toLowerCase() === skillSearch.trim().toLowerCase()) &&
+        !skills.some(s => s.toLowerCase() === skillSearch.trim().toLowerCase());
 
     // --- Modal State ---
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
@@ -664,6 +690,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     // --- Form Submission ---
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
         setSubmitError('');
 
         if (!formData.name.trim()) {
@@ -697,7 +724,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
         setIsSubmitting(true);
 
-        const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
+        const projectId = `PRJ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
         const effectiveType = isPartnerClientProject ? 'Partner' : formData.type;
 
@@ -947,28 +974,81 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                         <hr className="border-gray-100" />
 
                         {/* --- SKILLS SECTION --- */}
-                        <div className="flex flex-col gap-4 mt-4 mb-2">
+                        <div className="flex flex-col gap-3 mt-4 mb-2">
                             <h3 className="text-sm font-bold text-gray-700">Required Skills</h3>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={skillInput}
-                                    onChange={e => setSkillInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
-                                    placeholder="e.g. React, Python, AWS..."
-                                    className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all"
-                                />
-                                <button type="button" onClick={addSkill}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
-                                    Add
+
+                            {/* Dropdown trigger */}
+                            <div className="relative" ref={skillsDropdownRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsSkillsOpen(prev => !prev)}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-left flex items-center justify-between hover:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                                >
+                                    <span className="text-gray-600">
+                                        {skills.length > 0 ? `${skills.length} skill(s) selected` : 'Click to select or add skills'}
+                                    </span>
+                                    <span className="text-gray-400 text-xs">{isSkillsOpen ? '▲' : '▼'}</span>
                                 </button>
+
+                                {/* Dropdown panel */}
+                                {isSkillsOpen && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-80 overflow-hidden flex flex-col">
+                                        {/* Search + add custom */}
+                                        <div className="p-2 border-b border-gray-100 flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Search or type a new skill..."
+                                                value={skillSearch}
+                                                onChange={e => setSkillSearch(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSkill(); } }}
+                                                onClick={e => e.stopPropagation()}
+                                                className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                autoFocus
+                                            />
+                                            {customSkillTyped && (
+                                                <button
+                                                    type="button"
+                                                    onClick={addCustomSkill}
+                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors whitespace-nowrap"
+                                                >
+                                                    + Add "{skillSearch.trim()}"
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Scrollable skill list */}
+                                        <div className="overflow-y-auto p-2">
+                                            {filteredSkills.length > 0 ? (
+                                                <div className="grid grid-cols-3 gap-1">
+                                                    {filteredSkills.map(skill => (
+                                                        <label key={skill} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-50 px-2 py-1.5 rounded-lg transition-colors">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={skills.includes(skill)}
+                                                                onChange={() => toggleSkill(skill)}
+                                                                className="rounded text-blue-500 focus:ring-blue-400"
+                                                            />
+                                                            <span className="text-gray-700">{skill}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 text-center py-4">
+                                                    {skillSearch ? `No existing skill matches "${skillSearch}" — click Add to create it` : 'All skills selected'}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Selected skill chips */}
                             {skills.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
-                                    {skills.map((s, i) => (
-                                        <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-medium">
+                                    {skills.map(s => (
+                                        <span key={s} className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-medium">
                                             {s}
-                                            <button type="button" onClick={() => removeSkill(i)} className="text-blue-400 hover:text-blue-700 leading-none">×</button>
+                                            <button type="button" onClick={() => removeSkill(s)} className="text-blue-400 hover:text-blue-700 leading-none">×</button>
                                         </span>
                                     ))}
                                 </div>

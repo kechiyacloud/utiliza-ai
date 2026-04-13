@@ -113,8 +113,10 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable'; break;
                     case 'bench':
                         matchesCardFilter = (emp.employee_allocations || 0) <= 0; break;
-                    case 'notice':
-                        matchesCardFilter = emp.employee_status?.toLowerCase().includes('notice'); break;
+                    case 'notice': {
+                        const s = (emp.employee_status || '').toLowerCase();
+                        matchesCardFilter = s.includes('notice') || s.includes('pip'); break;
+                    }
                     case 'new-joiner':
                         const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
                         matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo; break;

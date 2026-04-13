@@ -451,7 +451,18 @@ const EmployeeDetails = () => {
                             </div>
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">CD Exp</p>
-                                <p className="font-semibold text-slate-700">{userData.cdExperience} Yrs</p>
+                                <p className="font-semibold text-slate-700">
+                                    {userData.joiningDate
+                                        ? (() => {
+                                            const joined = new Date(userData.joiningDate);
+                                            const now = new Date();
+                                            const years = (now - joined) / (1000 * 60 * 60 * 24 * 365.25);
+                                            return years >= 1
+                                                ? `${Math.floor(years)} Yr${Math.floor(years) !== 1 ? 's' : ''}`
+                                                : `${Math.round(years * 12)} Mo`;
+                                        })()
+                                        : `${userData.cdExperience ?? '—'} Yrs`}
+                                </p>
                             </div>
                         </div>
                         <div>

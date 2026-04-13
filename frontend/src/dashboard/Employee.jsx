@@ -152,7 +152,10 @@ function Employee() {
   // Derived stats from the filtered group
   const totalEmployeesCount = baseGroup.length;
   const benchEmployeesCount = baseGroup.filter(e => (e.employee_allocations || 0) <= 0).length;
-  const noticeEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
+  const noticeEmployeesCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    return s.includes('notice') || s.includes('pip');
+  }).length;
 
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
@@ -306,7 +309,7 @@ function Employee() {
           onClick={() => setCardFilter('bench')}
         />
         <StatCard
-          label="Leaving Soon"
+          label="Notice Period & PIP"
           value={noticeEmployeesCount}
           icon={Hourglass}
           colorClass="bg-red-500"
