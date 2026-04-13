@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 import uuid
+import json
 from typing import Dict, List, Optional
 
 import psycopg2
@@ -12,22 +13,6 @@ from app.database import get_db_connection, release_db_connection
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 HOURS_PER_FTE = 40  # 100% allocation per week
-
-
-def _projects_has_column(cur, column_name: str) -> bool:
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'projects'
-              AND column_name = %s
-        )
-        """,
-        (column_name,),
-    )
-    return bool(cur.fetchone()[0])
 
 class ProjectDetailsUpdate(BaseModel):
     budget: Optional[str] = None
@@ -52,6 +37,7 @@ class ProjectUpdate(BaseModel):
     client_id: Optional[str] = None
     partner_id: Optional[str] = None
     partner: Optional[str] = None
+    department_id: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     sub_status: Optional[str] = None
@@ -140,7 +126,7 @@ class ProjectCreate(BaseModel):
     end_date: Optional[date] = None
     team_members: List[TeamMemberCreate] = []
     sub_status: Optional[str] = None
-    skill_names: List[str] = []
+    skills: List[str] = []
 
 
 VALID_PROJECT_TYPES = {"client", "internal", "partner", "poc"}
@@ -157,18 +143,18 @@ PROJECT_STATUS_ALIASES = {
     "on hold": "On Hold",
     "delayed": "On Hold",
     "blocked": "On Hold",
-    "closed": "Completed",
-    "completed": "Completed",
-    "done": "Completed",
-    "ended": "Completed",
-    "end": "Completed",
-    "finished": "Completed",
+    "closed": "COMPLETED",
+    "completed": "COMPLETED",
+    "done": "COMPLETED",
+    "ended": "COMPLETED",
+    "end": "COMPLETED",
+    "finished": "COMPLETED",
 }
-VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "Completed"}
+VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "COMPLETED"}
 VALID_SUB_STATUSES = {"SOW_SIGNED": "SOW Signed", "SOW_NOT_SIGNED": "SOW Not Signed"}
 PROJECT_TYPE_ALIASES = {
-    "client": "External",
-    "external": "External",
+    "client": "Client",
+    "external": "Client",
     "internal": "Internal",
     "partner": "Partner",
     "poc": "POC",
@@ -198,7 +184,13 @@ def _parse_optional_date(value: Optional[str]):
         raise HTTPException(status_code=422, detail=f"Invalid date format '{value}'. Expected YYYY-MM-DD.") from exc
 
 
-def _normalize_project_status(value: Optional[str], strict: bool = True) -> Optional[str]:
+def _normalize_project_status(value: Optional[str], end_date: Optional[date] = None, strict: bool = True) -> Optional[str]:
+    from datetime import date as dt_date
+    
+    # 1. Date-based completion check (yesterday/past date logic)
+    if end_date and end_date < dt_date.today():
+        return "COMPLETED"
+
     normalized = _normalize_text(value)
     if not normalized:
         if strict:
@@ -207,13 +199,15 @@ def _normalize_project_status(value: Optional[str], strict: bool = True) -> Opti
 
     key = " ".join(normalized.lower().split())
     canonical = PROJECT_STATUS_ALIASES.get(key)
-    if canonical:
-        return canonical
-
-    if strict:
-        allowed = ", ".join(sorted(VALID_PROJECT_STATUSES))
-        raise HTTPException(status_code=422, detail=f"Project status must be one of: {allowed}.")
-    return normalized
+    
+    res = canonical if canonical else (normalized if not strict else "In Progress")
+    
+    # 2. Date-based status override
+    # If project end_date is today or in future, it CANNOT be COMPLETED
+    if end_date and end_date >= dt_date.today() and res == "COMPLETED":
+        return "In Progress"
+        
+    return res
 
 
 def _normalize_sub_status(value: Optional[str], strict: bool = False) -> Optional[str]:
@@ -241,7 +235,7 @@ def _normalize_project_type(value: Optional[str], strict: bool = True) -> Option
         return PROJECT_TYPE_ALIASES[key]
 
     if strict:
-        raise HTTPException(status_code=422, detail="Project type must be External, Internal, Partner, or POC.")
+        raise HTTPException(status_code=422, detail="Project type must be Client, Internal, Partner, or POC.")
     return normalized
 
 
@@ -787,29 +781,32 @@ def projects_overview(department: Optional[str] = None):
         cur.execute(f"SELECT COUNT(DISTINCT p.project_id) FROM projects p {join_clause} WHERE 1=1 {where_clause}", tuple(params))
         total = cur.fetchone()[0]
 
-        # 2. Ongoing
+        # 2. Ongoing (Exclude Not Started/Upcoming and projects that have ended)
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
-            WHERE LOWER(p.project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
+            WHERE (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
+              AND LOWER(p.project_status) NOT IN ('not started', 'planned', 'upcoming')
+              AND (p.start_date IS NULL OR p.start_date <= CURRENT_DATE)
             {where_clause}
         """, tuple(params))
         ongoing = cur.fetchone()[0]
 
-        # 3. Completed
+        # 3. Completed (Only if end_date has passed)
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
-            WHERE LOWER(p.project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
+            WHERE p.end_date < CURRENT_DATE
             {where_clause}
         """, tuple(params))
         completed = cur.fetchone()[0]
 
-        # 4. Upcoming
+        # 4. Upcoming (Status based OR start date in future)
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
             WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
+              AND (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
             {where_clause}
         """, tuple(params))
         upcoming = cur.fetchone()[0]
@@ -823,19 +820,20 @@ def projects_overview(department: Optional[str] = None):
         """, tuple(params))
         internal = cur.fetchone()[0]
 
-        # 6. External
+        # 6. Client
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
-            WHERE LOWER(p.project_type) = 'external'
+            WHERE LOWER(p.project_type) IN ('client', 'external')
             {where_clause}
         """, tuple(params))
-        external = cur.fetchone()[0]
+        client = cur.fetchone()[0]
 
         return {
             "total_projects": total,
             "internal_projects": internal,
-            "external_projects": external,
+            "external_projects": client,
+            "client_projects": client,
             "ongoing_projects": ongoing,
             "upcoming_projects": upcoming,
             "completed_projects": completed,
@@ -856,8 +854,15 @@ def projects_list(department: Optional[str] = None):
         where_clause = ""
         params = []
         if department and department.lower() != 'all':
-            where_clause = "HAVING STRING_AGG(DISTINCT em.department, ', ') LIKE %s"
-            params = [f"%{department}%"]
+            where_clause = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_dept
+                    JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
+                    WHERE pa_dept.project_id = p.project_id
+                      AND em_dept.department = %s
+                )
+            """
+            params = [department]
 
         cur.execute(f"""
             SELECT
@@ -868,7 +873,11 @@ def projects_list(department: Optional[str] = None):
                 p.project_type,
                 p.start_date,
                 p.end_date,
-                COUNT(DISTINCT pa.employee_id) AS resource_count,
+                (
+                    SELECT COUNT(DISTINCT pa_all.employee_id)
+                    FROM projects_allocation pa_all
+                    WHERE pa_all.project_id = p.project_id
+                ) AS resource_count,
                 (
                     SELECT JSON_AGG(json_row)
                     FROM (
@@ -885,14 +894,16 @@ def projects_list(department: Optional[str] = None):
                 pr.partner_name,
                 p.billable,
                 p.client_id,
-                p.partner_id
+                p.partner_id,
+                p.department_id,
+                d.department_name,
+                p.skills
             FROM projects p
-            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-            LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
-            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
-            {where_clause}
+            LEFT JOIN departments d ON p.department_id = d.department_id
+            WHERE 1=1 {where_clause}
+            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id, p.department_id, d.department_name, p.skills
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
         rows = cur.fetchall()
@@ -901,7 +912,8 @@ def projects_list(department: Optional[str] = None):
             {
                 "project_id": r[0],
                 "project_name": r[1],
-                "status": _normalize_project_status(r[2], strict=False) if r[2] else "Unknown",
+                "status": _normalize_project_status(r[2], end_date=r[6], strict=False),
+                "raw_status": (r[2] or "").strip(),   # exact value from DB — used for display
                 "sub_status": _normalize_sub_status(r[3], strict=False),
                 "type": _normalize_project_type(r[4], strict=False) if r[4] else "Unknown",
                 "start_date": r[5],
@@ -913,12 +925,15 @@ def projects_list(department: Optional[str] = None):
                 "billable": r[11] if r[11] else "Unknown",
                 "client_id": r[12],
                 "partner_id": r[13],
+                "department_id": r[14],
+                "department_name": r[15],
+                "skills": r[16] if r[16] else []
             }
             for r in rows
         ]
     except Exception as e:
         print("PROJECTS LIST ERROR:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:
         cur.close()
         release_db_connection(conn)
@@ -934,10 +949,12 @@ def get_project_details(project_id: str):
                 p.project_id, p.project_name, p.project_status, p.sub_status, p.billable, p.start_date, p.end_date,
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
-                ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes
+                ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
+                p.client_id, p.partner_id, p.department_id, d.department_name, p.project_type, p.skills
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
+            LEFT JOIN departments d ON p.department_id = d.department_id
             LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
             LEFT JOIN project_scopes ps ON p.project_id = ps.project_id
             WHERE p.project_id = %s
@@ -965,6 +982,12 @@ def get_project_details(project_id: str):
             "deliverables": row[15] or "No deliverables listed.",
             "milestones": row[16] or "No milestones listed.",
             "timeline_notes": row[17] or "No timeline notes.",
+            "client_id": row[18],
+            "partner_id": row[19],
+            "department_id": row[20],
+            "department_name": row[21],
+            "project_type": row[22],
+            "skills": row[23] if row[23] else []
         }
     finally:
         cur.close()
@@ -991,18 +1014,28 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
             WHERE project_id = %s
         """, (start_date_val, end_date_val, project_id))
 
-        # Replace commercial details
-        cur.execute("DELETE FROM project_commercials WHERE project_id = %s", (project_id,))
+        # Partial update for commercial details
+        # We use INSERT ON CONFLICT to ensure the row exists, and COALESCE to keep existing data if current is None
         cur.execute("""
             INSERT INTO project_commercials (project_id, budget, billing_type, contract_type, revenue_model, commercial_notes)
             VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (project_id) DO UPDATE SET
+                budget = COALESCE(EXCLUDED.budget, project_commercials.budget),
+                billing_type = COALESCE(EXCLUDED.billing_type, project_commercials.billing_type),
+                contract_type = COALESCE(EXCLUDED.contract_type, project_commercials.contract_type),
+                revenue_model = COALESCE(EXCLUDED.revenue_model, project_commercials.revenue_model),
+                commercial_notes = COALESCE(EXCLUDED.commercial_notes, project_commercials.commercial_notes)
         """, (project_id, details.budget, details.billing_type, details.contract_type, details.revenue_model, details.commercial_notes))
         
-        # Replace scope details
-        cur.execute("DELETE FROM project_scopes WHERE project_id = %s", (project_id,))
+        # Partial update for scope details
         cur.execute("""
             INSERT INTO project_scopes (project_id, objective, deliverables, milestones, timeline_notes)
             VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (project_id) DO UPDATE SET
+                objective = COALESCE(EXCLUDED.objective, project_scopes.objective),
+                deliverables = COALESCE(EXCLUDED.deliverables, project_scopes.deliverables),
+                milestones = COALESCE(EXCLUDED.milestones, project_scopes.milestones),
+                timeline_notes = COALESCE(EXCLUDED.timeline_notes, project_scopes.timeline_notes)
         """, (project_id, details.objective, details.deliverables, details.milestones, details.timeline_notes))
         
         conn.commit()
@@ -1012,32 +1045,6 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        release_db_connection(conn)
-
-
-@router.get("/{project_id}/skills")
-def get_project_skills(project_id: str):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Project not found")
-        cur.execute("""
-            SELECT s.skill_id, s.skill_name
-            FROM project_skills ps
-            JOIN skills s ON ps.skill_id = s.skill_id
-            WHERE ps.project_id = %s
-            ORDER BY s.skill_name
-        """, (project_id,))
-        rows = cur.fetchall()
-        return [{"skill_id": r[0], "skill_name": r[1]} for r in rows]
-    except HTTPException:
-        raise
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
@@ -1412,6 +1419,8 @@ def update_project(project_id: str, updates: ProjectUpdate):
             project_name = _normalize_text(payload["project_name"])
             if not project_name:
                 raise HTTPException(status_code=422, detail="Project name cannot be empty.")
+            if len(project_name) > 255:
+                raise HTTPException(status_code=422, detail="Project name cannot exceed 255 characters.")
             updates_map["project_name"] = project_name
 
         if "project_status" in payload:
@@ -1441,6 +1450,9 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "partner_id" in payload:
             updates_map["partner_id"] = _normalize_fk_id(payload["partner_id"])
 
+        if "department_id" in payload:
+            updates_map["department_id"] = _normalize_fk_id(payload["department_id"])
+
         # Handle sub_status once
         if sub_status_value is not None or ("project_status" in payload):
             if (normalized_status or "").lower() == "in progress":
@@ -1451,16 +1463,26 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if not updates_map:
             raise HTTPException(status_code=400, detail="No valid project fields were provided.")
 
+        print(f"UPDATING PROJECT {project_id} WITH:", updates_map)
         fields = [f"{col} = %s" for col in updates_map.keys()]
         values = list(updates_map.values())
         values.append(project_id)
 
-        # Debugging: final query and values
-        print("UPDATE projects SET", ", ".join(fields), "WHERE project_id = %s", "VALUES:", values)
-
         cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
         conn.commit()
-        return {"message": "Project updated successfully"}
+
+        # Verification step as requested
+        cur.execute("SELECT project_name, project_status FROM projects WHERE project_id = %s", (project_id,))
+        verified_row = cur.fetchone()
+        new_name = verified_row[0] if verified_row else "NOT FOUND"
+        new_status = verified_row[1] if verified_row else "NOT FOUND"
+        print(f"DB verification for project {project_id}: Name='{new_name}', Status='{new_status}'")
+
+        return {
+            "message": "Project updated successfully",
+            "updated_fields": updates_map,
+            "current_name": new_name
+        }
     except HTTPException:
         conn.rollback()
         raise
@@ -1491,7 +1513,7 @@ def create_project(project: ProjectCreate):
         if normalized_type == "partner" and not partner_id_value:
             raise HTTPException(status_code=422, detail="Partner projects must include a partner_id.")
         project_status, sub_status_val = _validate_status_and_substatus(project.project_status, project.sub_status)
-        insert_fields = ["project_id", "project_name", "project_status", "sub_status", "project_type", "billable", "start_date", "end_date"]
+        insert_fields = ["project_id", "project_name", "project_status", "sub_status", "project_type", "billable", "start_date", "end_date", "skills"]
         insert_values = [
             project.project_id,
             project_name,
@@ -1501,6 +1523,7 @@ def create_project(project: ProjectCreate):
             "Non-Billable" if normalized_type == "internal" else _normalize_text(project.billable),
             project.start_date,
             project.end_date,
+            json.dumps(project.skills) if project.skills else '[]'
         ]
 
         if client_id_value is not None:
@@ -1531,38 +1554,10 @@ def create_project(project: ProjectCreate):
                     continue
                 raise
 
-        # Upsert skills and link to project
-        for raw_skill in project.skill_names:
-            skill_name = _normalize_text(raw_skill)
-            if not skill_name:
-                continue
-            cur.execute(
-                "SELECT skill_id FROM skills WHERE LOWER(TRIM(skill_name)) = LOWER(%s) LIMIT 1",
-                (skill_name,)
-            )
-            skill_row = cur.fetchone()
-            if skill_row:
-                skill_id = skill_row[0]
-            else:
-                cur.execute(
-                    "INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id",
-                    (skill_name,)
-                )
-                skill_id = cur.fetchone()[0]
-            cur.execute(
-                "INSERT INTO project_skills (project_id, skill_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                (project.project_id, skill_id)
-            )
-
         conn.commit()
         return {"message": "Project created successfully", "project_id": project.project_id}
-    except psycopg2.errors.UniqueViolation as exc:
+    except psycopg2.errors.UniqueViolation:
         conn.rollback()
-        diag = exc.diag.constraint_name or ""
-        if "project_name" in diag:
-            raise HTTPException(status_code=409, detail=f"A project with the name '{project.project_name}' already exists for this client.")
-        if "allocation" in diag:
-            raise HTTPException(status_code=409, detail="Duplicate resource allocation detected.")
         raise HTTPException(status_code=409, detail=f"Project ID '{project.project_id}' already exists.")
     except HTTPException:
         conn.rollback()

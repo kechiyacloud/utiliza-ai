@@ -6,6 +6,10 @@ import {
     createSimpleClient,
     updateSimpleClient,
     deleteSimpleClient,
+    fetchPartnerClients,
+    createPartnerClient,
+    updatePartnerClient,
+    deletePartnerClient,
 } from '../../api/entitiesApi';
 import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
@@ -186,49 +190,107 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
 
 const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const [clients, setClients] = useState([]);
+    const [partnerClients, setPartnerClients] = useState([]);
+    const [departments, setDepartments] = useState([]);
     const [saveError, setSaveError] = useState('');
     const [entityError, setEntityError] = useState('');
+    const [initialFormData, setInitialFormData] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
-        type: 'Client',
+        type: 'External',
+        clientType: 'Direct Client',
         client: '',
         clientId: '',
+        partnerId: '',
+        partnerName: 'Cloud Destination',
+        departmentId: '',
         status: 'Not Started',
         subStatus: '',
         billable: 'Billable',
         startDate: '',
         endDate: '',
-        resources: 0
+        resources: 0,
+        skills: []
     });
 
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
+    const [availableSkills, setAvailableSkills] = useState([]);
 
-    async function loadClients() {
+    async function loadEntities() {
         setEntityError('');
         try {
-            const data = await fetchSimpleClients();
-            setClients(data);
+            const [clientData, partnerData, filterRes] = await Promise.all([
+                fetchSimpleClients(),
+                fetchPartnerClients(),
+                axios.get('/employees/filter-options')
+            ]);
+            setClients(clientData);
+            setPartnerClients(partnerData);
+            setDepartments(filterRes.data?.departments || []);
+            setAvailableSkills(filterRes.data?.skills || []);
         } catch {
-            setEntityError('Failed to load clients.');
+            setEntityError('Failed to load clients/partners.');
         }
     }
+
+    // Map raw/normalized type value → the exact string used in the <select> options
+    const normalizeTypeForForm = (t) => {
+        if (!t) return 'Client';
+        const lc = t.toLowerCase();
+        if (lc === 'external' || lc === 'client') return 'External';
+        if (lc === 'internal') return 'Internal';
+        if (lc === 'partner') return 'Partner';
+        if (lc === 'poc') return 'POC';
+        return t; // pass through unknown values
+    };
+
+    // Map billable value → exactly 'Billable' or 'Non-Billable'
+    const normalizeBillableForForm = (b) => {
+        if (!b) return 'Billable';
+        const normalized = b.replace(/\s+/g, '').toLowerCase();
+        if (normalized === 'non-billable' || normalized === 'nonbillable') return 'Non-Billable';
+        return 'Billable';
+    };
+
+    // Map status value → one of the exact PROJECT_STATUS_OPTIONS strings
+    const VALID_STATUSES = new Set(['Not Started', 'In Progress', 'On Hold', 'Completed']);
+    const normalizeStatusForForm = (s) => {
+        if (!s) return 'Not Started';
+        if (VALID_STATUSES.has(s)) return s;
+        // Try to match via the backend alias map
+        const lc = s.toLowerCase();
+        if (['in progress', 'live', 'running', 'active', 'ongoing'].includes(lc)) return 'In Progress';
+        if (['not started', 'planned', 'upcoming'].includes(lc)) return 'Not Started';
+        if (['on hold', 'delayed', 'blocked'].includes(lc)) return 'On Hold';
+        if (['completed', 'closed', 'done', 'ended', 'finished', 'end'].includes(lc)) return 'Completed';
+        return 'Not Started';
+    };
 
     useEffect(() => {
         if (project) {
             setSaveError('');
-            setFormData({
+            const projectType = normalizeTypeForForm(project.type || project.project_type);
+            const isPartner = projectType === 'Partner';
+            const data = {
                 name: project.name || project.project_name || '',
-                type: project.type || 'Client',
-                client: project.client || project.client_name || '',
+                type: isPartner ? 'External' : projectType,
+                clientType: isPartner ? 'Partner Client' : 'Direct Client',
+                client: project.client_name || project.client || '',
                 clientId: project.client_id || '',
-                status: project.status || 'Not Started',
-                subStatus: project.sub_status || '',
-                billable: project.billable || 'Billable',
+                partnerId: project.partner_id || '',
+                partnerName: project.partner_name || project.partner || 'Cloud Destination',
+                departmentId: project.department_id || '',
+                status: normalizeStatusForForm(project.status || project.project_status),
+                subStatus: project.sub_status || project.subStatus || '',
+                billable: normalizeBillableForForm(project.billable),
                 startDate: project.start_date || project.startDate || '',
                 endDate: project.end_date || project.endDate || '',
-                resources: project.resource_count || project.resources || 0
-            });
-            loadClients();
+                resources: project.resource_count || project.resources || 0,
+                skills: project.skills || []
+            };
+            setFormData(data);
+            setInitialFormData(data);
+            loadEntities();
         }
     }, [project]);
 
@@ -244,9 +306,32 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        if (name === 'type' && value === 'Internal') {
-            setFormData(prev => ({ ...prev, [name]: value, billable: 'Non-Billable' }));
-        } else if (name === 'status') {
+        if (name === 'type') {
+            const isClientType = value === 'External';
+            setFormData(prev => ({
+                ...prev,
+                type: value,
+                clientType: isClientType ? 'Direct Client' : '',
+                clientId: '',
+                client: '',
+                partnerId: '',
+                partnerName: isClientType ? 'Cloud Destination' : '',
+                billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
+            }));
+            return;
+        }
+        if (name === 'clientType') {
+            setFormData(prev => ({
+                ...prev,
+                clientType: value,
+                clientId: '',
+                client: '',
+                partnerId: value === 'Direct Client' ? '' : prev.partnerId,
+                partnerName: value === 'Direct Client' ? 'Cloud Destination' : '',
+            }));
+            return;
+        }
+        if (name === 'status') {
             setFormData(prev => ({
                 ...prev,
                 status: value,
@@ -261,36 +346,109 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         setFormData(prev => ({ ...prev, clientId: String(item.id), client: item.name }));
     };
 
+    const handlePartnerSelect = (item) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            partnerId: String(item.id), 
+            partnerName: item.name,
+            clientId: '',
+            client: ''
+        }));
+    };
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaveError('');
-        if (formData.endDate && formData.startDate && formData.endDate < formData.startDate) {
+
+        if (!initialFormData) return;
+
+        // Detect changed fields to support partial updates
+        const changedFields = {};
+        Object.keys(formData).forEach(key => {
+            if (formData[key] !== initialFormData[key]) {
+                changedFields[key] = formData[key];
+            }
+        });
+
+        if (Object.keys(changedFields).length === 0) {
+            onClose(); // Nothing changed
+            return;
+        }
+
+        // Validations - only validate if the relevant field is changed or critical
+        if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
             setSaveError('End date cannot be earlier than start date.');
             return;
         }
-        if (formData.status === 'In Progress' && !formData.subStatus) {
+
+        const isInternal = formData.type === 'Internal';
+        
+        // SOW Validation: Only if status is In Progress AND project is NOT Internal
+        if (formData.status === 'In Progress' && !isInternal && !formData.subStatus) {
             setSaveError('Sub Status is required when status is In Progress.');
             return;
         }
+
+        const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
+        const isDirectClientProject = formData.type === 'External' && formData.clientType === 'Direct Client';
+        
+        // Build the payload mapping our form keys to backend keys
+        // We only send a key if it was changed
+        const payload = {
+            project_id: project.project_id || project.id
+        };
+
+        if ('name' in changedFields) payload.project_name = formData.name;
+        if ('status' in changedFields) payload.project_status = formData.status;
+        if ('type' in changedFields || 'clientType' in changedFields) {
+            let effectiveType = formData.type;
+            if (isPartnerClientProject) effectiveType = 'Partner';
+            if (isDirectClientProject) effectiveType = 'Client';
+            payload.type = effectiveType;
+        }
+        
+        if ('clientId' in changedFields || 'type' in changedFields) {
+            payload.client_id = formData.type === 'External' ? (formData.clientId || null) : null;
+        }
+        if ('partnerId' in changedFields || 'type' in changedFields) {
+            payload.partner_id = isPartnerClientProject ? (formData.partnerId || null) : null;
+        }
+        if ('departmentId' in changedFields || 'type' in changedFields) {
+            payload.department_id = formData.type === 'Internal' ? (formData.departmentId || null) : null;
+        }
+        if ('billable' in changedFields) payload.billable = formData.billable;
+        if ('startDate' in changedFields) payload.start_date = formData.startDate;
+        if ('endDate' in changedFields) payload.end_date = formData.endDate || null;
+        if ('skills' in changedFields) payload.skills = formData.skills || [];
+        if ('subStatus' in changedFields || 'status' in changedFields || 'type' in changedFields) {
+            // Send sub_status if not internal, otherwise backend handles clearing it if needed
+            payload.sub_status = (!isInternal && formData.status === 'In Progress') ? (formData.subStatus || null) : null;
+        }
+
+        console.log('Edit Project Submission Payload:', payload);
         try {
-            await onSave({ ...project, ...formData });
+            await onSave(payload);
         } catch (error) {
             setSaveError(error?.response?.data?.detail || 'Failed to save project.');
         }
     };
 
-    const openModal = (mode) => {
-        if ((mode === 'edit' || mode === 'delete') && !formData.clientId && !formData.client) {
-            setEntityError(`Select a client to ${mode}.`);
+    const openModal = (mode, entityType = 'client') => {
+        const isClient = entityType === 'client';
+        const selectedId = isClient ? formData.clientId : formData.partnerId;
+        const selectedName = isClient ? formData.client : formData.partnerName;
+
+        if ((mode === 'edit' || mode === 'delete') && !selectedId) {
+            setEntityError(`Select a ${entityType} to ${mode}.`);
             return;
         }
 
         setModal({
             isOpen: true,
             mode,
-            entityType: 'client',
-            name: mode === 'add' ? '' : formData.client,
+            entityType,
+            name: mode === 'add' ? '' : selectedName,
             error: '',
         });
     };
@@ -298,7 +456,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const closeModal = () => setModal({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
 
     const handleModalConfirm = async (name) => {
+        const isClient = modal.entityType === 'client';
         const trimmedName = (name || '').trim();
+        const selectedId = isClient ? formData.clientId : formData.partnerId;
+
         if (modal.mode !== 'delete' && !trimmedName) {
             setModal(prev => ({ ...prev, error: 'Name cannot be empty.' }));
             return;
@@ -306,22 +467,39 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
         try {
             if (modal.mode === 'add') {
-                const created = await createSimpleClient(trimmedName);
-                await loadClients();
-                setFormData(prev => ({ ...prev, clientId: String(created.id), client: created.name }));
+                const created = isClient 
+                    ? await createSimpleClient(trimmedName)
+                    : await createPartnerClient(trimmedName);
+                await loadEntities();
+                if (isClient) {
+                    setFormData(prev => ({ ...prev, clientId: String(created.id), client: created.name }));
+                } else {
+                    setFormData(prev => ({ ...prev, partnerId: String(created.id), partnerName: created.name }));
+                }
             } else if (modal.mode === 'edit') {
-                const updated = await updateSimpleClient(formData.clientId, trimmedName);
-                await loadClients();
-                setFormData(prev => ({ ...prev, client: updated.name }));
+                const updated = isClient
+                    ? await updateSimpleClient(selectedId, trimmedName)
+                    : await updatePartnerClient(selectedId, trimmedName);
+                await loadEntities();
+                if (isClient) {
+                    setFormData(prev => ({ ...prev, client: updated.name }));
+                } else {
+                    setFormData(prev => ({ ...prev, partnerName: updated.name }));
+                }
             } else if (modal.mode === 'delete') {
-                await deleteSimpleClient(formData.clientId);
-                setFormData(prev => ({ ...prev, clientId: '', client: '' }));
-                await loadClients();
+                if (isClient) {
+                    await deleteSimpleClient(selectedId);
+                    setFormData(prev => ({ ...prev, clientId: '', client: '' }));
+                } else {
+                    await deletePartnerClient(selectedId);
+                    setFormData(prev => ({ ...prev, partnerId: '', partnerName: '' }));
+                }
+                await loadEntities();
             }
             setEntityError('');
             closeModal();
         } catch (error) {
-            const msg = error?.response?.data?.detail || `Failed to ${modal.mode} client.`;
+            const msg = error?.response?.data?.detail || `Failed to ${modal.mode} ${modal.entityType}.`;
             setModal(prev => ({ ...prev, error: msg }));
         }
     };
@@ -360,6 +538,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 <input
                                     type="text"
                                     name="name"
+                                    maxLength={255}
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-800"
                                     value={formData.name}
                                     onChange={handleChange}
@@ -367,14 +546,75 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 />
                             </div>
 
-                            {formData.type === 'Client' && (
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-500 uppercase">Project Type</label>
+                                <select
+                                    name="type"
+                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-700"
+                                    value={formData.type}
+                                    onChange={handleChange}
+                                >
+                                    <option value="External">External</option>
+                                    <option value="Internal">Internal</option>
+                                </select>
+                            </div>
+
+                            {formData.type === 'External' && (
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Client Type</label>
+                                    <select
+                                        name="clientType"
+                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-700"
+                                        value={formData.clientType}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="Direct Client">Direct Client</option>
+                                        <option value="Partner Client">Partner Client</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {formData.type === 'External' && formData.clientType === 'Partner Client' && (
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Partner</label>
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex gap-2">
+                                            <SearchableDropdown
+                                                items={partnerClients}
+                                                selectedId={formData.partnerId}
+                                                onSelect={handlePartnerSelect}
+                                                placeholder="Select Partner"
+                                                label="partners"
+                                            />
+                                            <button type="button" onClick={() => openModal('add', 'partner')}
+                                                className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Add Partner">
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
+                                        {formData.partnerId && (
+                                            <div className="flex gap-2 justify-end">
+                                                <button type="button" onClick={() => openModal('edit', 'partner')}
+                                                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors flex items-center gap-1">
+                                                    <Pencil size={12} /> Edit
+                                                </button>
+                                                <button type="button" onClick={() => openModal('delete', 'partner')}
+                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors flex items-center gap-1">
+                                                    <Trash2 size={12} /> Delete
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(formData.type === 'External') && (
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Client</label>
                                     <div className="flex flex-col gap-2">
                                         <div className="flex gap-2">
                                             <SearchableDropdown
-                                                items={clients}
-                                                selectedId={formData.clientId || formData.client}
+                                                items={formData.clientType === 'Partner Client' ? clients.filter(c => String(c.partner_id) === String(formData.partnerId)) : clients}
+                                                selectedId={formData.clientId}
                                                 onSelect={handleClientSelect}
                                                 placeholder="Select Client"
                                                 label="clients"
@@ -400,20 +640,22 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             )}
 
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Type</label>
-                                <select
-                                    name="type"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                    value={formData.type}
-                                    onChange={handleChange}
-                                >
-                                    <option value="Client">Client</option>
-                                    <option value="Internal">Internal</option>
-                                    <option value="Partner">Partner</option>
-                                    <option value="POC">POC</option>
-                                </select>
-                            </div>
+                            {formData.type === 'Internal' && (
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Department</label>
+                                    <select
+                                        name="departmentId"
+                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-800"
+                                        value={formData.departmentId}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">Select Department</option>
+                                        {departments.map(dep => (
+                                            <option key={dep} value={dep}>{dep}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
@@ -429,15 +671,14 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </select>
                             </div>
 
-                            {formData.status === 'In Progress' && (
+                            {formData.status === 'In Progress' && formData.type !== 'Internal' && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Status</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Status (SOW)</label>
                                     <select
                                         name="subStatus"
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                         value={formData.subStatus}
                                         onChange={handleChange}
-                                        required
                                     >
                                         <option value="">Select Sub Status</option>
                                         {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
@@ -490,6 +731,47 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             </div>
 
+                            {/* SKILLS MULTI-SELECT */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Required Skills</label>
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-2">
+                                        <SearchableDropdown
+                                            items={availableSkills.map(s => ({ id: s, name: s }))}
+                                            selectedId={null}
+                                            onSelect={(item) => {
+                                                let skillName = item.name;
+                                                if (skillName.startsWith('Add "') && skillName.endsWith('"')) {
+                                                    skillName = skillName.substring(5, skillName.length - 1);
+                                                }
+                                                if (!formData.skills.includes(skillName)) {
+                                                    setFormData(prev => ({ ...prev, skills: [...prev.skills, skillName] }));
+                                                }
+                                            }}
+                                            placeholder="Search or add skills..."
+                                            label="skills"
+                                            noResultsText="Skill not found. Press enter to add."
+                                        />
+                                    </div>
+                                    {formData.skills.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {formData.skills.map((skill) => (
+                                                <div key={skill} className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-100 shadow-sm animate-in fade-in zoom-in duration-200">
+                                                    {skill}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))}
+                                                        className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Resource Estimate</label>
                                 <input
@@ -528,7 +810,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             <EntityModal
                 isOpen={modal.isOpen}
                 mode={modal.mode}
-                entityLabel="Client"
+                entityLabel={modal.entityType === 'client' ? 'Client' : 'Partner'}
                 initialName={modal.name}
                 onConfirm={handleModalConfirm}
                 onCancel={closeModal}

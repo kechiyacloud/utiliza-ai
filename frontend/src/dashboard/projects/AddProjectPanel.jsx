@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useDataRefresh } from '../../context';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
 import axios from '../../api/axios';
 import {
@@ -17,11 +16,10 @@ import {
     deletePartnerClient,
 } from '../../api/entitiesApi';
 import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
-import { ALL_SKILLS } from '../../data/skills';
 
-/* ──────────────────────────────────────────────────────────
-   HELPERS — for Last 4 Weeks visualization
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   HELPERS ΓÇö for Last 4 Weeks visualization
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 function normalizeDateString(dateStr) {
     if (!dateStr) return '';
     const trimmed = (dateStr || '').trim();
@@ -135,7 +133,7 @@ function getLast4Weeks() {
         const wk = getISOWeekNumber(monday);
         weeks.push({
             label: i === 0 ? `This Week` : `Week -${i}`,
-            dateRange: `${fmtDate(monday)} – ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(monday)} ΓÇô ${fmtDate(sunday)}`,
             weekNum: wk,
             year: monday.getFullYear()
         });
@@ -167,7 +165,7 @@ function getProjectWeeks(startDateStr, endDateStr) {
             weekNum: getISOWeekNumber(cursor),
             year: cursor.getFullYear(),
             label: `W${wIdx}`,
-            dateRange: `${fmtDate(cursor)} – ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(cursor)} ΓÇô ${fmtDate(sunday)}`,
         });
         cursor.setDate(cursor.getDate() + 7);
         wIdx++;
@@ -176,9 +174,9 @@ function getProjectWeeks(startDateStr, endDateStr) {
 }
 
 
-/* ──────────────────────────────────────────────────────────
-   INLINE MODAL — Add / Edit / Delete confirmation
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   INLINE MODAL ΓÇö Add / Edit / Delete confirmation
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCancel, error }) => {
     const [name, setName] = useState(initialName || '');
     const inputRef = useRef(null);
@@ -405,9 +403,9 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
 };
 
 
-/* ──────────────────────────────────────────────────────────
-   SEARCHABLE DROPDOWN  —  scrollable + filterable
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   SEARCHABLE DROPDOWN  ΓÇö  scrollable + filterable
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 const SearchableDropdown = ({
     items,
     selectedId,
@@ -617,11 +615,10 @@ const SearchableDropdown = ({
 };
 
 
-/* ══════════════════════════════════════════════════════════
-   MAIN COMPONENT — AddProjectPanel
-   ══════════════════════════════════════════════════════════ */
+/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+   MAIN COMPONENT ΓÇö AddProjectPanel
+   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
 const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
-    const { triggerRefresh } = useDataRefresh();
     const DIRECT_CLIENT_TYPE = 'Direct Client';
     const PARTNER_CLIENT_TYPE = 'Partner Client';
     const CLOUD_DESTINATION_PARTNER = 'Cloud Destination';
@@ -641,6 +638,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         sowStatus: '',
         startDate: '',
         endDate: '',
+        skills: [],
         teamMembers: []
     });
 
@@ -648,6 +646,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [partnerClients, setPartnerClients] = useState([]);
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
+    const [availableSkills, setAvailableSkills] = useState([]);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState('');
     const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
@@ -658,35 +657,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [submitError, setSubmitError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
-
-    // --- Skills State ---
-    const [skills, setSkills] = useState([]);
-    const [isSkillsOpen, setIsSkillsOpen] = useState(false);
-    const [skillSearch, setSkillSearch] = useState('');
-    const skillsDropdownRef = useRef(null);
-
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (skillsDropdownRef.current && !skillsDropdownRef.current.contains(e.target)) {
-                setIsSkillsOpen(false);
-            }
-        };
-        if (isSkillsOpen) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isSkillsOpen]);
-
-    const toggleSkill = (skill) => setSkills(prev => prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]);
-    const addCustomSkill = () => {
-        const trimmed = skillSearch.trim();
-        if (!trimmed || skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) return;
-        setSkills(prev => [...prev, trimmed]);
-        setSkillSearch('');
-    };
-    const removeSkill = (skill) => setSkills(prev => prev.filter(s => s !== skill));
-    const filteredSkills = ALL_SKILLS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase()) && !skills.includes(s));
-    const customSkillTyped = skillSearch.trim() &&
-        !ALL_SKILLS.some(s => s.toLowerCase() === skillSearch.trim().toLowerCase()) &&
-        !skills.some(s => s.toLowerCase() === skillSearch.trim().toLowerCase());
 
     // --- Modal State ---
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
@@ -716,11 +686,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         setEntityError('');
         setIsDirectoryLoading(true);
         try {
-            const [clientResult, partnerResult, employeesResult, rolesResult] = await Promise.allSettled([
+            const [clientResult, partnerResult, employeesResult, rolesResult, filterResult] = await Promise.allSettled([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
                 axios.get('/employees/list'),
                 axios.get('/employees/departments/roles-mapping'),
+                axios.get('/employees/filter-options'),
             ]);
 
             if (clientResult.status === 'fulfilled') {
@@ -760,6 +731,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 console.error('[AddProjectPanel] Failed to load roles mapping', rolesResult.reason);
             }
 
+            if (filterResult.status === 'fulfilled') {
+                setAvailableSkills(filterResult.value?.data?.skills || []);
+            }
+
         } catch (error) {
             console.error('[AddProjectPanel] Failed to load dropdown entities', error);
             setEntityError('Failed to load clients/partner clients.');
@@ -774,9 +749,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         if (isOpen) {
             setSubmitError('');
             setEntityError('');
-            setSkills([]);
-            setSkillSearch('');
-            setIsSkillsOpen(false);
             setFormData({
                 name: '',
                 type: 'Client',
@@ -791,6 +763,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 sowStatus: '',
                 startDate: '',
                 endDate: '',
+                skills: [],
                 teamMembers: []
             });
             loadEntities();
@@ -1159,40 +1132,65 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleTeamMemberChange = (index, field, value) => {
-        const newTeam = [...formData.teamMembers];
-        let updated = { ...newTeam[index], [field]: value };
+        setFormData(prev => {
+            const newTeam = [...prev.teamMembers];
+            const updated = { ...newTeam[index], [field]: value };
 
-        if (field === 'allocation_pct') {
-            const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
-            updated.allocation_pct = pct;
-            
-            // Dynamic Proportional Allocation (100% = 40h)
-            if (pct !== '') {
-                const hours = Math.round((pct / 100) * 40);
-                const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
+            if (field === 'allocation_pct') {
+                const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
+                updated.allocation_pct = pct;
                 
-                let targetWeeks = projectWeeks;
-                if (updated.allocation_start_date || updated.allocation_end_date) {
-                    targetWeeks = getProjectWeeks(
-                        updated.allocation_start_date || formData.startDate,
-                        updated.allocation_end_date || formData.endDate
-                    );
+                // Dynamic Proportional Allocation (100% = 40h)
+                if (pct !== '') {
+                    const hours = Math.round((pct / 100) * 40);
+                    const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
+                    
+                    let targetWeeks = projectWeeks;
+                    if (updated.allocation_start_date || updated.allocation_end_date) {
+                        targetWeeks = getProjectWeeks(
+                            updated.allocation_start_date || prev.startDate,
+                            updated.allocation_end_date || prev.endDate
+                        );
+                    }
+
+                    const newWeeklyHours = { ...(updated.weekly_hours || {}) };
+                    targetWeeks.forEach(w => {
+                        newWeeklyHours[w.weekNum] = hours;
+                    });
+                    updated.weekly_hours = newWeeklyHours;
                 }
-
-                const newWeeklyHours = { ...(updated.weekly_hours || {}) };
-                targetWeeks.forEach(w => {
-                    newWeeklyHours[w.weekNum] = hours;
-                });
-                updated.weekly_hours = newWeeklyHours;
             }
-        }
 
-        newTeam[index] = updated;
-        setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+            // Re-calculate if dates change
+            if (field === 'allocation_start_date' || field === 'allocation_end_date') {
+                const pct = parseInt(updated.allocation_pct) || 0;
+                if (pct > 0) {
+                    const hours = Math.round((pct / 100) * 40);
+                    const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
+                    let targetWeeks = projectWeeks;
+                    if (updated.allocation_start_date || updated.allocation_end_date) {
+                        targetWeeks = getProjectWeeks(
+                            updated.allocation_start_date || prev.startDate,
+                            updated.allocation_end_date || prev.endDate
+                        );
+                    }
+                    const newWeeklyHours = { ...(updated.weekly_hours || {}) };
+                    targetWeeks.forEach(w => {
+                        newWeeklyHours[w.weekNum] = hours;
+                    });
+                    updated.weekly_hours = newWeeklyHours;
+                }
+            }
+
+            newTeam[index] = updated;
+            return { ...prev, teamMembers: newTeam };
+        });
 
         // Auto-fill weeks when dates change (keep logic for date shifts)
         if (['allocation_start_date', 'allocation_end_date'].includes(field)) {
-            setTimeout(() => autoFillWeeks(index, updated), 0);
+            // Since we moved state update inside, we can just let it handle it above, 
+            // but keeping autoFillWeeks call if it does extra work.
+            // Actually, the logic above covers it.
         }
     };
 
@@ -1209,7 +1207,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // --- Form Submission ---
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (isSubmitting) return;
         setSubmitError('');
 
         if (!(formData.name || '').trim()) {
@@ -1255,7 +1252,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             return;
         }
 
-        const projectId = `PRJ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
         const isClientProject = formData.type === 'Client';
         const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
         const effectiveType = formData.type;
@@ -1282,7 +1279,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             billable: formData.billable,
             start_date: normalizedStart,
             end_date: normalizedEnd || null,
-            skill_names: skills,
+            skills: formData.skills || [],
             team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
@@ -1302,7 +1299,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             }
             setSubmitError('');
             setIsSubmitting(false);
-            triggerRefresh();
             if (onAdd) onAdd(response?.data || payload);
             onClose();
         } catch (err) {
@@ -1332,10 +1328,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             )}
 
             {/* Panel / Page */}
-            <div className={pageMode
+            <div className={(pageMode
                 ? "w-full h-full bg-white flex flex-col"
                 : "fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col"
-            }>
+            ) + " add-project"}>
 
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
@@ -1471,7 +1467,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </div>
                                 )}
 
-                                {/* INTERNAL — Department dropdown */}
+                                {/* INTERNAL ΓÇö Department dropdown */}
                                 {formData.type === 'Internal' && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600 uppercase">Department (Optional)</label>
@@ -1538,85 +1534,62 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         value={formData.endDate} onChange={handleChange} />
                                 </div>
-                            </div>
-                        </div>
 
-                        <hr className="border-gray-100" />
-
-                        {/* --- SKILLS SECTION --- */}
-                        <div className="flex flex-col gap-3">
-                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Required Skills</h3>
-                            <div className="relative" ref={skillsDropdownRef}>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsSkillsOpen(prev => !prev)}
-                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-left flex items-center justify-between hover:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                                >
-                                    <span className="text-gray-600">
-                                        {skills.length > 0 ? `${skills.length} skill(s) selected` : 'Click to select or add skills'}
-                                    </span>
-                                    <span className="text-gray-400 text-xs">{isSkillsOpen ? '▲' : '▼'}</span>
-                                </button>
-                                {isSkillsOpen && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-80 overflow-hidden flex flex-col">
-                                        <div className="p-2 border-b border-gray-100 flex gap-2">
-                                            <input
-                                                type="text"
-                                                placeholder="Search or type a new skill..."
-                                                value={skillSearch}
-                                                onChange={e => setSkillSearch(e.target.value)}
-                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSkill(); } }}
-                                                onClick={e => e.stopPropagation()}
-                                                className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
-                                                autoFocus
+                                {/* SKILLS MULTI-SELECT */}
+                                <div className="flex flex-col gap-1.5 col-span-2">
+                                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Required Skills</label>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex gap-2">
+                                            <SearchableDropdown
+                                                items={availableSkills.map(s => ({ id: s, name: s }))}
+                                                selectedId={null} // Multi-select doesn't have a single selected ID
+                                                onSelect={(item) => {
+                                                    let skillName = item.name;
+                                                    if (skillName.startsWith('Add "') && skillName.endsWith('"')) {
+                                                        skillName = skillName.substring(5, skillName.length - 1);
+                                                    }
+                                                    if (!formData.skills.includes(skillName)) {
+                                                        setFormData(prev => ({ ...prev, skills: [...prev.skills, skillName] }));
+                                                    }
+                                                }}
+                                                placeholder="Search or add skills..."
+                                                label="skills"
+                                                noResultsText="Skill not found. Press enter to add."
+                                                loadOptions={async (query) => {
+                                                    const filtered = availableSkills.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+                                                    if (query && !filtered.some(s => s.toLowerCase() === query.toLowerCase())) {
+                                                        return [{ id: query, name: `Add "${query}"` }, ...filtered.map(s => ({ id: s, name: s }))];
+                                                    }
+                                                    return filtered.map(s => ({ id: s, name: s }));
+                                                }}
                                             />
-                                            {customSkillTyped && (
-                                                <button type="button" onClick={addCustomSkill}
-                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors whitespace-nowrap">
-                                                    + Add "{skillSearch.trim()}"
-                                                </button>
-                                            )}
                                         </div>
-                                        <div className="overflow-y-auto p-2">
-                                            {filteredSkills.length > 0 ? (
-                                                <div className="grid grid-cols-3 gap-1">
-                                                    {filteredSkills.map(skill => (
-                                                        <label key={skill} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-50 px-2 py-1.5 rounded-lg transition-colors">
-                                                            <input type="checkbox" checked={skills.includes(skill)} onChange={() => toggleSkill(skill)} className="rounded text-blue-500 focus:ring-blue-400" />
-                                                            <span className="text-gray-700">{skill}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="text-xs text-gray-400 text-center py-4">
-                                                    {skillSearch ? `No existing skill matches "${skillSearch}" — click Add to create it` : 'All skills selected'}
-                                                </p>
-                                            )}
-                                        </div>
+                                        {formData.skills.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {formData.skills.map((skill) => (
+                                                    <div key={skill} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100 shadow-sm animate-in fade-in zoom-in duration-200">
+                                                        {skill}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))}
+                                                            className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            {skills.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {skills.map(s => (
-                                        <span key={s} className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-medium">
-                                            {s}
-                                            <button type="button" onClick={() => removeSkill(s)} className="text-blue-400 hover:text-blue-700 leading-none">×</button>
-                                        </span>
-                                    ))}
                                 </div>
-                            )}
+                            </div>
                         </div>
 
                         <hr className="border-gray-100" />
 
                         {/* --- BOTTOM SECTION: Team Members --- */}
                         <div className="flex flex-col gap-4 mb-10">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Users size={18} className="text-emerald-500" />
-                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Team Members</h3>
-                                </div>
+                            <div className="flex items-center">
                                 <button type="button" onClick={handleAddTeamMember} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors">
                                     <Plus size={14} /> Add Team Member
                                 </button>
@@ -1667,7 +1640,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 onClick={() => setShowAllWeeks(v => !v)}
                                                                 className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                                                             >
-                                                                {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
+                                                                {showAllWeeks ? 'ΓåÉ Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
                                                             </button>
                                                         </th>
                                                     )}
@@ -1762,7 +1735,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <option value="Shadow">Shadow</option>
                                                             </select>
                                                         </td>
-                                                        {/* Dynamic week columns — Excel-style */}
+                                                        {/* Dynamic week columns ΓÇö Excel-style */}
                                                         {visibleWeeks.map((wk, wIdx) => {
                                                             const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                             return (

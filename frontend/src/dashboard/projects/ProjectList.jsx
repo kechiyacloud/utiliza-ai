@@ -37,10 +37,11 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
 };
 
 const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
-    if (!resources || resources.length === 0) return null;
+    const safeResources = Array.isArray(resources) ? resources : [];
+    if (safeResources.length === 0) return null;
     
-    const displayMembers = resources.slice(0, 3);
-    const remainingCount = Math.max((totalCount || resources.length) - displayMembers.length, 0);
+    const displayMembers = safeResources.slice(0, 3);
+    const remainingCount = Math.max((totalCount || safeResources.length) - displayMembers.length, 0);
 
     return (
         <div className="flex -space-x-1.5 overflow-hidden items-center group/stack cursor-pointer">
@@ -174,7 +175,12 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
 
                 <div className="flex items-center gap-2 text-sm text-slate-500 font-normal">
                     <Info size={12} className="text-blue-400" />
-                    <span>Client: <span className="font-normal text-gray-700">{project.client_name || project.client || '—'}</span></span>
+                    <span>Client: <span className="font-normal text-gray-700">
+                        {(() => {
+                            let c = project.client_name || project.client || '—';
+                            return (c === 'Internal' || c === 'External') ? '—' : c;
+                        })()}
+                    </span></span>
                 </div>
 
                 <button 
@@ -266,7 +272,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         if (activeCardFilter === 'Internal') {
             matchesCardFilter = ['Internal', 'POC'].includes(project.type);
         } else if (activeCardFilter === 'External') {
-            matchesCardFilter = project.type === 'External';
+            matchesCardFilter = ['External', 'Client'].includes(project.type);
         } else if (activeCardFilter === 'Ongoing') {
             matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
         } else if (activeCardFilter === 'Partner') {
@@ -359,8 +365,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     }, {});
 
     const formatStatus = (project) => {
-        const base = project.status || '';
-        if (base.toLowerCase() === 'in progress') {
+        // Use raw DB status for display; fall back to normalized if not present
+        const base = project.display_status || project.raw_status || project.status || '';
+        // Append sub-status label when status is any variant of "In Progress"
+        if ((project.status || '').toLowerCase() === 'in progress') {
             const sub = project.sub_status || project.subStatus;
             const label = sub ? SUB_STATUS_LABELS[sub] || sub : '';
             if (label) return `${base} / ${label}`;
@@ -387,18 +395,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         setIsEditFormOpen(true);
     };
 
-    const handleSaveProject = async (updatedProject) => {
+    const handleSaveProject = async (payload) => {
         try {
-            await axios.put(`/projects/${updatedProject.project_id || updatedProject.id}`, {
-                project_name: updatedProject.name,
-                project_status: updatedProject.status,
-                type: updatedProject.type,
-                client: updatedProject.client,
-                sub_status: updatedProject.subStatus || updatedProject.sub_status || null,
-                billable: updatedProject.billable,
-                start_date: updatedProject.startDate || null,
-                end_date: updatedProject.endDate || null,
-            });
+            await axios.put(`/projects/${payload.project_id || payload.id}`, payload);
             if (onRefresh) onRefresh();
             setIsEditFormOpen(false);
         } catch (error) {
@@ -408,16 +407,30 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     };
 
     const handleExport = (format) => {
-        const exportData = filteredProjects.map(p => ({
-            'Project Name': p.name,
-            'Client/Partner': p.client || '—',
-            'Type': p.type,
-            'Status': formatStatus(p),
-            'Billable': p.billable,
-            'Resources': p.resource_count || p.resources || 0,
-            'Start Date': p.startDate || p.start_date || '—',
-            'End Date': p.endDate || p.end_date || '—'
-        }));
+        const formatDate = (val) => {
+            if (!val) return '--';
+            if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+                return val.substring(0, 10);
+            }
+            const date = new Date(val);
+            if (isNaN(date.getTime())) return '--';
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const exportData = filteredProjects.map(p => {
+            return {
+                'Project Name': p.name,
+                'Type': p.type,
+                'Status': formatStatus(p),
+                'Billable': p.billable,
+                'Resources': p.resource_count || p.resources || 0,
+                'Start Date': formatDate(p.start_date || p.startDate),
+                'End Date': formatDate(p.end_date || p.endDate)
+            };
+        });
 
         const fileName = `Projects_${tableTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`;
 
@@ -428,11 +441,12 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         } else if (format === 'pdf') {
             const columns = [
                 { header: 'Project Name', dataKey: 'Project Name' },
-                { header: 'Client', dataKey: 'Client/Partner' },
                 { header: 'Type', dataKey: 'Type' },
                 { header: 'Status', dataKey: 'Status' },
                 { header: 'Billable', dataKey: 'Billable' },
                 { header: 'Resources', dataKey: 'Resources' },
+                { header: 'Start Date', dataKey: 'Start Date' },
+                { header: 'End Date', dataKey: 'End Date' }
             ];
             exportToPDF(exportData, columns, `Project List - ${tableTitle}`, fileName);
         }
@@ -599,7 +613,12 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                 <div>
                                                     <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight">{project.name}</div>
                                                     <div className="text-sm text-slate-500 font-sans tracking-tight">{project.project_id || project.id}</div>
-                                                    <div className="text-sm text-slate-500 font-normal mt-0.5">Client: {project.client || '—'}</div>
+                                                    <div className="text-sm text-slate-500 font-normal mt-0.5">
+                                                        Client: {(() => {
+                                                            let c = project.client_name || project.client || '—';
+                                                            return (c === 'Internal' || c === 'External') ? '—' : c;
+                                                        })()}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>

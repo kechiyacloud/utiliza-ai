@@ -7,6 +7,7 @@ import axios from '../../api/axios';
 import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import EditProjectPanel from './EditProjectPanel';
 
 const toMessage = (val, fallback = 'Something went wrong') => {
     if (!val && val !== 0) return fallback;
@@ -1198,12 +1199,37 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
         if (field === 'allocation_pct') {
             currentRow.allocation_pct = value;
+            const num = Number(value);
+            // Recalculate instantly on change
+            if (!isNaN(num) && num >= 0) {
+                const hrs = clampHours((num / 100) * WEEK_DEFAULT_HOURS);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return; 
+                    currentRow.weekly_hours[wk.yearWeek] = hrs;
+                });
+            }
         } else if (field.startsWith('week_')) {
             const yearWeek = field.replace('week_', '');
             currentRow.weekly_hours[yearWeek] = value;
         } else if (field === 'allocation_start_date' || field === 'allocation_end_date') {
             setSaveError(''); // Clear previous errors
+
+            // Allow clearing end date for resources
+            if (field === 'allocation_end_date' && !value) {
+                currentRow[field] = value;
+                newRows[index] = currentRow;
+                setLocalRows(newRows);
+                return;
+            }
+
             const newDate = new Date(value);
+            if (isNaN(newDate)) {
+                 currentRow[field] = value;
+                 newRows[index] = currentRow;
+                 setLocalRows(newRows);
+                 return;
+            }
             newDate.setHours(0, 0, 0, 0);
 
             if (field === 'allocation_start_date') {
@@ -2069,10 +2095,11 @@ const getStatusBadgeClasses = (pct) => {
     return 'bg-rose-50 text-rose-700 border-rose-100';
 };
 
-const OngoingProjectInfoCard = ({ project, resources }) => {
+const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const headcount = resources.length;
     const projectName = project?.name || project?.project_name || 'Untitled Project';
-    const projectTypeLabel = (project?.type || '').toLowerCase() === 'internal' ? 'Internal' : 'Client';
+    const projectTypeRaw = project?.type || project?.project_type || '';
+    const projectTypeLabel = projectTypeRaw.toLowerCase() === 'internal' ? 'Internal' : 'External';
     const projectStatus = project?.status || project?.project_status || 'Not Set';
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
@@ -2081,7 +2108,7 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
     const statusClasses = getStatusBadgeClasses(progressPct);
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card">
             <div className="flex items-start gap-4 w-full md:w-auto min-w-0">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
                     {avatarLetter}
@@ -2097,7 +2124,7 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                         </span>
                         <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
                             <Briefcase size={14} className="text-slate-400" />
-                            {project.client || 'No client selected'}
+                            {project.client_name || project.client || 'No client selected'}
                         </span>
                         <div className="ml-2 flex items-center gap-3">
 
@@ -2108,11 +2135,26 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                             )}
                         </div>
                     </div>
+                    {/* PROJECT SKILLS DISPLAY */}
+                    {project.skills && project.skills.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                            {project.skills.map(s => (
+                                <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm">
+                                    {s}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div className="flex flex-col items-end gap-2">
-                {/* Header metadata removed here as per user request to avoid duplication with cards below */}
+                <button 
+                    onClick={onEdit}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 group-hover/card:border-blue-100"
+                >
+                    <Pencil size={14} /> Edit Project Details
+                </button>
             </div>
         </div>
     );
@@ -2525,6 +2567,7 @@ const ProjectDetailsPage = () => {
     const [rolesList, setRolesList] = useState([]);
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
+    const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
 
     const allocationStartBoundary = useMemo(() => {
         const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
@@ -2606,6 +2649,18 @@ const ProjectDetailsPage = () => {
         }
     };
 
+    const handleProjectSave = async (payload) => {
+        try {
+            const response = await axios.put(`/projects/${id}`, payload);
+            console.log('Project Update API Response:', response.data);
+            setIsEditPanelOpen(false);
+            loadProjectData();
+        } catch (error) {
+            console.error('Project Update Error:', error);
+            throw error;
+        }
+    };
+
     useEffect(() => {
         if (id) loadProjectData();
     }, [id, refreshKey]);
@@ -2637,7 +2692,7 @@ const ProjectDetailsPage = () => {
                     <ArrowLeft size={16} /> Back to Project Overview
                 </button>
 
-                <OngoingProjectInfoCard project={project} resources={resources} />
+                <OngoingProjectInfoCard project={project} resources={resources} onEdit={() => setIsEditPanelOpen(true)} />
             </div>
 
             <div className="flex flex-col gap-5">
@@ -2708,7 +2763,7 @@ const ProjectDetailsPage = () => {
                 </div>
 
                 {/* Scope & Commercial side-by-side below allocation */}
-                {false && (
+                <div>
                     <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div>
                             <ScopeSection project={project} onUpdate={loadProjectData} />
@@ -2717,8 +2772,15 @@ const ProjectDetailsPage = () => {
                             <CommercialSection project={project} onUpdate={loadProjectData} />
                         </div>
                     </div>
-                )}
+                </div>
             </div>
+
+            <EditProjectPanel 
+                isOpen={isEditPanelOpen}
+                onClose={() => setIsEditPanelOpen(false)}
+                project={project}
+                onSave={handleProjectSave}
+            />
         </div>
     );
 };

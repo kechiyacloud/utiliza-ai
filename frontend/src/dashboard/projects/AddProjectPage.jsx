@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import AddProjectPanel from './AddProjectPanel';
 
@@ -10,7 +10,7 @@ const AddProjectPage = () => {
     };
 
     return (
-        <div className="w-full h-full overflow-y-auto bg-white projects-poppins-container">
+        <div className="w-full h-full overflow-y-auto bg-white">
             <AddProjectPanel
                 isOpen={true}
                 pageMode={true}

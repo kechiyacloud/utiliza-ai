@@ -109,7 +109,7 @@ const ProjectsOverview = ({
                 />
                 <StatCard
                     label="External Projects"
-                    value={stats.externalProjects}
+                    value={stats.externalProjects || stats.clientProjects}
                     icon={Globe}
                     active={activeFilter === 'External'}
                     onClick={() => onFilterChange(activeFilter === 'External' ? null : 'External')}
