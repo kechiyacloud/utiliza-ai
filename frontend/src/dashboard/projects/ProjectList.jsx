@@ -1,12 +1,177 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Pencil, Eye, Trash2, AlertTriangle, Loader2, PieChart, ArrowLeft, Download, FileText, Table as TableIcon, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { 
+    Search, Filter, Pencil, Eye, Trash2, AlertTriangle, 
+    Loader2, PieChart, ArrowLeft, Download, FileText, 
+    Table as TableIcon, FileSpreadsheet, ChevronDown, 
+    LayoutGrid, List, Users, Calendar, ExternalLink,
+    MoreVertical, Info
+} from 'lucide-react';
 import axios from '../../api/axios';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
+
+const calculateProjectProgress = (project) => {
+    const today = new Date();
+    const start = new Date(project.startDate || project.start_date);
+    const end = new Date(project.endDate || project.end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return { pct: 0, daysLeft: 0 };
+    const msDay = 1000 * 60 * 60 * 24;
+    const totalDuration = Math.max((end - start) / msDay, 1);
+    const elapsed = Math.max((today - start) / msDay, 0);
+    let pct = Math.round((elapsed / totalDuration) * 100);
+    if (today < start) pct = 0;
+    if (today > end) pct = 100;
+    pct = Math.min(Math.max(pct, 0), 100);
+    const daysLeft = Math.max(Math.ceil((end - today) / msDay), 0);
+    return { pct, daysLeft };
+};
+
+const getProgressColorClasses = (pct) => {
+    if (pct <= 30) return 'bg-emerald-500';
+    if (pct <= 60) return 'bg-amber-400';
+    return 'bg-red-500';
+};
+
+const getStatusBadgeStyle = (pct) => {
+    if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' }; // Green
+    if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' }; // Amber
+    return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
+};
+
+const AvatarStack = ({ members, totalCount }) => {
+    if (!members || members.length === 0) return null;
+    
+    const displayMembers = members.slice(0, 3);
+    const remainingCount = totalCount - displayMembers.length;
+
+    return (
+        <div className="flex -space-x-2 overflow-hidden items-center mr-2">
+            {displayMembers.map((member, i) => (
+                <div 
+                    key={member.id || i} 
+                    className="relative group/avatar"
+                    title={member.name}
+                >
+                    <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
+                        {member.photo_url ? (
+                            <img 
+                                src={member.photo_url} 
+                                alt={member.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = '';
+                                    e.target.parentElement.innerHTML = `<span class="text-[10px] font-bold text-slate-400">${member.name?.[0].toUpperCase()}</span>`;
+                                }}
+                            />
+                        ) : (
+                            <span className="text-[10px] font-bold text-slate-400">{member.name?.[0].toUpperCase()}</span>
+                        )}
+                    </div>
+                </div>
+            ))}
+            {remainingCount > 0 && (
+                <div className="w-7 h-7 rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 shadow-sm z-10">
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
+    const progress = calculateProjectProgress(project);
+    return (
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300">
+            <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        {project.icon || project.name?.[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors line-clamp-1 truncate max-w-[160px]" title={project.name}>
+                            {project.name}
+                        </h3>
+                        <p className="text-sm text-slate-500 tracking-tight">
+                            {project.project_id || project.id}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => onEdit(project)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                        <Pencil size={14} />
+                    </button>
+                    <button onClick={() => onDelete(project)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <span className="text-sm font-normal text-slate-500">Status</span>
+                    <span 
+                        className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider whitespace-nowrap"
+                        style={getStatusBadgeStyle(progress.pct)}
+                    >
+                        {formatStatus(project)}
+                    </span>
+                </div>
+
+                {/* Progress Bar with Avatars */}
+                <div className="space-y-1.5">
+                    <div className="flex justify-between items-center px-0.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
+                        <span className="text-[10px] font-bold text-slate-600">{progress.pct}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <AvatarStack members={project.team_members} totalCount={project.resource_count} />
+                        <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(progress.pct)}`}
+                                style={{ width: `${progress.pct}%` }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                            <Users size={12} />
+                            <span className="text-sm font-normal uppercase">Team</span>
+                        </div>
+                        <p className="text-sm font-normal text-gray-700">{project.resource_count || 0} Members</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                            <Calendar size={12} />
+                            <span className="text-sm font-normal uppercase">Type</span>
+                        </div>
+                        <p className="text-sm font-normal text-gray-700">{project.type}</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-slate-500 font-normal">
+                    <Info size={12} className="text-blue-400" />
+                    <span>Client: <span className="font-normal text-gray-700">{project.client_name || project.client || '—'}</span></span>
+                </div>
+
+                <button 
+                    onClick={() => onView(project)}
+                    className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600"
+                >
+                    View Details
+                    <ExternalLink size={14} />
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -15,8 +180,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('table'); // 'table' or 'chart'
+    const [activeView, setActiveView] = useState('table'); // 'table', 'grid', or 'chart'
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'billable', 'non-billable', 'internal', 'name'
+    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -24,12 +191,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     useEffect(() => {
         if (location.state?.search && projects && projects.length > 0) {
             setSearchTerm(location.state.search);
-            // Auto open the details panel if we find a direct match
             const foundProj = projects.find(p => p.name.toLowerCase() === location.state.search.toLowerCase());
             if (foundProj) {
                 setSelectedProject(foundProj);
             }
-            // Clear location state to prevent reopening on subsequent renders or back navigation
             navigate(location.pathname, { replace: true, state: {} });
         }
     }, [location.state, projects, navigate]);
@@ -52,13 +217,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const filteredProjects = projects.filter(project => {
         if (!project || !project.name) return false;
 
-        // Search Bar logic (Quick searches name/client from top bar)
         const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        // Side Panel Filter Logic (AND condition)
         const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
-        
         const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
         const isAllStatus = !filters.status || filters.status === 'All Status';
@@ -70,7 +232,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         
         const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
-        // Date overlap filter (Start/End)
         const projectStart = new Date(project.startDate || project.start_date);
         const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
         const hasProjectDates = !Number.isNaN(projectStart.getTime());
@@ -80,18 +241,15 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             if (!filterStart && !filterEnd) return true;
             if (!hasProjectDates) return false;
             if (filterStart && projectEnd < filterStart) return false;
-            if (filterEnd && projectStart > filterEnd) return false;
+            if (filterEnd && projectStart > filterStart) return false;
             return true;
         })();
 
-        const matchesTime = true;
-
-        // Quick Card Filter logic (Categories)
         let matchesCardFilter = true;
         if (activeCardFilter === 'Internal') {
             matchesCardFilter = ['Internal', 'POC'].includes(project.type);
-        } else if (activeCardFilter === 'Client') {
-            matchesCardFilter = project.type === 'Client';
+        } else if (activeCardFilter === 'External') {
+            matchesCardFilter = project.type === 'External';
         } else if (activeCardFilter === 'Ongoing') {
             matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
         } else if (activeCardFilter === 'Partner') {
@@ -104,14 +262,43 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
 
         return matchesSearchTerm && matchesName && matchesResource && matchesStatus && 
-               matchesResourceType && matchesDate && matchesTime && matchesCardFilter;
+               matchesResourceType && matchesDate && matchesCardFilter;
+    }).sort((a, b) => {
+        if (sortBy === 'newest') {
+            const dateA = new Date(a.startDate || a.start_date || 0);
+            const dateB = new Date(b.startDate || b.start_date || 0);
+            return dateB - dateA;
+        }
+        if (sortBy === 'oldest') {
+            const dateA = new Date(a.startDate || a.start_date || 0);
+            const dateB = new Date(b.startDate || b.start_date || 0);
+            return dateA - dateB;
+        }
+        if (sortBy === 'name') {
+            return (a.name || '').localeCompare(b.name || '');
+        }
+        if (sortBy === 'billable') {
+            const aVal = (a.billable || '').toLowerCase() === 'billable' ? 0 : 1;
+            const bVal = (b.billable || '').toLowerCase() === 'billable' ? 0 : 1;
+            return aVal - bVal;
+        }
+        if (sortBy === 'non-billable') {
+            const aVal = (a.billable || '').toLowerCase().includes('non') ? 0 : 1;
+            const bVal = (b.billable || '').toLowerCase().includes('non') ? 0 : 1;
+            return aVal - bVal;
+        }
+        if (sortBy === 'internal') {
+            const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
+            const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
+            return aVal - bVal;
+        }
+        return 0;
     });
 
-    // Compute dynamic table heading
     const tableTitle = (() => {
         if (!activeCardFilter) return 'All Projects';
         if (activeCardFilter === 'Ongoing') return 'Active Projects';
-        if (activeCardFilter === 'Client') return 'External Projects';
+        if (activeCardFilter === 'External') return 'External Projects';
         if (activeCardFilter === 'Internal') return 'Internal Projects';
         if (activeCardFilter === 'Partner') return 'Partner Projects';
         if (activeCardFilter === 'Upcoming') return 'Upcoming Projects';
@@ -230,152 +417,200 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
     return (
         <div className="w-full space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full relative min-h-[500px]">
+            <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 w-full relative min-h-[600px]">
 
                 {/* Header (Tabs and Filter) */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-4 mb-6 gap-4">
-                {/* Left Side: Tabs */}
-                <div className="flex gap-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-50 pb-6 mb-8 gap-6">
+                {/* Left Side: View Toggles */}
+                <div className="flex items-center p-1 bg-slate-50 rounded-2xl border border-slate-100">
                     <button
-                            onClick={() => setActiveView('table')}
-                            className={`text-lg font-bold transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            {tableTitle} <span className="font-normal opacity-70">({filteredProjects.length})</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveView('chart')}
-                            className={`text-lg font-bold transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            Project Status Chart
-                        </button>
-                    </div>
-
-                    {/* Right Side: Search and Export */}
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <div className="relative group">
-                            <button 
-                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-white hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm"
-                            >
-                                <Download size={14} />
-                                Export
-                                <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {isExportMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                        <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
-                                            <FileSpreadsheet size={14} className="text-emerald-500" /> Excel (.xlsx)
-                                        </button>
-                                        <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
-                                            <TableIcon size={14} className="text-blue-500" /> CSV (.csv)
-                                        </button>
-                                        <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors border-t border-slate-50">
-                                            <FileText size={14} className="text-red-500" /> PDF Document
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        <div className="relative flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                            <input
-                                type="text"
-                                placeholder="Search projects..."
-                                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-700"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        {isFilterActive && (
-                            <button
-                                onClick={handleClearFilters}
-                                className="flex items-center gap-1 px-3 py-2 text-xs font-bold bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition text-gray-700"
-                                title="Clear all active filters"
-                            >
-                                <span className="text-gray-500 text-sm">✕</span>
-                                Clear
-                            </button>
-                        )}
-                        <button
-                            onClick={() => setIsFilterPanelOpen(true)}
-                            className={`p-2 rounded-xl border transition-all shadow-sm ${isFilterPanelOpen ? 'bg-blue-50 border-blue-200 text-blue-600 ring-2 ring-blue-50' : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-white hover:border-gray-200'}`}
-                        >
-                            <Filter size={18} />
-                        </button>
-                    </div>
+                        onClick={() => setActiveView('table')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold uppercase transition-all font-sans ${activeView === 'table' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                    >
+                        <List size={16} />
+                        Table
+                    </button>
+                    <button
+                        onClick={() => setActiveView('grid')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'grid' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                    >
+                        <LayoutGrid size={16} />
+                        Grid
+                    </button>
+                    <button
+                        onClick={() => setActiveView('chart')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeView === 'chart' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                    >
+                        <PieChart size={16} />
+                        Analytics
+                    </button>
                 </div>
 
+                {/* Right Side: Search and Export */}
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative group">
+                        <button 
+                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-semibold uppercase text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm font-sans"
+                        >
+                            <Download size={14} />
+                            Export
+                            <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isExportMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                    <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
+                                        <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
+                                    </button>
+                                    <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+                                        <TableIcon size={16} className="text-blue-500" /> CSV (.csv)
+                                    </button>
+                                    <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-3 transition-colors border-t border-slate-50">
+                                        <FileText size={16} className="text-rose-500" /> PDF Document
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="relative flex-1 md:w-72">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search projects..."
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-200 transition-all font-normal text-gray-700 placeholder:text-slate-400 font-sans"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    
+                    <button
+                        onClick={() => setIsFilterPanelOpen(true)}
+                        className={`p-3 rounded-2xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-4 ring-blue-50' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                    >
+                        <Filter size={20} />
+                        {isFilterActive && <span className="ml-2 w-2 h-2 rounded-full bg-white animate-pulse"></span>}
+                    </button>
+
+                    <div className="relative group">
+                        <button 
+                            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                        >
+                            Sort
+                            <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isSortMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
+                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                    {[
+                                        { id: 'newest', label: 'Newest First' },
+                                        { id: 'oldest', label: 'Oldest First' },
+                                        { id: 'name', label: 'A-Z Project Name' },
+                                        { id: 'billable', label: 'Billable First' },
+                                        { id: 'non-billable', label: 'Non-billable First' },
+                                        { id: 'internal', label: 'Internal Only' },
+                                    ].map((opt) => (
+                                        <button 
+                                            key={opt.id}
+                                            onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }} 
+                                            className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            {opt.label}
+                                            {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {isFilterActive && (
+                        <button
+                            onClick={handleClearFilters}
+                            className="px-4 py-3 text-[10px] font-normal uppercase tracking-widest bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 hover:bg-rose-100 transition-all"
+                        >
+                            Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-gray-800 tracking-tight flex items-center gap-3 font-sans">
+                    {tableTitle}
+                    <span className="text-sm font-normal bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase font-sans">
+                        {filteredProjects.length} Projects
+                    </span>
+                </h2>
+            </div>
+
                 {activeView === 'table' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
+                    <div className="overflow-x-auto rounded-2xl border border-slate-50">
+                        <table className="w-full font-sans">
                             <thead>
-                                <tr className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                                    <th className="text-left py-4 pl-4">Project Name</th>
-                                    <th className="text-center py-4">Status</th>
-                                    <th className="text-center py-4">Billable</th>
-                                    <th className="text-center py-4">Resources</th>
-                                    <th className="w-10"></th>
+                                <tr className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-slate-50">
+                                    <th className="py-5 pl-6">Project Details</th>
+                                    <th className="text-center py-5">Status</th>
+                                    <th className="text-center py-5">Type</th>
+                                    <th className="text-center py-5">Team Size</th>
+                                    <th className="w-20 pr-6"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredProjects.map((project) => (
-                                    <tr key={project.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                                        <td className="py-4 pl-4">
+                                    <tr key={project.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+                                        <td className="py-5 pl-6">
                                             <div
-                                                className="flex items-center gap-3 cursor-pointer group"
+                                                className="flex items-center gap-4 cursor-pointer"
                                                 onClick={() => handleViewClick(project)}
-                                                title="View project details"
                                             >
-                                                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg group-hover:bg-blue-100 transition-colors shadow-sm">
+                                                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                                                     {project.icon || project.name?.[0]?.toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <div className="font-bold text-gray-800 transition-colors group-hover:text-blue-700">{project.name}</div>
-                                                    <div className="text-[10px] text-gray-400 font-mono tracking-tighter">{project.project_id || project.id}</div>
+                                                    <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight">{project.name}</div>
+                                                    <div className="text-sm text-slate-500 font-sans tracking-tight">{project.project_id || project.id}</div>
+                                                    <div className="text-sm text-slate-500 font-normal mt-0.5">Client: {project.client || '—'}</div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-4 text-center">
+                                        <td className="py-5 text-center">
                                             <span 
-                                                className="px-4 py-1.5 rounded-full text-xs font-bold"
-                                                style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
-                                                    backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
-                                                    color: project.status === 'Completed' ? '#1E40AF' : '#166534'
-                                                }}
+                                                className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
+                                                style={getStatusBadgeStyle(calculateProjectProgress(project).pct)}
                                             >
                                                 {formatStatus(project)}
                                             </span>
                                         </td>
-                                        <td className="py-4 text-center">
+                                        <td className="py-5 text-center">
                                             <span 
-                                                className="px-3 py-1 rounded-md text-xs font-bold border"
-                                                style={{
-                                                    backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
-                                                    color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
-                                                    borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
-                                                }}
+                                                className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-slate-100 bg-slate-50 text-slate-600 font-sans"
                                             >
-                                                {project.billable || 'Unknown'}
+                                                {project.type || 'Unknown'}
                                             </span>
                                         </td>
-                                        <td className="py-4 text-center">
+                                        <td className="py-5 text-center">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-sm font-extrabold text-blue-600">{project.resource_count || project.resources || 0}</span>
-                                                <span className="text-[10px] text-gray-400 font-medium tracking-tight">Members</span>
+                                                <div className="mb-1">
+                                                    <AvatarStack members={project.team_members} totalCount={project.resource_count} />
+                                                </div>
+                                                <span className="text-sm text-slate-500 font-normal uppercase mt-1">Resources: {project.resource_count || 0}</span>
                                             </div>
                                         </td>
-                                        <td className="py-4 pr-4">
-                                            <div className="flex justify-end gap-2">
+                                        <td className="py-5 pr-6">
+                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleEditClick(project);
                                                     }}
-                                                    className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                                                    className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                                     title="Edit Project"
                                                 >
                                                     <Pencil size={16} />
@@ -385,7 +620,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                                         e.stopPropagation();
                                                         setProjectToDelete(project);
                                                     }}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                                    className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
                                                     title="Delete Project"
                                                 >
                                                     <Trash2 size={16} />
@@ -399,8 +634,32 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
                 )}
 
+                {activeView === 'grid' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {filteredProjects.map((project) => (
+                            <ProjectCard 
+                                key={project.id}
+                                project={project}
+                                onEdit={handleEditClick}
+                                onDelete={setProjectToDelete}
+                                onView={handleViewClick}
+                                formatStatus={formatStatus}
+                            />
+                        ))}
+                        {filteredProjects.length === 0 && (
+                            <div className="col-span-full py-20 text-center">
+                                <div className="p-4 bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 text-slate-300">
+                                    <List size={40} />
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800">No Projects Found</h3>
+                                <p className="text-slate-500 text-sm mt-1">Try adjusting your filters or search term</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {activeView === 'chart' && (
-                    <div className="w-full h-[600px] mt-4">
+                    <div className="w-full h-[600px] mt-4 p-6 bg-slate-50/50 rounded-3xl border border-slate-100">
                         <ProjectStatusChart projects={filteredProjects} />
                     </div>
                 )}
@@ -424,34 +683,37 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
             {/* Delete Confirmation Modal */}
             {projectToDelete && (
-                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center gap-4 text-red-600 mb-4">
-                            <div className="p-3 bg-red-100 rounded-full">
-                                <AlertTriangle size={24} />
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-4 text-rose-600 mb-6">
+                            <div className="p-4 bg-rose-50 rounded-2xl">
+                                <AlertTriangle size={32} />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900">Delete Project</h3>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 leading-tight">Delete Project</h3>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">Irreversible Action</p>
+                            </div>
                         </div>
-                        <p className="text-gray-600 mb-6 font-medium">
-                            Are you sure you want to delete <span className="font-bold text-gray-900">{projectToDelete.name}</span>? This action cannot be undone.
+                        <p className="text-slate-600 mb-8 font-medium border-l-4 border-rose-100 pl-4 py-2">
+                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 uppercase tracking-tight">{projectToDelete.name}</span>? This action cannot be undone and all associated data will be lost.
                         </p>
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => setProjectToDelete(null)}
                                 disabled={isDeleting}
-                                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg transition-colors"
+                                className="px-6 py-3 text-slate-500 font-bold uppercase tracking-widest text-[10px] hover:bg-slate-50 rounded-2xl transition-all"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleDeleteConfirm}
                                 disabled={isDeleting}
-                                className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                                className="px-6 py-3 bg-rose-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center gap-2"
                             >
                                 {isDeleting ? (
-                                    <><Loader2 size={16} className="animate-spin" /> Deleting...</>
+                                    <><Loader2 size={14} className="animate-spin" /> Deleting...</>
                                 ) : (
-                                    'Delete'
+                                    'Delete Project'
                                 )}
                             </button>
                         </div>
