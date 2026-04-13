@@ -1,10 +1,19 @@
 import api from "./axios";
 
+<<<<<<< HEAD
 export const fetchProjectsData = async () => {
     try {
         const [overviewRes, listRes] = await Promise.all([
             api.get('/projects/overview').catch(() => ({ data: {} })),
             api.get('/projects/list').catch(() => ({ data: [] }))
+=======
+export const fetchProjectsData = async (filters = {}) => {
+    try {
+        const params = { ...filters };
+        const [overviewRes, listRes] = await Promise.all([
+            api.get('/projects/overview', { params }).catch(() => ({ data: {} })),
+            api.get('/projects/list', { params }).catch(() => ({ data: [] }))
+>>>>>>> c6d4574 (resolve conflicts)
         ]);
 
         const o = overviewRes?.data || {};
@@ -42,9 +51,13 @@ export const fetchProjectsData = async () => {
                     name: p.project_name,
                     statusText: "Active",
                     statusColor: "text-green-500",
-                    resources: p.resource_count || 0,
                     resource_count: p.resource_count || 0,
+<<<<<<< HEAD
                     team_members: Array.isArray(p.team_members) ? p.team_members : [],
+=======
+                    resources: p.team_members || [], // resources should be the list of members for AvatarStack
+                    team_members: p.team_members || [],
+>>>>>>> c6d4574 (resolve conflicts)
                     client: clientName,
                     startDate: p.start_date || "",
                     endDate: p.end_date || "",
@@ -56,6 +69,7 @@ export const fetchProjectsData = async () => {
                     statusPillColor: pillColor,
                     billable: (p.billable || '').replace(/\s+/g, ''),
                     icon: p.project_name ? p.project_name.charAt(0).toUpperCase() : "P",
+<<<<<<< HEAD
                     resourceNames: p.resource_names || "None",
                     client_name: p.client_name || null,
                     partner_name: p.partner_name || null,
@@ -63,6 +77,9 @@ export const fetchProjectsData = async () => {
                     partner_id: p.partner_id || null,
                     department_id: p.department_id || null,
                     department_name: p.department_name || null,
+=======
+                    resourceNames: p.resource_names || "None"
+>>>>>>> c6d4574 (resolve conflicts)
                 };
             })
         };
@@ -75,7 +92,17 @@ export const fetchProjectsData = async () => {
         return {
             data: {
                 stats: {
+<<<<<<< HEAD
                     totalProjects: 0, internalProjects: 0, clientProjects: 0, ongoing: 0, partnerCount: 0, completedProjects: 0
+=======
+                    totalProjects: 0,
+                    internalProjects: 0,
+                    externalProjects: 0,
+                    ongoing: 0,
+                    partnerCount: 0,
+                    completedProjects: 0,
+                    upcoming_projects: 0
+>>>>>>> c6d4574 (resolve conflicts)
                 },
                 projects: []
             }

@@ -4,7 +4,18 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { getSkillTopic, normalizeSkillName } from '../../../utils/skillTopics';
 
 const SkillsOverview = ({ employees = [] }) => {
+    const [expandedSubskills, setExpandedSubskills] = useState(new Set());
     const [expandedTopic, setExpandedTopic] = useState(null);
+
+    const toggleSubskill = (topicName, subskillName) => {
+        const key = `${topicName}-${subskillName}`;
+        setExpandedSubskills(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     const topicMatrix = useMemo(() => {
         const topicsMap = new Map();
@@ -50,7 +61,8 @@ const SkillsOverview = ({ employees = [] }) => {
                 subskillEntry.employees.push({
                     id: employee.employee_id,
                     name: employee.employee_name,
-                    role: employee.role_designation
+                    role: employee.role_designation,
+                    isBench: isBench
                 });
             });
         });
@@ -158,7 +170,7 @@ const SkillsOverview = ({ employees = [] }) => {
                                             <span className={`rounded-md px-2 py-1 text-xs font-bold ${topic.benchCount > 0
                                                 ? benchHeavy
                                                     ? 'border border-red-100 bg-red-50 text-red-600'
-                                                    : 'border border-orange-100 bg-orange-50 text-orange-600'
+                                                    : 'border border-amber-100 bg-amber-50 text-amber-600'
                                                 : 'text-gray-400'
                                                 }`}>
                                                 {topic.benchCount}
@@ -179,31 +191,44 @@ const SkillsOverview = ({ employees = [] }) => {
                                                         {topic.name} Subskills
                                                     </h4>
                                                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                                                        {topic.subskills.map((subskill) => (
-                                                            <div key={`${topic.name}-${subskill.name}`} className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-                                                                <div className="flex items-center justify-between gap-3">
-                                                                    <div>
-                                                                        <p className="text-sm font-bold text-gray-800">{subskill.name}</p>
-                                                                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{subskill.count} employees</p>
+                                                        {topic.subskills.map((subskill) => {
+                                                            const isSubskillExpanded = expandedSubskills.has(`${topic.name}-${subskill.name}`);
+                                                            const displayEmployees = isSubskillExpanded ? subskill.employees : subskill.employees.slice(0, 6);
+
+                                                            return (
+                                                                <div key={`${topic.name}-${subskill.name}`} className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div>
+                                                                            <p className="text-sm font-bold text-gray-800">{subskill.name}</p>
+                                                                            <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">{subskill.count} employees</p>
+                                                                        </div>
+                                                                        <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${subskill.benchCount > 0 ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                                                                            {subskill.benchCount} bench
+                                                                        </span>
                                                                     </div>
-                                                                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${subskill.benchCount > 0 ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
-                                                                        {subskill.benchCount} bench
-                                                                    </span>
+                                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                                        {displayEmployees.map((employee) => (
+                                                                            <span 
+                                                                                key={`${subskill.name}-${employee.id}`} 
+                                                                                className={`rounded-full px-2 py-1 text-[10px] font-bold border ${employee.isBench 
+                                                                                    ? 'bg-amber-50 text-amber-600 border-amber-100' 
+                                                                                    : 'bg-slate-50 text-slate-600 border-slate-100'}`}
+                                                                            >
+                                                                                {employee.name}
+                                                                            </span>
+                                                                        ))}
+                                                                        {subskill.employees.length > 6 && (
+                                                                            <button 
+                                                                                onClick={() => toggleSubskill(topic.name, subskill.name)}
+                                                                                className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-colors"
+                                                                            >
+                                                                                {isSubskillExpanded ? 'Show less' : `+${subskill.employees.length - 6} more`}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                                    {subskill.employees.slice(0, 6).map((employee) => (
-                                                                        <span key={`${subskill.name}-${employee.id}`} className="rounded-full border border-slate-100 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600">
-                                                                            {employee.name}
-                                                                        </span>
-                                                                    ))}
-                                                                    {subskill.employees.length > 6 && (
-                                                                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                                                                            +{subskill.employees.length - 6} more
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             </td>

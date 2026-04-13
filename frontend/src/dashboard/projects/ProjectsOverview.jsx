@@ -38,9 +38,9 @@ const ProjectsOverview = ({
     activeFilter, 
     onFilterChange, 
     onProjectAdded, 
-    selectedDepartment, 
-    onDepartmentChange, 
-    departments 
+    selectedDepartment = '', 
+    onDepartmentChange = () => {}, 
+    departments = [] 
 }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -80,7 +80,7 @@ const ProjectsOverview = ({
                             className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
                         >
                             <option value="">All Department</option>
-                            {departments.map((dept) => (
+                            {(departments || []).map((dept) => (
                                 <option key={dept} value={dept}>{dept}</option>
                             ))}
                         </select>

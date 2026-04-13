@@ -79,11 +79,11 @@ const DepartmentAllocationChart = ({ filters }) => {
                             align="right"
                             iconType="circle"
                             wrapperStyle={{
-                                paddingBottom: '15px',
-                                fontSize: '9px',
-                                fontWeight: 'bold',
-                                textTransform: 'lowercase',
-                                letterSpacing: '0.05em'
+                                paddingTop: '10px',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                textTransform: 'none',
+                                letterSpacing: 'normal'
                             }}
                         />
                         <Bar
@@ -91,21 +91,21 @@ const DepartmentAllocationChart = ({ filters }) => {
                             stackId="a"
                             fill="#10b981"
                             radius={[0, 0, 0, 0]}
-                            name="allocated-billable"
+                            name="Allocated: Billable"
                         />
                         <Bar
                             dataKey="allocated_non_billable"
                             stackId="a"
                             fill="#3b82f6"
                             radius={[0, 0, 0, 0]}
-                            name="allocated - non-billable"
+                            name="Allocated: Non-Billable"
                         />
                         <Bar
                             dataKey="not_allocated_billable"
                             stackId="a"
                             fill="#cbd5e1"
                             radius={[6, 6, 0, 0]}
-                            name="not-allocated billable"
+                            name="Not Allocated: Billable"
                         />
                     </BarChart>
                 </ResponsiveContainer>

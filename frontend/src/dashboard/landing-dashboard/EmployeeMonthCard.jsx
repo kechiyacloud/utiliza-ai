@@ -1,7 +1,7 @@
 import React from 'react';
 import { Trophy } from 'lucide-react';
 
-const EmployeeMonthCard = ({ employee, onClick, selectedDepartment = 'Overall' }) => {
+const EmployeeMonthCard = ({ employee, onClick, selectedDepartments = [] }) => {
     if (!employee) {
         return (
             <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-start relative min-w-[140px] h-full flex-1 group">
@@ -18,7 +18,7 @@ const EmployeeMonthCard = ({ employee, onClick, selectedDepartment = 'Overall' }
                 </div>
                 <p className="text-[9px] text-slate-400 font-bold uppercase">No Performer</p>
                 <p className="text-[9px] text-slate-300 font-medium mt-1">
-                    {selectedDepartment === 'Overall' ? 'No nominations found yet' : `No nominations in ${selectedDepartment}`}
+                    {selectedDepartments.length === 0 ? 'No nominations found yet' : `No nominations in selected departments`}
                 </p>
             </div>
         );

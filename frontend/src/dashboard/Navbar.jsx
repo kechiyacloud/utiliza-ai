@@ -16,10 +16,10 @@ const Navbar = () => {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard' },
         { icon: FolderKanban, label: 'Projects', path: 'projects' },
-        { icon: Users, label: 'Employee', path: 'employee' },
-        { icon: PieChart, label: 'Allocation', path: 'allocation' },
+        { icon: Users, label: 'Employees', path: 'employees/list' },
+        { icon: PieChart, label: 'Allocations', path: 'allocation' },
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
-        { icon: Briefcase, label: 'Client', path: 'client' },
+        { icon: Briefcase, label: 'Clients', path: 'client' },
         { icon: Settings, label: 'Settings', path: 'settings' },
     ];
 

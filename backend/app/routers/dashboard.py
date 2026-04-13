@@ -35,27 +35,37 @@ def get_dashboard_all(department: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    dept_m_filter = " AND m.department = %s " if department and department != 'Overall' else ""
-    dept_e_filter = " AND e.department = %s " if department and department != 'Overall' else ""
-    dept_params = (department,) if department and department != 'Overall' else ()
+    # Support multiple departments via comma-separated string
+    dept_list = [d.strip() for d in department.split(',')] if department and department != 'Overall' else []
+    
+    if dept_list:
+        dept_m_filter = " AND m.department = ANY(%s) "
+        dept_e_filter = " AND e.department = ANY(%s) "
+        dept_e_with_null = " AND (e.department = ANY(%s) OR pa.employee_id IS NULL) "
+        dept_params = (dept_list,)
+    else:
+        dept_m_filter = ""
+        dept_e_filter = ""
+        dept_e_with_null = ""
+        dept_params = ()
 
     try:
         # ==============================================================
         # BATCH 1: Info Cards (Total Employees, Clients, Projects, Bench)
         # ==============================================================
         try:
-            if department:
+            if dept_list:
                 cur.execute("""
                     SELECT 
-                        (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND department = %s),
+                        (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND department = ANY(%s)),
                         (SELECT COUNT(*) FROM clients),
                         (SELECT COUNT(*) FROM projects),
                         (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
                          LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                          WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-                         AND m.date_of_resign IS NULL AND m.department = %s
+                         AND m.date_of_resign IS NULL AND m.department = ANY(%s)
                          AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0)
-                """, (department, department))
+                """, (dept_list, dept_list))
             else:
                 cur.execute("""
                     SELECT 
@@ -100,8 +110,7 @@ def get_dashboard_all(department: Optional[str] = None):
                   ON pa.allocation_start_date <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day')
                  AND (pa.allocation_end_date >= mo.month_start OR pa.allocation_end_date IS NULL)
                 LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
-                WHERE (e.date_of_resign IS NULL OR pa.employee_id IS NULL)
-                """ + dept_e_filter.replace("AND", "AND (").replace("%s", "%s OR pa.employee_id IS NULL)") + """
+                """ + dept_e_with_null + """
                 GROUP BY mo.month_start ORDER BY mo.month_start
             """, dept_params)
             allocation_3m = [{"month": r[0], "allocations": float(r[1])} for r in cur.fetchall()]
@@ -191,12 +200,13 @@ def get_dashboard_all(department: Optional[str] = None):
 
         try:
             cur.execute("""
-                SELECT DISTINCT e.employee_name, 'Completed'
+                SELECT DISTINCT e.employee_name, c.certificate_name
                 FROM employee_certificates ec
                 JOIN employee_master e ON ec.employee_id = e.employee_id
+                JOIN certificates c ON ec.certificate_id = c.certificate_id
                 WHERE 1=1 """ + dept_e_filter + """ ORDER BY e.employee_name
             """, dept_params)
-            certifications = [{"employee": r[0],"expiry_date": r[1]} for r in cur.fetchall()]
+            certifications = [{"employee": r[0], "certification_name": r[1], "expiry_date": "Completed"} for r in cur.fetchall()]
         except Exception as e:
             conn.rollback(); print("Error in Certifications:", e); certifications = []
 
@@ -210,9 +220,9 @@ def get_dashboard_all(department: Optional[str] = None):
                 LEFT JOIN employee_skills es ON s.skill_id = es.skill_id
                 LEFT JOIN employee_master m ON es.employee_id = m.employee_id
                 LEFT JOIN project_skills ps ON s.skill_id = ps.skill_id
-                WHERE (m.department = %s OR %s IS NULL)
+                WHERE (m.department = ANY(%s) OR %s IS NULL)
                 GROUP BY s.skill_name
-            """, (department, department))
+            """, (dept_list, department))
             skills_gap = []
             for r in cur.fetchall():
                 avail, alloc = r[1] or 0, r[2] or 0
@@ -226,26 +236,26 @@ def get_dashboard_all(department: Optional[str] = None):
         # ==============================================================
         try:
             # Combined CTE to get all headcounts in one round trip
-            if department:
+            if dept_list:
                 cur.execute("""
                     SELECT
-                        (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND department = %s),
+                        (SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND department = ANY(%s)),
                         (SELECT COUNT(*) FROM employee_master m JOIN employee_master_pro p ON m.employee_id=p.employee_id
-                         WHERE p.employee_status ILIKE CHR(37)||'notice'||CHR(37) AND m.date_of_resign IS NULL AND m.department = %s),
+                         WHERE p.employee_status ILIKE CHR(37)||'notice'||CHR(37) AND m.date_of_resign IS NULL AND m.department = ANY(%s)),
                         (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
                          JOIN employee_master m ON pa.employee_id=m.employee_id
                          WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date>=CURRENT_DATE)
-                           AND LOWER(pa.project_tags)='billable' AND m.date_of_resign IS NULL AND m.department = %s AND pa.allocation_percentage > 0),
+                           AND LOWER(pa.project_tags)='billable' AND m.date_of_resign IS NULL AND m.department = ANY(%s) AND pa.allocation_percentage > 0),
                         (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
                          LEFT JOIN employee_master_pro p ON m.employee_id=p.employee_id
                          WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
-                           AND m.date_of_resign IS NULL AND m.department = %s
+                           AND m.date_of_resign IS NULL AND m.department = ANY(%s)
                            AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0),
                         (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
                          JOIN employee_master m ON pa.employee_id=m.employee_id
                          WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE+INTERVAL '30 days')
-                           AND m.date_of_resign IS NULL AND m.department = %s)
-                """, (department, department, department, department, department))
+                           AND m.date_of_resign IS NULL AND m.department = ANY(%s))
+                """, (dept_list, dept_list, dept_list, dept_list, dept_list))
             else:
                 cur.execute("""
                     SELECT
@@ -322,7 +332,7 @@ def get_dashboard_all(department: Optional[str] = None):
                  AND (pa.allocation_end_date>=mo.month_start OR pa.allocation_end_date IS NULL)
                 LEFT JOIN employee_master e ON pa.employee_id=e.employee_id
                 WHERE 1=1
-                """ + dept_e_filter.replace("AND", "AND (").replace("%s", "%s OR pa.employee_id IS NULL)") + """
+                """ + dept_e_with_null + """
                 GROUP BY mo.month_start ORDER BY mo.month_start
             """, dept_params)
             forecast = []
@@ -331,14 +341,14 @@ def get_dashboard_all(department: Optional[str] = None):
                 forecast.append({"month": r[0], "allocated": round(alloc, 2), "availability": round(max(float(active_hc)-alloc, 0), 2)})
 
             # Projects at risk
-            if department:
+            if dept_list:
                 cur.execute("""
                     SELECT p.project_name, count(pa.employee_id) FROM projects p
                     LEFT JOIN projects_allocation pa ON pa.project_id=p.project_id
                     LEFT JOIN employee_master e ON pa.employee_id=e.employee_id
-                    WHERE (e.department=%s OR e.department IS NULL)
+                    WHERE (e.department=ANY(%s) OR e.department IS NULL)
                     GROUP BY p.project_name ORDER BY count(pa.employee_id) ASC LIMIT 3
-                """, dept_params)
+                """, (dept_list,))
             else:
                 cur.execute("""
                     SELECT p.project_name, count(pa.employee_id) FROM projects p
@@ -460,14 +470,14 @@ def get_dashboard_all(department: Optional[str] = None):
             todo_counter = 1
 
             # Risk triggers
-            if department:
+            if dept_list:
                 cur.execute("""
                     (SELECT 'understaffed', p.project_name, count(pa.employee_id)::text FROM projects p
                     LEFT JOIN projects_allocation pa ON pa.project_id=p.project_id
                     LEFT JOIN employee_master e ON pa.employee_id=e.employee_id
                     WHERE LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
                       AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
-                      AND (e.department=%s OR e.department IS NULL)
+                      AND (e.department=ANY(%s) OR e.department IS NULL)
                     GROUP BY p.project_name HAVING count(pa.employee_id)<3 LIMIT 3)
                 UNION ALL
                     (SELECT 'deadline', p.project_name, '' FROM projects p
@@ -476,20 +486,20 @@ def get_dashboard_all(department: Optional[str] = None):
                     WHERE p.end_date IS NULL
                       AND LOWER(p.project_status) NOT LIKE CHR(37)||'end'||CHR(37)
                       AND LOWER(p.project_status) NOT LIKE CHR(37)||'complete'||CHR(37)
-                      AND e.department=%s LIMIT 3)
+                      AND e.department=ANY(%s) LIMIT 3)
                 UNION ALL
                     (SELECT 'bench', e.employee_name,
                         (CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE))::text
                     FROM employee_master e
                     LEFT JOIN employee_master_pro p ON e.employee_id=p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id=pa.employee_id
-                    WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
+                    WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
                       AND e.date_of_resign IS NULL 
                       AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = e.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0
-                      AND e.department=%s
+                      AND e.department=ANY(%s)
                     GROUP BY e.employee_name,e.date_of_joining
                     HAVING CURRENT_DATE-COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE)>30 LIMIT 3)
-                """, (department, department, department))
+                """, (dept_list, dept_list, dept_list))
             else:
                 cur.execute("""
                     (SELECT 'understaffed', p.project_name, count(pa.employee_id)::text FROM projects p

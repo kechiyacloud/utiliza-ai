@@ -824,16 +824,15 @@ def projects_overview(department: Optional[str] = None):
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
-            WHERE LOWER(p.project_type) IN ('client', 'external')
+            WHERE LOWER(p.project_type) = 'external'
             {where_clause}
         """, tuple(params))
-        client = cur.fetchone()[0]
+        external = cur.fetchone()[0]
 
         return {
             "total_projects": total,
             "internal_projects": internal,
-            "external_projects": client,
-            "client_projects": client,
+            "external_projects": external,
             "ongoing_projects": ongoing,
             "upcoming_projects": upcoming,
             "completed_projects": completed,
@@ -869,7 +868,6 @@ def projects_list(department: Optional[str] = None):
                 p.project_id,
                 p.project_name,
                 p.project_status,
-                p.sub_status,
                 p.project_type,
                 p.start_date,
                 p.end_date,
@@ -901,19 +899,18 @@ def projects_list(department: Optional[str] = None):
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
-            LEFT JOIN departments d ON p.department_id = d.department_id
-            WHERE 1=1 {where_clause}
-            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id, p.department_id, d.department_name, p.skills
+            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
+            {where_clause}
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
-        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+        results = [dict(zip(columns, row)) for row in cur.fetchall()]
 
         return [
             {
                 "project_id": r[0],
                 "project_name": r[1],
-                "status": _normalize_project_status(r[2], end_date=r[6], strict=False),
-                "raw_status": (r[2] or "").strip(),   # exact value from DB — used for display
+                "status": _normalize_project_status(r[2], strict=False) if r[2] else "Unknown",
                 "sub_status": _normalize_sub_status(r[3], strict=False),
                 "type": _normalize_project_type(r[4], strict=False) if r[4] else "Unknown",
                 "start_date": r[5],
@@ -925,11 +922,8 @@ def projects_list(department: Optional[str] = None):
                 "billable": r[11] if r[11] else "Unknown",
                 "client_id": r[12],
                 "partner_id": r[13],
-                "department_id": r[14],
-                "department_name": r[15],
-                "skills": r[16] if r[16] else []
             }
-            for r in rows
+            for r in results
         ]
     except Exception as e:
         print("PROJECTS LIST ERROR:", e)
@@ -946,7 +940,7 @@ def get_project_details(project_id: str):
     try:
         cur.execute("""
             SELECT 
-                p.project_id, p.project_name, p.project_status, p.sub_status, p.billable, p.start_date, p.end_date,
+                p.project_id, p.project_name, p.project_status, p.billable, p.start_date, p.end_date,
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
@@ -982,12 +976,6 @@ def get_project_details(project_id: str):
             "deliverables": row[15] or "No deliverables listed.",
             "milestones": row[16] or "No milestones listed.",
             "timeline_notes": row[17] or "No timeline notes.",
-            "client_id": row[18],
-            "partner_id": row[19],
-            "department_id": row[20],
-            "department_name": row[21],
-            "project_type": row[22],
-            "skills": row[23] if row[23] else []
         }
     finally:
         cur.close()
@@ -1390,11 +1378,11 @@ def update_project(project_id: str, updates: ProjectUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT project_status, sub_status FROM projects WHERE project_id = %s", (project_id,))
+        cur.execute("SELECT project_status FROM projects WHERE project_id = %s", (project_id,))
         current_row = cur.fetchone()
         if not current_row:
             raise HTTPException(status_code=404, detail="Project not found")
-        current_status, current_sub_status = current_row
+        current_status = current_row[0]
 
         payload = _model_payload(updates)
         if not payload:
@@ -1409,9 +1397,8 @@ def update_project(project_id: str, updates: ProjectUpdate):
         sub_status_value = payload.get("sub_status")
         normalized_status = None
         normalized_sub_status = None
-        if status_value is not None or sub_status_value is not None:
-            base_status = status_value if status_value is not None else current_status
-            normalized_status, normalized_sub_status = _validate_status_and_substatus(base_status, sub_status_value if sub_status_value is not None else current_sub_status)
+        if status_value is not None:
+            normalized_status, _ = _validate_status_and_substatus(status_value, None)
 
         updates_map = {}
 
@@ -1449,9 +1436,6 @@ def update_project(project_id: str, updates: ProjectUpdate):
 
         if "partner_id" in payload:
             updates_map["partner_id"] = _normalize_fk_id(payload["partner_id"])
-
-        if "department_id" in payload:
-            updates_map["department_id"] = _normalize_fk_id(payload["department_id"])
 
         # Handle sub_status once
         if sub_status_value is not None or ("project_status" in payload):
@@ -1513,12 +1497,11 @@ def create_project(project: ProjectCreate):
         if normalized_type == "partner" and not partner_id_value:
             raise HTTPException(status_code=422, detail="Partner projects must include a partner_id.")
         project_status, sub_status_val = _validate_status_and_substatus(project.project_status, project.sub_status)
-        insert_fields = ["project_id", "project_name", "project_status", "sub_status", "project_type", "billable", "start_date", "end_date", "skills"]
+        insert_fields = ["project_id", "project_name", "project_status", "sub_status", "project_type", "billable", "start_date", "end_date"]
         insert_values = [
             project.project_id,
             project_name,
             project_status,
-            sub_status_val,
             project_type,
             "Non-Billable" if normalized_type == "internal" else _normalize_text(project.billable),
             project.start_date,

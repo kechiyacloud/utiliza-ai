@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useDataRefresh } from '../context'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -10,6 +9,8 @@ import SkillsOverview from './employee/insights/SkillsOverview'
 import UtilizationTrend from './employee/insights/UtilizationTrend'
 import { getEmployeeList } from '../api/employeeApi'
 import { normalizeSkillName } from '../utils/skillTopics'
+import MultiSelectDropdown from '../components/MultiSelectDropdown'
+import { exportToCSV } from '../utils/exportUtils'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -61,11 +62,13 @@ function Employee() {
   // Department chip selector — default shows all unique depts; user can narrow down
   const [selectedDepts, setSelectedDepts] = useState(() => {
     const initialDepartment = location.state?.departmentFilter;
-    if (initialDepartment && initialDepartment !== 'Overall') return [initialDepartment];
+    if (initialDepartment && initialDepartment !== 'Overall') {
+      return initialDepartment.includes(',') ? initialDepartment.split(',') : [initialDepartment];
+    }
     try {
       const saved = localStorage.getItem('employee_department_filter');
       if (saved) return JSON.parse(saved);
-    } catch(e) {}
+    } catch (e) { }
     return [];
   });
 
@@ -91,7 +94,6 @@ function Employee() {
       prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]
     );
   };
-  const { refreshKey } = useDataRefresh();
 
   useEffect(() => {
     let mounted = true
@@ -100,10 +102,22 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList(refreshKey > 0)
+        const data = await getEmployeeList()
         if (!mounted) return
 
         setAllEmployees(data)
+
+        // Guard: if saved department filter produces zero results, clear it to avoid deadlock
+        setSelectedDepts(prev => {
+          if (prev.length === 0) return prev;
+          const hasMatch = data.some(e => prev.includes(e.department));
+          if (!hasMatch) {
+            localStorage.removeItem('employee_department_filter');
+            return [];
+          }
+          return prev;
+        });
+
       } catch (err) {
         if (mounted) setError(err?.message || 'Failed to load')
       } finally {
@@ -113,7 +127,7 @@ function Employee() {
 
     fetchAllData()
     return () => { mounted = false }
-  }, [refreshKey])
+  }, [])
 
   // Combined filters passed to EmployeeTable — dept chips override the filter drawer's dept selection
   const combinedFilters = {
@@ -134,12 +148,12 @@ function Employee() {
 
       const sv = combinedFilters.search?.toLowerCase().trim();
       const matchesSearch = !sv || (
-          emp.employee_name?.toLowerCase().includes(sv) ||
-          emp.employee_id?.toLowerCase().includes(sv) ||
-          emp.role_designation?.toLowerCase().includes(sv) ||
-          emp.location?.toLowerCase().includes(sv) ||
-          emp.department?.toLowerCase().includes(sv) ||
-          (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
+        emp.employee_name?.toLowerCase().includes(sv) ||
+        emp.employee_id?.toLowerCase().includes(sv) ||
+        emp.role_designation?.toLowerCase().includes(sv) ||
+        emp.location?.toLowerCase().includes(sv) ||
+        emp.department?.toLowerCase().includes(sv) ||
+        (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
       );
 
       return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
@@ -220,7 +234,22 @@ function Employee() {
                   </div>
                 </button>
                 <button
-                  onClick={() => { setShowBulkDropdown(false); }}
+                  onClick={() => {
+                    setShowBulkDropdown(false);
+                    const exportData = allEmployees.map(emp => ({
+                      'Employee ID': emp.employee_id,
+                      'Name': emp.employee_name,
+                      'Designation': emp.role_designation,
+                      'Department': emp.department,
+                      'Location': emp.location,
+                      'Status': emp.employee_status,
+                      'Allocation %': emp.employee_allocations ?? 0,
+                      'Billable': emp.billable,
+                      'Employee Type': emp.employee_type,
+                      'Date of Joining': emp.date_of_joining,
+                    }));
+                    exportToCSV(exportData, `Employees_${new Date().toISOString().split('T')[0]}`);
+                  }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-left"
                 >
                   <Download size={16} className="text-emerald-500" />
@@ -245,46 +274,6 @@ function Employee() {
         </div>
       </div>
 
-      {/* Department Filter — table-row style */}
-      {allDepts.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden flex-shrink-0">
-          <div className="flex items-center border-b border-gray-100 px-4 py-2 bg-gray-50">
-            <Building2 size={13} className="text-gray-400 mr-2" />
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex-1">Department</span>
-            <span className="text-[11px] text-gray-400 font-medium">
-              {selectedDepts.length > 0 ? `${selectedDepts.length} selected` : 'All'}
-            </span>
-          </div>
-          <div className="flex overflow-x-auto custom-scrollbar divide-x divide-gray-100">
-            {/* All button */}
-            <button
-              onClick={() => setSelectedDepts([])}
-              className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-2.5 min-w-[80px] transition-all border-b-2 text-center ${selectedDepts.length === 0
-                  ? 'border-blue-500 bg-blue-50/60 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                }`}
-            >
-              <span className={`text-xs font-bold ${selectedDepts.length === 0 ? 'text-blue-700' : 'text-gray-700'}`}>All</span>
-            </button>
-            {allDepts.map(dept => {
-              const count = allEmployees.filter(e => e.department === dept).length;
-              const isActive = selectedDepts.includes(dept);
-              return (
-                <button
-                  key={dept}
-                  onClick={() => toggleDept(dept)}
-                  className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-2.5 min-w-[100px] transition-all border-b-2 text-center ${isActive
-                      ? 'border-blue-500 bg-blue-50/60 text-blue-700'
-                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                    }`}
-                >
-                  <span className={`text-xs font-bold truncate max-w-[90px] ${isActive ? 'text-blue-700' : 'text-gray-700'}`} title={dept}>{dept}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

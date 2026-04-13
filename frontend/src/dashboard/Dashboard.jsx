@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign,
-  PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, X
+  PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -12,26 +12,31 @@ import {
   BarChart, Bar, Legend
 } from 'recharts';
 
-import {
-  fetchDashboardData,
-  fetchTodos,
-  addTodo,
-  toggleTodo,
-  clearTodo,
-  exportRiskBoard,
-  updateTodo,
+import { 
+  fetchDashboardData, 
+  fetchTodos, 
+  addTodo, 
+  toggleTodo, 
+  clearTodo, 
+  updateTodo, 
   clearDashboardCache,
-  fetchDepartments
+  fetchDepartments 
 } from '../api/dashboardApi';
 import { getEmployeeList } from '../api/employeeApi';
-import { useDataRefresh } from '../context';
+import { createProject } from '../api/projectsApi';
+import { createClient } from '../api/clientApi';
+
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
+import AddProjectPanel from './projects/AddProjectPanel';
+import AddClientModal from './clients/AddClientModal';
 import DashboardTables from './landing-dashboard/DashboardTables';
 import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import NominationModal from './employee/NominationModal';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
+import { Building2 } from 'lucide-react';
 
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -55,23 +60,34 @@ const CustomTooltip = ({ active, payload, label }) => {
 function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [forcedTab, setForcedTab] = useState(null);
+  const [forcedTab] = useState(null);
   const navigate = useNavigate();
 
   // Interaction States
+  const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isSplitViewOpen, setIsSplitViewOpen] = useState(false);
   const [isNominationModalOpen, setIsNominationModalOpen] = useState(false);
 
   // Filter States
-  const [selectedDepartment, setSelectedDepartment] = useState(() => {
-    return localStorage.getItem('dashboard_department_filter') || 'Overall';
+  const [selectedDepartments, setSelectedDepartments] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_department_filter_v2');
+      if (saved) return JSON.parse(saved);
+      // Fallback to old single selection if exists
+      const old = localStorage.getItem('dashboard_department_filter');
+      if (old && old !== 'Overall') return [old];
+    } catch (err) {
+      console.error('Failed to parse active tab:', err);
+    }
+    return [];
   });
   const [allEmployees, setAllEmployees] = useState([]);
   const [departmentOptions, setDepartmentOptions] = useState([]);
 
   useEffect(() => {
-    localStorage.setItem('dashboard_department_filter', selectedDepartment);
-  }, [selectedDepartment]);
+    localStorage.setItem('dashboard_department_filter_v2', JSON.stringify(selectedDepartments));
+  }, [selectedDepartments]);
 
   // Actionable Todo States
   const [todos, setTodos] = useState([]);
@@ -80,15 +96,15 @@ function Dashboard() {
   const [todoToDelete, setTodoToDelete] = useState(null);
   const [isDeletingTodo, setIsDeletingTodo] = useState(false);
   const [editingTodoId, setEditingTodoId] = useState(null);
-  const { refreshKey } = useDataRefresh();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         // Parallel fetch for all initial dashboard requirements
+        const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
-          fetchDashboardData(refreshKey > 0, selectedDepartment),
-          getEmployeeList(refreshKey > 0),
+          fetchDashboardData(false, deptParam),
+          getEmployeeList(),
           fetchTodos(),
           fetchDepartments()
         ]);
@@ -102,7 +118,7 @@ function Dashboard() {
         if (empListRes.status === 'fulfilled') {
           setAllEmployees(empListRes.value);
         }
-
+        
         if (todosRes.status === 'fulfilled') {
           setTodos(todosRes.value);
         }
@@ -117,7 +133,7 @@ function Dashboard() {
       }
     };
     loadData();
-  }, [selectedDepartment, refreshKey]);
+  }, [selectedDepartments]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
 
@@ -177,18 +193,6 @@ function Dashboard() {
     setNewTodoText('');
   };
 
-  const handleExportRisk = async () => {
-    try {
-      const blob = await exportRiskBoard();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'delivery_risk_board.csv';
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (e) { console.error('Export failed', e); }
-  };
-
   useEffect(() => {
     // Restore scroll position when loading is complete
     if (!loading) {
@@ -218,16 +222,55 @@ function Dashboard() {
     }
   }, [loading]);
 
+  const handleAddProject = async (projectData) => {
+    try {
+      const payload = {
+        project_id: (projectData.name.replace(/\s+/g, '-').toUpperCase() + '-' + Math.floor(Math.random() * 1000)).substring(0, 20),
+        project_name: projectData.name,
+        project_status: projectData.status,
+        billable: projectData.type === 'Client' ? 'Yes' : 'No',
+        start_date: projectData.startDate || null,
+        end_date: projectData.endDate || null
+      };
+      await createProject(payload);
+
+      setIsProjectPanelOpen(false);
+      clearDashboardCache();
+      const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
+      const res = await fetchDashboardData(true, deptParam);
+      setData(res.data);
+      if (res.todos) setTodos(res.todos);
+    } catch (e) {
+      console.error("Failed to add project", e);
+      alert("Failed to create project");
+    }
+  };
+
+  const handleAddClient = async (clientData) => {
+    try {
+      await createClient(clientData);
+      setIsClientModalOpen(false);
+      clearDashboardCache();
+      const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
+      const res = await fetchDashboardData(true, deptParam);
+      setData(res.data);
+      if (res.todos) setTodos(res.todos);
+    } catch (e) {
+      console.error("Failed to add client", e);
+      alert("Failed to create client");
+    }
+  };
+
   // Map Backend Executive Metrics to UI Arrays
   const _metrics = data?.executiveMetrics || {};
 
-  const contextLabel = selectedDepartment === 'Overall' ? 'Organization' : 'Team';
+  const contextLabel = selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
   const dynamicKpiData = [
-    { title: `${contextLabel} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true } },
-    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: UsersIcon, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } },
-    { title: "Upcoming Bench (30d)", value: _metrics?.upcoming_bench || 0, subtext: "Rolling off soon", icon: Activity, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } }
+    { title: `${contextLabel} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
+    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -241,16 +284,14 @@ function Dashboard() {
 
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
 
-  const dynamicBenchSkillsData = Array.isArray(_metrics?.bench_skills) && _metrics.bench_skills.length > 0 ? _metrics.bench_skills : [];
-  const dynamicBenchIndividualSkills = Array.isArray(_metrics?.bench_individual_skills) && _metrics.bench_individual_skills.length > 0 ? _metrics.bench_individual_skills : [];
-  const dynamicAlerts = Array.isArray(_metrics?.alerts) && _metrics.alerts.length > 0 ? _metrics.alerts : [];
-  const dynamicProjectsAtRisk = Array.isArray(_metrics?.projects_at_risk) && _metrics.projects_at_risk.length > 0 ? _metrics.projects_at_risk : [];
-
+  // Cleaned up datasets
+  const dynamicBenchIndividualSkills = _metrics.bench_individual_skills || [];
+  
   const filteredDashboardEmployees = useMemo(() => (
-    selectedDepartment === 'Overall'
+    selectedDepartments.length === 0
       ? allEmployees
-      : allEmployees.filter((employee) => employee.department === selectedDepartment)
-  ), [allEmployees, selectedDepartment]);
+      : allEmployees.filter((employee) => selectedDepartments.includes(employee.department))
+  ), [allEmployees, selectedDepartments]);
 
   if (loading) {
     return (
@@ -277,32 +318,52 @@ function Dashboard() {
 
         {/* Header with Actions */}
         <div className="flex justify-between items-end mb-8">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
-              Dashboard
-            </h1>
-            <p className="mt-1.5 text-sm font-medium text-slate-500">
-              See how your {contextLabel.toLowerCase()} is doing, track project progress, and check overall health.
-            </p>
+          <div className="flex items-center gap-4">
+            <button
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+                title="Go Back"
+            >
+                <ArrowLeft size={24} className="text-slate-600" />
+            </button>
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
+                Dashboard
+              </h1>
+              <p className="mt-1.5 text-sm font-medium text-slate-500">
+                See how your {contextLabel.toLowerCase()} is doing, track project progress, and check overall health.
+              </p>
+            </div>
           </div>
 
           <div className="flex gap-3">
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="bg-white border text-sm font-bold text-slate-700 border-slate-200 rounded-xl px-4 py-2 shadow-sm hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            >
-              <option value="Overall">All Departments</option>
-              {departmentOptions.map((dept) => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
+            <MultiSelectDropdown
+              options={departmentOptions}
+              selectedValues={selectedDepartments}
+              onChange={setSelectedDepartments}
+              placeholder="Select Departments"
+              icon={Building2}
+            />
             <button
-              onClick={() => navigate('/info/projects')}
+              onClick={() => navigate('/info/employee/add')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
+            >
+              <UserCog size={18} />
+              Add Employee
+            </button>
+            <button
+              onClick={() => setIsProjectPanelOpen(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200"
             >
               <Plus size={18} />
               Add Project
+            </button>
+            <button
+              onClick={() => setIsClientModalOpen(true)}
+              className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+            >
+              <UserPlus size={18} className="text-slate-500" />
+              Add Client
             </button>
           </div>
         </div>
@@ -338,7 +399,7 @@ function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="dashboard-cards">
-            <ExecutiveDashboardCards data={data?.executiveCards} selectedDepartment={selectedDepartment} />
+            <ExecutiveDashboardCards data={data?.executiveCards} selectedDepartments={selectedDepartments} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
@@ -351,7 +412,7 @@ function Dashboard() {
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Allocated vs Available
+                    Allocate vs. Available
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
@@ -364,128 +425,116 @@ function Dashboard() {
                     <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                     <RechartsTooltip content={<CustomTooltip />} />
                     <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="availability" name="Available" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocated" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Actionable Todo List (Span 1) */}
-            <div className="relative bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 overflow-hidden">
-              {/* Coming Soon Overlay */}
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 backdrop-blur-[3px] rounded-2xl p-6">
-                <div className="bg-white p-3 rounded-full shadow-sm border border-slate-100 mb-3">
-                  <ListTodo size={28} className="text-blue-500" />
-                </div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest mb-1 shadow-white">Coming Soon</h3>
-                <p className="text-xs font-semibold text-slate-600 shadow-white">Intelligent task management is under development.</p>
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 opacity-60 grayscale pointer-events-none select-none">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <ListTodo size={16} className="text-blue-500" />
+                Actionable Todo List
+                <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
+              </h2>
+
+              <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
+                <span className="font-semibold">Admin controls are enabled for this board.</span>
+                <span className="font-black uppercase tracking-wider text-blue-600">{editingTodoId ? 'Editing task' : 'Live task manager'}</span>
               </div>
 
-              {/* Blurred Content */}
-              <div className="opacity-40 blur-[3px] flex flex-col gap-3 pointer-events-none select-none h-full">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <ListTodo size={16} className="text-blue-500" />
-                  Actionable Todo List
-                  <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
-                </h2>
-
-                <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
-                  <span className="font-semibold">Admin controls are enabled for this board.</span>
-                  <span className="font-black uppercase tracking-wider text-blue-600">{editingTodoId ? 'Editing task' : 'Live task manager'}</span>
-                </div>
-
-                {/* Add Task Input */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTodoText}
-                    onChange={e => setNewTodoText(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
-                    placeholder="Add a new task..."
-                    className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
-                  />
+              {/* Add Task Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTodoText}
+                  onChange={e => setNewTodoText(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
+                  placeholder="Add a new task..."
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
+                />
+                <button
+                  onClick={handleAddTodo}
+                  disabled={todoLoading || !newTodoText.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  <Send size={13} />
+                  {editingTodoId ? 'Save' : 'Add'}
+                </button>
+                {editingTodoId && (
                   <button
-                    onClick={handleAddTodo}
-                    disabled={todoLoading || !newTodoText.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50"
+                    onClick={cancelTodoEditing}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50"
                   >
-                    <Send size={13} />
-                    {editingTodoId ? 'Save' : 'Add'}
+                    <X size={13} />
                   </button>
-                  {editingTodoId && (
-                    <button
-                      onClick={cancelTodoEditing}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+                )}
+              </div>
 
-                {/* Todo Items */}
-                <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
-                  {todos.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
-                  )}
-                  {todos.map((todo) => (
-                    <div
-                      key={todo.id}
-                      className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
-                        ? 'bg-slate-50 border-slate-100 opacity-60'
-                        : 'bg-white border-gray-100 hover:border-blue-200 shadow-xs hover:shadow-sm'
+              {/* Todo Items */}
+              <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
+                {todos.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
+                )}
+                {todos.map((todo) => (
+                  <div
+                    key={todo.id}
+                    className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
+                      ? 'bg-slate-50 border-slate-100 opacity-60'
+                      : 'bg-white border-gray-100 hover:border-blue-200 shadow-xs hover:shadow-sm'
+                      }`}
+                  >
+                    <button
+                      onClick={() => handleToggleTodo(todo.id)}
+                      className={`mt-0.5 flex-shrink-0 transition-colors ${todo.status === 'completed' ? 'text-emerald-500' : 'text-slate-300 hover:text-blue-500'
                         }`}
                     >
-                      <button
-                        onClick={() => handleToggleTodo(todo.id)}
-                        className={`mt-0.5 flex-shrink-0 transition-colors ${todo.status === 'completed' ? 'text-emerald-500' : 'text-slate-300 hover:text-blue-500'
-                          }`}
-                      >
-                        <CheckCircle2 size={18} strokeWidth={2} />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-                          }`}>
-                          {todo.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${todo.type === 'critical' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                            todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                              'bg-blue-50 text-blue-600 border border-blue-100'
-                            }`}>{todo.type}</span>
-                          <span className="text-[9px] text-slate-400">{todo.time}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
-                          <button
-                            onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
-                            className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                            title="Take Action"
-                          >
-                            <ArrowUpRight size={16} />
-                          </button>
-                        )}
-                        {!todo.isSystemSuggestion && (
-                          <button
-                            onClick={() => startEditingTodo(todo)}
-                            className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
-                            title="Edit task"
-                          >
-                            <SquarePen size={15} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => promptDeleteTodo(todo)}
-                          className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
-                          title="Delete task"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                      <CheckCircle2 size={18} strokeWidth={2} />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                        }`}>
+                        {todo.message}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${todo.type === 'critical' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                          todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                            'bg-blue-50 text-blue-600 border border-blue-100'
+                          }`}>{todo.type}</span>
+                        <span className="text-[9px] text-slate-400">{todo.time}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
+                        <button
+                          onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
+                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                          title="Take Action"
+                        >
+                          <ArrowUpRight size={16} />
+                        </button>
+                      )}
+                      {!todo.isSystemSuggestion && (
+                        <button
+                          onClick={() => startEditingTodo(todo)}
+                          className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
+                          title="Edit task"
+                        >
+                          <SquarePen size={15} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => promptDeleteTodo(todo)}
+                        className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
+                        title="Delete task"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -555,7 +604,7 @@ function Dashboard() {
             {/* Top Skills on Bench */}
             <div
               className="bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
-              onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined } })}
+              onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -566,37 +615,37 @@ function Dashboard() {
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
                 <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
-                      <th className="text-left py-2 px-5 bg-white">Employee</th>
-                      <th className="text-left py-2 px-5 bg-white">Skill Set</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
-                      <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
-                        <td className="py-2.5 px-5">
-                          <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
-                        </td>
-                        <td className="py-2.5 px-5">
-                          <div className="flex flex-wrap gap-1">
-                            {row.skills.split(', ').map((skill, sIdx) => (
-                              <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
-                          <ShieldAlert opacity={0.5} size={24} />
-                          No resources currently on bench with skills listed.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
+                    <thead className="sticky top-0 z-10">
+                        <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                            <th className="text-left py-2 px-5 bg-white">Employee</th>
+                            <th className="text-left py-2 px-5 bg-white">Skill Set</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
+                            <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
+                                <td className="py-2.5 px-5">
+                                    <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
+                                </td>
+                                <td className="py-2.5 px-5">
+                                    <div className="flex flex-wrap gap-1">
+                                        {row.skills.split(', ').map((skill, sIdx) => (
+                                            <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
+                                                {skill}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </td>
+                            </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                                <ShieldAlert opacity={0.5} size={24} />
+                                No resources currently on bench with skills listed.
+                            </td>
+                          </tr>
+                        )}
+                    </tbody>
                 </table>
               </div>
             </div>
@@ -629,19 +678,33 @@ function Dashboard() {
 
       </div>
 
+      {/* Interaction Components */}
+      <AddProjectPanel
+        isOpen={isProjectPanelOpen}
+        onClose={() => setIsProjectPanelOpen(false)}
+        onAdd={handleAddProject}
+      />
+
+      <AddClientModal
+        isOpen={isClientModalOpen}
+        onClose={() => setIsClientModalOpen(false)}
+        onSubmit={handleAddClient}
+      />
+
       <WorkforceSplitView
         isOpen={isSplitViewOpen}
         onClose={() => setIsSplitViewOpen(false)}
         employees={filteredDashboardEmployees}
+        contextLabel={contextLabel}
       />
 
       {isNominationModalOpen && (
-        <NominationModal
-          onClose={() => setIsNominationModalOpen(false)}
+        <NominationModal 
+          onClose={() => setIsNominationModalOpen(false)} 
           onSuccess={() => {
             // Simplified refresh: reload the page to see new data
             window.location.reload();
-          }}
+          }} 
         />
       )}
     </div>

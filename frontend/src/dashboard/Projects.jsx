@@ -1,12 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchProjectsData } from '../api/projectsApi';
-import axios from '../api/axios';
-import { useDataRefresh } from '../context';
+import { getAvailabilityFilters } from '../api/availabilityApi';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
 
 function Projects() {
-  const { refreshKey } = useDataRefresh();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,11 +12,15 @@ function Projects() {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [departments, setDepartments] = useState([]);
 
-  const loadData = useCallback(async (dept = selectedDepartment) => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchProjectsData(dept);
+      const filters = {};
+      if (selectedDepartment) {
+        filters.department = selectedDepartment;
+      }
+      const res = await fetchProjectsData(filters);
       setData(res.data);
     } catch (err) {
       console.error("Failed to load projects data", err);
@@ -29,40 +31,32 @@ function Projects() {
   }, [selectedDepartment]);
 
   useEffect(() => {
-    const fetchDepartments = async () => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const fetchFilters = async () => {
       try {
-        const res = await axios.get('/employees/filter-options');
-        if (res.data && res.data.departments) {
-          const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
-          setDepartments(filtered);
+        const filterData = await getAvailabilityFilters();
+        if (filterData && filterData.departments) {
+          setDepartments(filterData.departments);
         }
       } catch (err) {
         console.error("Failed to fetch departments", err);
       }
     };
-    fetchDepartments();
+    fetchFilters();
   }, []);
 
-  useEffect(() => {
-    loadData(selectedDepartment);
-  }, [selectedDepartment, loadData, refreshKey]);
-
   if (loading && !data) {
-    return (
-      <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-64">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-          <span>Loading Projects...</span>
-        </div>
-      </div>
-    );
+    return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-[60vh]">Loading Projects...</div>;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center gap-4">
-        <div className="text-red-500 text-sm font-normal bg-red-50 px-6 py-4 rounded-xl border border-red-100">{error}</div>
-        <button onClick={() => loadData()} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 font-normal transition-colors shadow-lg shadow-blue-100">
+      <div className="p-8 flex flex-col items-center justify-center gap-4 h-[60vh]">
+        <div className="text-red-500 text-sm font-semibold bg-red-50 px-6 py-4 rounded-xl border border-red-100">{error}</div>
+        <button onClick={loadData} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 font-bold transition-colors">
           Retry
         </button>
       </div>
@@ -70,20 +64,13 @@ function Projects() {
   }
 
   return (
-    <>
-      <style>{`
-        .projects-poppins-container, 
-        .projects-poppins-container * {
-            font-family: 'Poppins', sans-serif !important;
-        }
-      `}</style>
-      <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
-        {/* Overview Section */}
+    <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto font-technical">
+      {/* Overview Section */}
       <ProjectsOverview
         stats={data?.stats}
         activeFilter={activeCardFilter}
         onFilterChange={setActiveCardFilter}
-        onProjectAdded={() => loadData()}
+        onProjectAdded={loadData}
         selectedDepartment={selectedDepartment}
         onDepartmentChange={setSelectedDepartment}
         departments={departments}
@@ -93,10 +80,9 @@ function Projects() {
       <ProjectList
         projects={data?.projects || []}
         activeCardFilter={activeCardFilter}
-        onRefresh={() => loadData()}
+        onRefresh={loadData}
       />
-      </div>
-    </>
+    </div>
   );
 }
 

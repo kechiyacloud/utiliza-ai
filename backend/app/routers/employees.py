@@ -252,6 +252,7 @@ def get_all_employees(include_resigned: bool = False):
                 m.department, 
                 m.location, 
                 m.photo_url,
+                m.date_of_joining,
                 {employee_type_expr} as employee_type,
                 CASE
                     {notice_status_expr}
@@ -289,6 +290,7 @@ def get_all_employees(include_resigned: bool = False):
                 m.department,
                 m.location,
                 m.photo_url,
+                m.date_of_joining,
                 p.employee_status,
                 ap.priority_rank,
                 da.total_alloc,
@@ -304,20 +306,9 @@ def get_all_employees(include_resigned: bool = False):
             ),
             (include_resigned,),
         )
-        columns = [column[0] for column in cur.description]
+        columns = [desc[0] for desc in cur.description]
         results = [dict(zip(columns, row)) for row in cur.fetchall()]
-        
-        # Ensure 'skills' is an empty list if it's None for frontend that expects an array
-        for row in results:
-             if row.get('skills') is None:
-                  row['skills'] = []
-                  
         return results
-
-    except Exception as e:
-        print(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-        
     finally:
         cur.close()
         release_db_connection(conn)

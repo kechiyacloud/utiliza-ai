@@ -34,8 +34,9 @@ def get_all_availability(
         """
         params = []
         if department:
-            query += " AND em.department = %s"
-            params.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            query += " AND em.department = ANY(%s)"
+            params.append(dept_list)
         if project:
             query += " AND p.project_name = %s"
             params.append(project)

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataRefresh } from '../../context';
-import { 
-    Search, Filter, Pencil, Eye, Trash2, AlertTriangle, 
-    Loader2, PieChart, ArrowLeft, Download, FileText, 
-    Table as TableIcon, FileSpreadsheet, ChevronDown, 
+import {
+    Search, Filter, Pencil, Eye, Trash2, AlertTriangle,
+    Loader2, PieChart, ArrowLeft, Download, FileText,
+    Table as TableIcon, FileSpreadsheet, ChevronDown,
     LayoutGrid, List, Users, Calendar, ExternalLink,
     MoreVertical, Info
 } from 'lucide-react';
@@ -19,9 +19,9 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
     return (
         <div className={`${size} rounded-full border border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
             {avatar_url ? (
-                <img 
-                    src={avatar_url} 
-                    alt={name} 
+                <img
+                    src={avatar_url}
+                    alt={name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
                         e.target.onerror = null;
@@ -37,9 +37,8 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
 };
 
 const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
-    const safeResources = Array.isArray(resources) ? resources : [];
-    if (safeResources.length === 0) return null;
-    
+    if (!resources || resources.length === 0) return null;
+
     const displayMembers = safeResources.slice(0, 3);
     const remainingCount = Math.max((totalCount || safeResources.length) - displayMembers.length, 0);
 
@@ -48,10 +47,10 @@ const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
             {displayMembers.map((user, i) => {
                 const avatar = user.avatar_url || user.photo_url || user.profile_image;
                 return (
-                    <AvatarCircle 
-                        key={user.id || user.employee_id || i} 
-                        name={user.name || user.employee_name || 'Unknown'} 
-                        avatar_url={avatar} 
+                    <AvatarCircle
+                        key={user.id || user.employee_id || i}
+                        name={user.name || user.employee_name || 'Unknown'}
+                        avatar_url={avatar}
                         size={size}
                     />
                 );
@@ -125,7 +124,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
                     <span className="text-sm font-normal text-slate-500">Status</span>
-                    <span 
+                    <span
                         className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider whitespace-nowrap"
                         style={getStatusBadgeStyle(progress.pct)}
                     >
@@ -139,16 +138,16 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-slate-600">{progress.pct}%</span>
-                            <AvatarStack 
-                                resources={project.team_members || project.resources || project.allocations || []} 
-                                totalCount={project.resource_count || (project.team_members || project.resources || []).length || 0} 
-                                size="w-5 h-5" 
+                            <AvatarStack
+                                resources={project.team_members || project.resources || project.allocations || []}
+                                totalCount={project.resource_count || (project.team_members || project.resources || []).length || 0}
+                                size="w-5 h-5"
                             />
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div 
+                            <div
                                 className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(calculateProjectProgress(project).pct)}`}
                                 style={{ width: `${calculateProjectProgress(project).pct}%` }}
                             />
@@ -183,7 +182,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                     </span></span>
                 </div>
 
-                <button 
+                <button
                     onClick={() => onView(project)}
                     className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600"
                 >
@@ -252,7 +251,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
         const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
         const matchesStatus = statusMatches && subStatusMatches;
-        
+
         const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
         const projectStart = new Date(project.startDate || project.start_date);
@@ -284,8 +283,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
         }
 
-        return matchesSearchTerm && matchesName && matchesResource && matchesStatus && 
-               matchesResourceType && matchesDate && matchesCardFilter;
+        return matchesSearchTerm && matchesName && matchesResource && matchesStatus &&
+            matchesResourceType && matchesDate && matchesCardFilter;
     }).sort((a, b) => {
         if (sortBy === 'newest') {
             const dateA = new Date(a.startDate || a.start_date || 0);
@@ -456,135 +455,132 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         <div className="w-full space-y-6">
             <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 w-full relative min-h-[600px]">
 
-            {/* Single Line Header Layout */}
-            <div className="flex flex-wrap md:flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4">
-                {/* Left Side: Navigation & Grid Toggle */}
-                <div className="flex items-center gap-5 shrink-0">
-                    <button 
-                        onClick={() => setActiveView('table')}
-                        className={`text-sm font-medium tracking-tight transition-colors ${
-                            activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                    >
-                        {tableTitle} ({filteredProjects.length})
-                    </button>
-
-                    <div className="w-[1px] h-6 bg-slate-200" />
-
-                    <button 
-                        onClick={() => setActiveView('chart')}
-                        className={`text-sm font-medium tracking-tight transition-colors ${
-                            activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                    >
-                        Project Status Bar
-                    </button>
-
-                    <div className="w-[1px] h-6 bg-slate-200" />
-
-                    <button 
-                        onClick={() => setActiveView('grid')}
-                        className={`text-sm font-medium tracking-tight transition-colors ${
-                            activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                    >
-                        Grid
-                    </button>
-                </div>
-
-                {/* Right Side: Search, Export, Filter, Sort */}
-                <div className="flex items-center gap-3 shrink-0">
-                     <div className="relative group">
-                        <button 
-                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
-                        >
-                            <Download size={14} />
-                            Export
-                            <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isExportMenuOpen && (
-                            <>
-                                <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
-                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                    <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
-                                        <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
-                                    </button>
-                                    <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
-                                        <TableIcon size={16} className="text-blue-500" /> CSV (.csv)
-                                    </button>
-                                    <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-3 transition-colors border-t border-slate-50">
-                                        <FileText size={16} className="text-rose-500" /> PDF Document
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="relative w-64 md:w-56 lg:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Search projects..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all text-gray-700 placeholder:text-slate-400"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    
-                    <button
-                        onClick={() => setIsFilterPanelOpen(true)}
-                        className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
-                    >
-                        <Filter size={18} />
-                        {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
-                    </button>
-
-                    <div className="relative group">
-                        <button 
-                            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
-                        >
-                            Sort
-                            <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isSortMenuOpen && (
-                            <>
-                                <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
-                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                    {[
-                                        { id: 'newest', label: 'Newest First' },
-                                        { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
-                                        { id: 'billable', label: 'Billable' },
-                                        { id: 'non-billable', label: 'Non-Billable' },
-                                        { id: 'internal', label: 'Internal' },
-                                        { id: 'finishing-soon', label: 'Finishing Soon' },
-                                        { id: 'finishing-last', label: 'Finishing Last' },
-                                    ].map((opt) => (
-                                        <button 
-                                            key={opt.id}
-                                            onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }} 
-                                            className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-                                        >
-                                            {opt.label}
-                                            {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
-                                        </button>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    {isFilterActive && (
+                {/* Single Line Header Layout */}
+                <div className="flex flex-wrap md:flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4">
+                    {/* Left Side: Navigation & Grid Toggle */}
+                    <div className="flex items-center gap-5 shrink-0">
                         <button
-                            onClick={handleClearFilters}
-                            className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
+                            onClick={() => setActiveView('table')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                                }`}
                         >
-                            Reset
+                            {tableTitle} ({filteredProjects.length})
                         </button>
-                    )}
+
+                        <div className="w-[1px] h-6 bg-slate-200" />
+
+                        <button
+                            onClick={() => setActiveView('chart')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            Project Status Bar
+                        </button>
+
+                        <div className="w-[1px] h-6 bg-slate-200" />
+
+                        <button
+                            onClick={() => setActiveView('grid')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            Grid
+                        </button>
+                    </div>
+
+                    {/* Right Side: Search, Export, Filter, Sort */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        <div className="relative group">
+                            <button
+                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                            >
+                                <Download size={14} />
+                                Export
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isExportMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
+                                            <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
+                                        </button>
+                                        <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+                                            <TableIcon size={16} className="text-blue-500" /> CSV (.csv)
+                                        </button>
+                                        <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-3 transition-colors border-t border-slate-50">
+                                            <FileText size={16} className="text-rose-500" /> PDF Document
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="relative w-64 md:w-56 lg:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search projects..."
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all text-gray-700 placeholder:text-slate-400"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        <button
+                            onClick={() => setIsFilterPanelOpen(true)}
+                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                        >
+                            <Filter size={18} />
+                            {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
+                        </button>
+
+                        <div className="relative group">
+                            <button
+                                onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                                className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                            >
+                                Sort
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isSortMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
+                                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        {[
+                                            { id: 'newest', label: 'Newest First' },
+                                            { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
+                                            { id: 'billable', label: 'Billable' },
+                                            { id: 'non-billable', label: 'Non-Billable' },
+                                            { id: 'internal', label: 'Internal' },
+                                            { id: 'finishing-soon', label: 'Finishing Soon' },
+                                            { id: 'finishing-last', label: 'Finishing Last' },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.id}
+                                                onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }}
+                                                className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                            >
+                                                {opt.label}
+                                                {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {isFilterActive && (
+                            <button
+                                onClick={handleClearFilters}
+                                className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
 
                 {activeView === 'table' && (
                     <div className="overflow-x-auto rounded-2xl border border-slate-50">
@@ -623,7 +619,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                             </div>
                                         </td>
                                         <td className="py-5 text-center">
-                                            <span 
+                                            <span
                                                 className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
                                                 style={getStatusBadgeStyle(calculateProjectProgress(project).pct)}
                                             >
@@ -631,7 +627,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                             </span>
                                         </td>
                                         <td className="py-5 text-center">
-                                            <span 
+                                            <span
                                                 className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-slate-100 bg-slate-50 text-slate-600 font-sans"
                                             >
                                                 {project.type || 'Unknown'}
@@ -708,7 +704,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 {activeView === 'grid' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {filteredProjects.map((project) => (
-                            <ProjectCard 
+                            <ProjectCard
                                 key={project.id}
                                 project={project}
                                 onEdit={handleEditClick}

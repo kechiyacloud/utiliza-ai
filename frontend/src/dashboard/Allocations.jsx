@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useDataRefresh } from '../context';
 import { ArrowLeft, Upload } from 'lucide-react';
 import ImportAllocationModal from './allocation/ImportAllocationModal';
 import AllocationMetrics from './allocation/AllocationMetrics';
@@ -24,7 +23,9 @@ function Allocations() {
 
   // Filter State
   const [filters, setFilters] = useState({
-    department: location.state?.departmentFilter || 'All Departments',
+    department: location.state?.departmentFilter 
+        ? (location.state.departmentFilter.includes(',') ? location.state.departmentFilter.split(',') : [location.state.departmentFilter])
+        : [],
     location: 'All Locations',
     resourceType: 'All Resources'
   });
@@ -34,7 +35,9 @@ function Allocations() {
   const [possibleProjects, setPossibleProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const { refreshKey } = useDataRefresh();
+
+  const contextLabel = filters.department && filters.department.length > 0 ? 'Team' : 'Organization';
+
 
   // Fetch Logic
   useEffect(() => {
@@ -54,7 +57,7 @@ function Allocations() {
       }
     };
     loadData();
-  }, [filters, refreshKey]); // Re-fetch when filters or refreshKey change
+  }, [filters]); // Re-fetch when filters change
 
   // Handle URL Hash Scrolling
   useEffect(() => {
@@ -106,8 +109,8 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Forecast Bench</h1>
-            <p className="text-sm text-gray-500">Employees rolling off projects in the next 30 days.</p>
+            <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Forecast Bench</h1>
+            <p className="text-sm text-gray-500">See which team members will be available soon.</p>
           </div>
         </div>
         <div id="forecast-bench" className="flex flex-col lg:flex-row gap-6 w-full pb-8">
@@ -145,8 +148,8 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Organization Utilization</h1>
-            <p className="text-sm text-gray-500">Deep dive into organization-wide availability and active projects.</p>
+            <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Utilization</h1>
+            <p className="text-sm text-gray-500">Check how your team's time is being spent.</p>
           </div>
         </div>
 
@@ -179,18 +182,16 @@ function Allocations() {
       {/* Page Header + Filters on same row */}
       <div className="flex justify-between items-start flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          {location.state?.showBack && (
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-              title="Go Back"
-            >
-              <ArrowLeft size={20} className="text-gray-600" />
-            </button>
-          )}
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+            title="Go Back"
+          >
+            <ArrowLeft size={20} className="text-gray-600" />
+          </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Resource Allocation</h1>
-            <p className="text-gray-500 text-sm">Monitor organization-wide utilization and availability.</p>
+            <p className="text-gray-500 text-sm">See who is busy working and who is free for new projects.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

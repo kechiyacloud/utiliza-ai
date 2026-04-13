@@ -1219,7 +1219,7 @@ COPY public.employee_master (si_number, employee_id, employee_name, phone_number
 11	CD-MAA01-00005	Mohanraj Balan	9123456927	mohanrajb@clouddestinations.com	Chennai	WFO	2017-08-18	Senior Engineer	Cloud Solutions Engineering	FTE	9	8.5	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
 13	CD-CJB01-00190	Naresh Pandian Chinna	9123456930	nareshp@clouddestinations.com	Remote	WFO	2020-09-13	Senior Engineer	Cloud Solutions Engineering	FTE	5	5.5	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
 15	CD-MAA01-00361	Naveen Srinivasan	9123456934	naveens@clouddestinations.com	Remote	WFO	2017-09-08	Devops Engineer	Cloud Solutions Engineering	FTE	12	8.5	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
-1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architecht	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
+1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architect	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
 3	CD-MAA01-00136	Pavithra Ranganathan	9123456904	pavithrar@clouddestinations.com	Coimbatore	WFO	2019-10-26	Senior Engineer	Cloud Solutions Engineering	FTE	7	6.4	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
 18	CD-MAA01-00079	Preethi Ramesh	9123456940	preethir@clouddestinations.com	Remote	WFO	2020-09-11	Engineer	Cloud Solutions Engineering	FTE	6	5.5	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
 12	CD-MAA01-00204	Priyanka Mohan	9123456929	priyankam@clouddestinations.com	Coimbatore	WFO	2019-08-24	Engineer	Cloud Solutions Engineering	FTE	8	6.5	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N	2026-03-25 15:49:39.912335	2026-03-25 15:49:39.912335
@@ -1897,7 +1897,7 @@ AL00164	CD-MAA01-00033	CP016	Cloud Solutions Engineering	25	2025-12-31	2026-12-3
 AL00165	CD-MAA01-00033	CP015	Cloud Solutions Engineering	25	2025-12-31	2026-04-16	Billable	2026-03-25 15:49:39.987348	2026-03-25 15:49:39.987348
 AL00166	CD-MAA01-00033	CP010	Cloud Solutions Engineering	25	2025-12-31	2026-07-30	Billable	2026-03-25 15:49:39.987348	2026-03-25 15:49:39.987348
 0e7a77d0-101f-462a-b318-3bd87925aa0b	CD-MAA01-00458	CP011	Cloud Solutions Engineering	100	2025-12-31	2027-03-29	billable	2026-03-25 15:49:39.987348	2026-03-25 15:49:39.987348
-AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architecht	25	2025-12-31	2026-07-30	Billable	2026-03-25 15:49:39.987348	2026-03-25 15:49:39.987348
+AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architect	25	2025-12-31	2026-07-30	Billable	2026-03-25 15:49:39.987348	2026-03-25 15:49:39.987348
 \.
 
 
@@ -2054,7 +2054,7 @@ CI1234	CD-MAA01-00368
 --
 
 COPY public.stg_employee_master (si_number, employee_id, employee_name, phone_number, email_id, location, mode_of_work, date_of_joining, role_designation, department, employee_type, total_experience, experience_in_cd, shift, time_zone, date_of_resign, photo_url) FROM stdin;
-1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architecht	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
+1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architect	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 2	CD-MAA01-00090	Mohan Muruganandham	9123456903	mohanm@clouddestinations.com	Chennai	WFO	2020-12-17	Senior Engineer	Cloud Solutions Engineering	FTE	6	5.2	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 3	CD-MAA01-00136	Pavithra Ranganathan	9123456904	pavithrar@clouddestinations.com	Coimbatore	WFO	2019-10-26	Senior Engineer	Cloud Solutions Engineering	FTE	7	6.4	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 4	CD-MAA01-00217	Muthu Mohamed Inzamam Bari Mahaboob Ali	9123456905	inzamamb@clouddestinations.com	Remote	WFO	2023-10-18	Senior Engineer	Cloud Solutions Engineering	FTE	5	2.4	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
@@ -2086,7 +2086,7 @@ COPY public.stg_employee_master (si_number, employee_id, employee_name, phone_nu
 30	CD-CJB01-00269	Sriram Rajasekaran	9566464772	\N	Chennai	WFO	2021-04-27	Senior Engineer	Cloud Solutions Engineering	FTE	4	3	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 31	CD-MAA01-00375	Thamizh	9566464772	\N	Chennai	WFO	2021-04-28	Senior SRE Engineer	SRE	FTE	3	2	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 32	CD-CJB01-00060	Vasanth Poovaraghavan	9566464772	\N	Chennai	WFO	2021-04-29	Site Reliability Engineer	SRE	FTE	3	2	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
-1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architecht	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
+1	CD-MAA01-00033	Naveen Vasanthakumar	9123456902	naveenv@clouddestinations.com	Coimbatore	WFO	2021-02-03	Cloud Architect	Cloud Solutions Engineering	FTE	6	5.1	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 2	CD-MAA01-00090	Mohan Muruganandham	9123456903	mohanm@clouddestinations.com	Chennai	WFO	2020-12-17	Senior Engineer	Cloud Solutions Engineering	FTE	6	5.2	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 3	CD-MAA01-00136	Pavithra Ranganathan	9123456904	pavithrar@clouddestinations.com	Coimbatore	WFO	2019-10-26	Senior Engineer	Cloud Solutions Engineering	FTE	7	6.4	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
 4	CD-MAA01-00217	Muthu Mohamed Inzamam Bari Mahaboob Ali	9123456905	inzamamb@clouddestinations.com	Remote	WFO	2023-10-18	Senior Engineer	Cloud Solutions Engineering	FTE	5	2.4	General (10:00 AM - 07:00 PM)	(GMT+05:30)	\N	\N
@@ -3082,7 +3082,7 @@ AL00164	CD-MAA01-00033	CP016	Cloud Solutions Engineering	25	2025-12-31	2026-12-3
 AL00165	CD-MAA01-00033	CP015	Cloud Solutions Engineering	25	2025-12-31	2026-04-16	Billable	10	10	10	10	\N	\N
 AL00166	CD-MAA01-00033	CP010	Cloud Solutions Engineering	25	2025-12-31	2026-07-30	Billable	10	10	10	10	\N	\N
 0e7a77d0-101f-462a-b318-3bd87925aa0b	CD-MAA01-00458	CP011	Cloud Solutions Engineering	100	2025-12-31	2027-03-29	billable	0	0	0	0	\N	\N
-AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architecht	25	2025-12-31	2026-07-30	Billable	0	0	0	0	\N	\N
+AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architect	25	2025-12-31	2026-07-30	Billable	0	0	0	0	\N	\N
 AL00137	CD-MAA01-00005	CP002	Cloud Solutions Engineering	100	2025-12-31	2026-12-30	Billable	40	40	40	40	40.00	[40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
 AL00138	CD-RMT-00068	CP003	Cloud Solutions Engineering	100	2025-12-31	2026-12-30	Billable	40	40	40	40	\N	\N
 AL00139	CD-MAA01-00079	CP014	Cloud Solutions Engineering	100	2025-12-31	2026-05-30	Billable	40	40	40	40	\N	\N
@@ -3113,7 +3113,7 @@ AL00164	CD-MAA01-00033	CP016	Cloud Solutions Engineering	25	2025-12-31	2026-12-3
 AL00165	CD-MAA01-00033	CP015	Cloud Solutions Engineering	25	2025-12-31	2026-04-16	Billable	10	10	10	10	\N	\N
 AL00166	CD-MAA01-00033	CP010	Cloud Solutions Engineering	25	2025-12-31	2026-07-30	Billable	10	10	10	10	\N	\N
 0e7a77d0-101f-462a-b318-3bd87925aa0b	CD-MAA01-00458	CP011	Cloud Solutions Engineering	100	2025-12-31	2027-03-29	billable	0	0	0	0	\N	\N
-AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architecht	25	2025-12-31	2026-07-30	Billable	0	0	0	0	\N	\N
+AL-CP001-001	CD-MAA01-00033	CP001	Cloud Architect	25	2025-12-31	2026-07-30	Billable	0	0	0	0	\N	\N
 \.
 
 

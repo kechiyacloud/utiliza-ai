@@ -2,9 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-.projects-poppins-container, .projects-poppins-container *,
-.add-project, .add-project * {
-  font-family: 'Poppins', sans-serif !important;
+@layer base {
+  html, body {
+    font-family: 'Poppins', sans-serif;
+  }
+}
+
+.font-technical {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
 }
 
 .input-field{

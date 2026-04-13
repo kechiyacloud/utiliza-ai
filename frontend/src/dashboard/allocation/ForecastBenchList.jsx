@@ -13,12 +13,7 @@ const ForecastBenchList = ({ employees, onEmployeeClick }) => {
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full h-[500px] flex flex-col">
-            <div className="flex justify-between items-center mb-6 shrink-0">
-                <div>
-                    <h3 className="text-lg font-bold text-gray-800">Forecast Bench</h3>
-                    <p className="text-xs text-gray-500 font-medium">Employees rolling off in the next 60 days</p>
-                </div>
-            </div>
+
 
             <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
                 {employees && employees.length > 0 ? (

@@ -563,7 +563,7 @@ const EmployeeDetails = () => {
                             className="flex justify-between items-center cursor-pointer mb-4 group"
                             onClick={() => setShowDetailedSkills(!showDetailedSkills)}
                         >
-                            <h2 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Master Skills & Concentration</h2>
+                            <h2 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Skills</h2>
                             <div className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 transition-colors">
                                 <ChevronRight size={16} className={`transition-transform duration-200 ${showDetailedSkills ? 'rotate-90' : ''}`} />
                             </div>
