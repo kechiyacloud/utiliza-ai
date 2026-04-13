@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchProjectsData } from '../api/projectsApi';
 import axios from '../api/axios';
+import { useDataRefresh } from '../context';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
 
 function Projects() {
+  const { refreshKey } = useDataRefresh();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,7 +45,7 @@ function Projects() {
 
   useEffect(() => {
     loadData(selectedDepartment);
-  }, [selectedDepartment, loadData]);
+  }, [selectedDepartment, loadData, refreshKey]);
 
   if (loading && !data) {
     return (

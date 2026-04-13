@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useDataRefresh } from '../../context';
 import { 
     Search, Filter, Pencil, Eye, Trash2, AlertTriangle, 
     Loader2, PieChart, ArrowLeft, Download, FileText, 
@@ -189,6 +190,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
 };
 
 const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
+    const { triggerRefresh } = useDataRefresh();
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -331,6 +333,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         setIsDeleting(true);
         try {
             await axios.delete(`/projects/${projectToDelete.project_id || projectToDelete.id}`);
+            triggerRefresh();
             if (onRefresh) onRefresh();
             setProjectToDelete(null);
         } catch (error) {

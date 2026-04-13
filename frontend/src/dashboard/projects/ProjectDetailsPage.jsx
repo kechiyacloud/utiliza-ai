@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useDataRefresh } from '../../context';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
@@ -1816,9 +1817,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                             <div className="flex items-center gap-1 justify-center">
                                                 <input
                                                     type="number"
-                                                    min="10"
+                                                    min="0"
                                                     max="100"
-                                                    step="0.01"
+                                                    step="any"
                                                     placeholder="10"
                                                     value={row.allocation_pct === '' ? '' : (row.allocation_pct ?? getAllocationPct(row))}
                                                     onChange={(e) => handleRowChange(ridx, 'allocation_pct', e.target.value)}
@@ -2516,6 +2517,7 @@ const ProjectDetailsPage = () => {
     const { id } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
+    const { refreshKey } = useDataRefresh();
     const [project, setProject] = useState(() => location.state?.project || null);
     const [loading, setLoading] = useState(true);
     const [resources, setResources] = useState([]);
@@ -2606,7 +2608,7 @@ const ProjectDetailsPage = () => {
 
     useEffect(() => {
         if (id) loadProjectData();
-    }, [id]);
+    }, [id, refreshKey]);
 
     // Utilization counts and filters were removed per user request to replace them with View Tabs
 

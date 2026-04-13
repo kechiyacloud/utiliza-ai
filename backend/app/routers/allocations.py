@@ -65,7 +65,7 @@ def allocation_metrics(
         non_billable_query = """
             SELECT COUNT(DISTINCT pa.employee_id)
             FROM projects_allocation pa
-            JOIN employee_master em pa.employee_id = em.employee_id
+            JOIN employee_master em ON pa.employee_id = em.employee_id
             WHERE LOWER(pa.project_tags) = 'non-billable'
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
         """

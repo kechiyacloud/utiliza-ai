@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useDataRefresh } from '../../context'
 import {
     Phone,
     Mail,
@@ -94,6 +95,7 @@ const EmployeeDetails = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { id } = useParams();
+    const { triggerRefresh } = useDataRefresh();
     // State
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -317,6 +319,7 @@ const EmployeeDetails = () => {
                     setIsDeleting(true);
                     try {
                         await deleteEmployee(id);
+                        triggerRefresh();
                         navigate('/info/employee');
                     } catch (err) {
                         console.error('Delete failed', err);

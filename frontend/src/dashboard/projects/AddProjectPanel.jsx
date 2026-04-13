@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useDataRefresh } from '../../context';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
 import axios from '../../api/axios';
 import {
@@ -12,7 +13,7 @@ import {
     updatePartnerClient,
     deletePartnerClient,
 } from '../../api/entitiesApi';
-import { DEPARTMENTS, PROJECT_STATUS_OPTIONS } from '../../data/constants';
+import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 /* ──────────────────────────────────────────────────────────
    HELPERS — for Last 4 Weeks visualization
@@ -345,6 +346,7 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
    MAIN COMPONENT — AddProjectPanel
    ══════════════════════════════════════════════════════════ */
 const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
+    const { triggerRefresh } = useDataRefresh();
     const DIRECT_CLIENT_TYPE = 'Direct Client';
     const PARTNER_CLIENT_TYPE = 'Partner Client';
     const CLOUD_DESTINATION_PARTNER = 'Cloud Destination';
@@ -361,6 +363,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
         department: '',
         billable: 'Billable',
         status: 'Not Started',
+        subStatus: '',
         startDate: '',
         endDate: '',
         teamMembers: []
@@ -375,6 +378,21 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [entityError, setEntityError] = useState('');
+
+    // --- Skills State ---
+    const [skillInput, setSkillInput] = useState('');
+    const [skills, setSkills] = useState([]);
+
+    const addSkill = () => {
+        const trimmed = skillInput.trim();
+        if (!trimmed || skills.some(s => s.toLowerCase() === trimmed.toLowerCase())) return;
+        setSkills(prev => [...prev, trimmed]);
+        setSkillInput('');
+    };
+
+    const removeSkill = (index) => {
+        setSkills(prev => prev.filter((_, i) => i !== index));
+    };
 
     // --- Modal State ---
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
@@ -581,10 +599,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
     const handleAddTeamMember = () => {
         setFormData(prev => {
-            const newMember = { 
-                employee_id: '', name: '', role: '', company: 'Cloud Destinations', company_type: 'Internal', location: 'Remote', 
-                allocation_start_date: prev.startDate, allocation_end_date: prev.endDate, allocation_pct: 100, 
-                w1: 0, w2: 0, w3: 0, w4: 0 
+            const newMember = {
+                employee_id: '', name: '', role: '', billable_shadow: 'Billable', location: 'Remote',
+                allocation_start_date: prev.startDate, allocation_end_date: prev.endDate, allocation_pct: 100,
+                w1: 0, w2: 0, w3: 0, w4: 0
             };
             const computedMember = recalculateMemberWeeks(newMember, prev.startDate, prev.endDate);
             return {
@@ -595,20 +613,24 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
     };
 
     const handleEmployeeSelect = (index, emp) => {
-        const newTeam = [...formData.teamMembers];
-        newTeam[index] = {
-            ...newTeam[index],
-            employee_id: emp.employee_id,
-            name: emp.employee_name,
-            role: newTeam[index].role || emp.role_designation || '',
-        };
-        setFormData({ ...formData, teamMembers: newTeam });
+        setFormData(prev => {
+            const newTeam = [...prev.teamMembers];
+            newTeam[index] = {
+                ...newTeam[index],
+                employee_id: emp.employee_id,
+                name: emp.employee_name,
+                role: newTeam[index].role || emp.role_designation || '',
+            };
+            return { ...prev, teamMembers: newTeam };
+        });
     };
 
     const handleRoleSelect = (index, role) => {
-        const newTeam = [...formData.teamMembers];
-        newTeam[index].role = role;
-        setFormData({ ...formData, teamMembers: newTeam });
+        setFormData(prev => {
+            const newTeam = [...prev.teamMembers];
+            newTeam[index] = { ...newTeam[index], role };
+            return { ...prev, teamMembers: newTeam };
+        });
     };
 
     const handleRemoveTeamMember = (index) => {
@@ -620,15 +642,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
 
     const handleTeamMemberChange = (index, field, value) => {
         const newTeam = [...formData.teamMembers];
-        
-        if (field === 'company_type') {
-            newTeam[index][field] = value;
-            if (value === 'Internal') {
-                newTeam[index]['company'] = 'Cloud Destinations';
-            } else {
-                newTeam[index]['company'] = '';
-            }
-        } else if (field === 'allocation_pct') {
+
+        if (field === 'allocation_pct') {
             let pct = parseFloat(value);
             if (isNaN(pct)) pct = '';
             newTeam[index].allocation_pct = pct;
@@ -698,12 +713,15 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
             billable: formData.billable,
             start_date: formData.startDate,
             end_date: formData.endDate || null,
+            sub_status: formData.status === 'In Progress' ? (formData.subStatus || null) : null,
+            skill_names: skills,
             team_members: formData.teamMembers
         };
 
         try {
             const response = await axios.post('/projects', payload);
             setIsSubmitting(false);
+            triggerRefresh();
             if (onAdd) onAdd(response?.data || payload);
             onClose();
         } catch (err) {
@@ -884,6 +902,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                     </select>
                                 </div>
 
+                                {formData.status === 'In Progress' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">SOW Status</label>
+                                        <select name="subStatus" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                            value={formData.subStatus} onChange={handleChange}>
+                                            <option value="">— Select —</option>
+                                            {PROJECT_SUB_STATUS_OPTIONS.map(o => (
+                                                <option key={o.value} value={o.value}>{o.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Billable</label>
                                     <select name="billable"
@@ -911,6 +942,37 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                         value={formData.endDate} onChange={handleChange} />
                                 </div>
                             </div>
+                        </div>
+
+                        <hr className="border-gray-100" />
+
+                        {/* --- SKILLS SECTION --- */}
+                        <div className="flex flex-col gap-4 mt-4 mb-2">
+                            <h3 className="text-sm font-bold text-gray-700">Required Skills</h3>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={skillInput}
+                                    onChange={e => setSkillInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
+                                    placeholder="e.g. React, Python, AWS..."
+                                    className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all"
+                                />
+                                <button type="button" onClick={addSkill}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
+                                    Add
+                                </button>
+                            </div>
+                            {skills.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {skills.map((s, i) => (
+                                        <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-medium">
+                                            {s}
+                                            <button type="button" onClick={() => removeSkill(i)} className="text-blue-400 hover:text-blue-700 leading-none">×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <hr className="border-gray-100" />
@@ -948,8 +1010,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100">S.No</th>
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100">Name</th>
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100">Role</th>
-                                                <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100 min-w-[90px]">Comp. Type</th>
-                                                <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100 min-w-[120px]">Company</th>
+                                                <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100 min-w-[120px]">Resource Type</th>
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[90px]">Location</th>
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100 min-w-[120px]">Alloc. Start</th>
                                                 <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider border-r border-gray-100 min-w-[120px]">Alloc. End</th>
@@ -998,14 +1059,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                             size="sm"
                                                         />
                                                     </td>
-                                                    <td className="px-2 py-2 min-w-[100px]">
-                                                        <select value={member.company_type} onChange={(e) => handleTeamMemberChange(idx, 'company_type', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer font-normal text-slate-700">
-                                                            <option value="Internal">Internal</option>
-                                                            <option value="External">External</option>
+                                                    <td className="px-2 py-2 min-w-[120px]">
+                                                        <select value={member.billable_shadow || 'Billable'} onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer font-normal text-slate-700">
+                                                            <option value="Billable">Billable</option>
+                                                            <option value="Non-Billable">Non-Billable</option>
+                                                            <option value="Shadow">Shadow</option>
                                                         </select>
-                                                    </td>
-                                                    <td className="px-2 py-2 min-w-[130px]">
-                                                        <input type="text" value={member.company} onChange={(e) => handleTeamMemberChange(idx, 'company', e.target.value)} disabled={member.company_type === 'Internal'} placeholder="Company Name" className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white disabled:bg-slate-50 disabled:text-slate-400" />
                                                     </td>
                                                     <td className="px-2 py-2 min-w-[90px]">
                                                         <select value={member.location} onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)} className="w-full px-2 py-1.5 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer font-normal text-slate-700">
@@ -1022,7 +1081,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd }) => {
                                                     </td>
                                                     <td className="px-2 py-2 min-w-[100px]">
                                                         <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1.5">
-                                                            <input type="number" min="2.5" max="100" value={member.allocation_pct} onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)} className="flex-1 min-w-0 text-xs font-bold text-center outline-none bg-transparent" />
+                                                            <input type="number" min="0" max="100" step="any" value={member.allocation_pct} onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)} className="flex-1 min-w-0 text-xs font-bold text-center outline-none bg-transparent" />
                                                             <span className="text-slate-400 text-xs font-bold">%</span>
                                                         </div>
                                                     </td>
