@@ -106,6 +106,9 @@ const EmployeeDetails = () => {
     const [isDeleting, setIsDeleting] = useState(false);
     const SKILLS_PREVIEW_COUNT = 7;
     const returnTarget = location.state?.from;
+    const backLabel = returnTarget?.pathname?.includes('availability')
+        ? 'Back to Availability'
+        : 'Go Back';
 
     const handleGoBack = () => {
         if (returnTarget?.pathname) {
@@ -218,7 +221,7 @@ const EmployeeDetails = () => {
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Go Back
+                    {backLabel}
                 </button>
             </div>
         )
@@ -340,7 +343,7 @@ const EmployeeDetails = () => {
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Go Back
+                    {backLabel}
                 </button>
             </div>
 

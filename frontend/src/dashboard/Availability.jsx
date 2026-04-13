@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, RotateCcw, Search, X } from 'lucide-react';
 import { getAvailabilityData, getAvailabilityFilters } from '../api/availabilityApi';
 import * as XLSX from 'xlsx';
@@ -53,6 +54,8 @@ const overlapsRange = (startDate, endDate, rangeStart, rangeEnd) => {
 };
 
 const Availability = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
     const [data, setData] = useState([]);
     const [filters, setFilters] = useState({ departments: [], projects: [], locations: [] });
     const [selectedDept, setSelectedDept] = useState('');
@@ -921,7 +924,22 @@ const Availability = () => {
                                             <tr key={`${employee.employee_id}-${allocationIndex}`} className={`h-12 ${rowBackground}`}>
                                                 {allocationIndex === 0 && (
                                                     <td className={`sticky left-0 z-20 border-b border-r border-slate-100 px-4 py-2 ${rowBackground}`} rowSpan={allocations.length} style={{ width: '176px', minWidth: '176px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
-                                                        <div className="font-bold text-[13px] leading-tight text-slate-800">{employee.employee_name}</div>
+                                                        <button
+                                            type="button"
+                                            onClick={() => navigate(`/info/employee/${employee.employee_id}`, {
+                                                state: {
+                                                    from: {
+                                                        pathname: location.pathname,
+                                                        search: location.search,
+                                                        hash: location.hash,
+                                                        state: location.state || null
+                                                    }
+                                                }
+                                            })}
+                                            className="font-bold text-[13px] leading-tight text-blue-600 hover:text-blue-800 hover:underline text-left transition-colors cursor-pointer"
+                                        >
+                                            {employee.employee_name}
+                                        </button>
                                                         <div className="text-[10px] text-slate-400">ID: {employee.employee_id}</div>
                                                         <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{employee.department || 'No Department'}</div>
                                                     </td>
