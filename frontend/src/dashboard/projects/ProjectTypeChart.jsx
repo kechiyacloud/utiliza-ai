@@ -89,7 +89,7 @@ const ProjectTypeChart = ({ projects }) => {
                                     verticalAlign="bottom"
                                     height={36}
                                     iconType="circle"
-                                    formatter={(value, entry) => <span className="text-gray-700 font-semibold text-sm ml-1">{value}</span>}
+                                    formatter={(value) => <span className="text-gray-700 font-semibold text-sm ml-1">{value}</span>}
                                 />
                             </PieChart>
                         </ResponsiveContainer>

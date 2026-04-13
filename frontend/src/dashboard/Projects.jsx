@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { fetchProjectsData } from '../api/projectsApi';
-import { getAvailabilityFilters } from '../api/availabilityApi';
+import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
 
@@ -12,15 +12,11 @@ function Projects() {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [departments, setDepartments] = useState([]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (dept = selectedDepartment) => {
     setLoading(true);
     setError(null);
     try {
-      const filters = {};
-      if (selectedDepartment) {
-        filters.department = selectedDepartment;
-      }
-      const res = await fetchProjectsData(filters);
+      const res = await fetchProjectsData(dept);
       setData(res.data);
     } catch (err) {
       console.error("Failed to load projects data", err);
@@ -31,32 +27,40 @@ function Projects() {
   }, [selectedDepartment]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    const fetchFilters = async () => {
+    const fetchDepartments = async () => {
       try {
-        const filterData = await getAvailabilityFilters();
-        if (filterData && filterData.departments) {
-          setDepartments(filterData.departments);
+        const res = await axios.get('/employees/filter-options');
+        if (res.data && res.data.departments) {
+          const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
+          setDepartments(filtered);
         }
       } catch (err) {
         console.error("Failed to fetch departments", err);
       }
     };
-    fetchFilters();
+    fetchDepartments();
   }, []);
 
+  useEffect(() => {
+    loadData(selectedDepartment);
+  }, [selectedDepartment, loadData]);
+
   if (loading && !data) {
-    return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-[60vh]">Loading Projects...</div>;
+    return (
+      <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-64">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+          <span>Loading Projects...</span>
+        </div>
+      </div>
+    );
   }
 
-  if (error && !data) {
+  if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center gap-4 h-[60vh]">
-        <div className="text-red-500 text-sm font-semibold bg-red-50 px-6 py-4 rounded-xl border border-red-100">{error}</div>
-        <button onClick={loadData} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 font-bold transition-colors">
+      <div className="p-8 flex flex-col items-center justify-center gap-4">
+        <div className="text-red-500 text-sm font-normal bg-red-50 px-6 py-4 rounded-xl border border-red-100">{error}</div>
+        <button onClick={() => loadData()} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 font-normal transition-colors shadow-lg shadow-blue-100">
           Retry
         </button>
       </div>
@@ -64,25 +68,33 @@ function Projects() {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto font-technical">
-      {/* Overview Section */}
-      <ProjectsOverview
-        stats={data?.stats}
-        activeFilter={activeCardFilter}
-        onFilterChange={setActiveCardFilter}
-        onProjectAdded={loadData}
-        selectedDepartment={selectedDepartment}
-        onDepartmentChange={setSelectedDepartment}
-        departments={departments}
-      />
+    <>
+      <style>{`
+        .projects-poppins-container,
+        .projects-poppins-container * {
+            font-family: 'Poppins', sans-serif !important;
+        }
+      `}</style>
+      <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
+        {/* Overview Section */}
+        <ProjectsOverview
+          stats={data?.stats}
+          activeFilter={activeCardFilter}
+          onFilterChange={setActiveCardFilter}
+          onProjectAdded={() => loadData()}
+          selectedDepartment={selectedDepartment}
+          onDepartmentChange={setSelectedDepartment}
+          departments={departments}
+        />
 
-      {/* Projects List Section */}
-      <ProjectList
-        projects={data?.projects || []}
-        activeCardFilter={activeCardFilter}
-        onRefresh={loadData}
-      />
-    </div>
+        {/* Projects List Section */}
+        <ProjectList
+          projects={data?.projects || []}
+          activeCardFilter={activeCardFilter}
+          onRefresh={() => loadData()}
+        />
+      </div>
+    </>
   );
 }
 

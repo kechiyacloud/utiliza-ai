@@ -212,7 +212,7 @@ const Availability = () => {
                     getAvailabilityFilters(),
                     getAvailabilityData()
                 ]);
-                setFilters(filterData || { departments: [], projects: [], locations: [] });
+                setFilters(filterData);
                 setData(Array.isArray(availabilityData) ? availabilityData : []);
             } catch (error) {
                 console.error('Error loading availability page:', error);
@@ -574,8 +574,8 @@ const Availability = () => {
                             type="button"
                             onClick={() => setIsCalendarOpen((v) => !v)}
                             className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors ${isCalendarOpen
-                                    ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
-                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+                                ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
                                 }`}
                         >
                             <CalendarRange size={16} className="text-blue-500" />
@@ -633,8 +633,8 @@ const Availability = () => {
                                                     type="button"
                                                     onClick={() => { setStartMonth(s); setEndMonth(e); }}
                                                     className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${isActive
-                                                            ? 'bg-blue-500 text-white'
-                                                            : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600'
+                                                        ? 'bg-blue-500 text-white'
+                                                        : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600'
                                                         }`}
                                                 >
                                                     {label}
@@ -662,8 +662,8 @@ const Availability = () => {
                             onChange={(e) => handleDeptChange(e.target.value)}
                             disabled={filterLoading}
                             className={`appearance-none cursor-pointer rounded-full border py-2 pl-4 pr-8 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${selectedDept
-                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                                 }`}
                             style={{ maxWidth: '180px' }}
                         >
@@ -682,8 +682,8 @@ const Availability = () => {
                             onChange={(e) => handleLocationChange(e.target.value)}
                             disabled={filterLoading}
                             className={`appearance-none cursor-pointer rounded-full border py-2 pl-4 pr-8 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${selectedLocation
-                                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                                 }`}
                             style={{ maxWidth: '160px' }}
                         >
@@ -701,8 +701,8 @@ const Availability = () => {
                             type="button"
                             onClick={() => setIsProjectDropdownOpen((current) => !current)}
                             className={`inline-flex items-center gap-1.5 rounded-full border py-2 pl-4 pr-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] ${selectedProjects.length > 0
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                                 }`}
                         >
                             {selectedProjects.length > 0 ? `${selectedProjects.length} Project${selectedProjects.length > 1 ? 's' : ''}` : 'All Projects'}
@@ -758,8 +758,8 @@ const Availability = () => {
                     {/* Employee search autocomplete */}
                     <div className="relative" ref={searchRef}>
                         <div className={`inline-flex items-center gap-2 rounded-full border py-2 pl-3.5 pr-3 text-sm ${selectedEmployee
-                                ? 'border-violet-200 bg-violet-50'
-                                : 'border-slate-200 bg-slate-50'
+                            ? 'border-violet-200 bg-violet-50'
+                            : 'border-slate-200 bg-slate-50'
                             }`}>
                             <Search size={14} className={selectedEmployee ? 'text-violet-500' : 'text-slate-400'} />
                             <input

@@ -6,11 +6,10 @@ const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
     return (
         <div
             onClick={onClick}
-            className={`rounded-xl p-3.5 border transition-all duration-500 cursor-pointer flex flex-col justify-between h-24 shadow-sm relative group ${
-                active 
-                ? 'bg-blue-50/30 border-blue-500 ring-2 ring-blue-100 ring-offset-0' 
-                : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-md'
-            }`}
+            className={`rounded-xl p-3.5 border transition-all duration-500 cursor-pointer flex flex-col justify-between h-24 shadow-sm relative group ${active
+                    ? 'bg-blue-50/30 border-blue-500 ring-2 ring-blue-100 ring-offset-0'
+                    : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-md'
+                }`}
         >
             <div className="flex justify-between items-start flex-row-reverse w-full">
                 <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
@@ -33,14 +32,14 @@ const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
     );
 };
 
-const ProjectsOverview = ({ 
-    stats, 
-    activeFilter, 
-    onFilterChange, 
-    onProjectAdded, 
-    selectedDepartment = '', 
-    onDepartmentChange = () => {}, 
-    departments = [] 
+const ProjectsOverview = ({
+    stats,
+    activeFilter,
+    onFilterChange,
+    onProjectAdded,
+    selectedDepartment = '',
+    onDepartmentChange = () => { },
+    departments = []
 }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -80,9 +79,10 @@ const ProjectsOverview = ({
                             className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
                         >
                             <option value="">All Department</option>
-                            {(departments || []).map((dept) => (
-                                <option key={dept} value={dept}>{dept}</option>
-                            ))}
+                            {departments.map((dept) => {
+                                const deptName = typeof dept === 'object' ? (dept.label || dept.value || String(dept)) : dept;
+                                return <option key={deptName} value={deptName}>{deptName}</option>;
+                            })}
                         </select>
                         <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
                             <ChevronDown size={14} className="text-gray-400 group-hover:text-slate-600 transition-colors" />

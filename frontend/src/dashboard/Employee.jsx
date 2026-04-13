@@ -130,12 +130,12 @@ function Employee() {
   }, [])
 
   // Combined filters passed to EmployeeTable — dept chips override the filter drawer's dept selection
-  const combinedFilters = {
+  const combinedFilters = useMemo(() => ({
     ...filters,
     departments: selectedDepts.length > 0 ? selectedDepts : filters.departments,
     search: searchQuery,
     cardFilter: cardFilter
-  };
+  }), [filters, selectedDepts, searchQuery, cardFilter]);
 
   const baseGroup = useMemo(() => {
     return allEmployees.filter(emp => {

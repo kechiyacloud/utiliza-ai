@@ -12,15 +12,15 @@ import {
   BarChart, Bar, Legend
 } from 'recharts';
 
-import { 
-  fetchDashboardData, 
-  fetchTodos, 
-  addTodo, 
-  toggleTodo, 
-  clearTodo, 
-  updateTodo, 
+import {
+  fetchDashboardData,
+  fetchTodos,
+  addTodo,
+  toggleTodo,
+  clearTodo,
+  updateTodo,
   clearDashboardCache,
-  fetchDepartments 
+  fetchDepartments
 } from '../api/dashboardApi';
 import { getEmployeeList } from '../api/employeeApi';
 import { createProject } from '../api/projectsApi';
@@ -118,7 +118,7 @@ function Dashboard() {
         if (empListRes.status === 'fulfilled') {
           setAllEmployees(empListRes.value);
         }
-        
+
         if (todosRes.status === 'fulfilled') {
           setTodos(todosRes.value);
         }
@@ -264,13 +264,13 @@ function Dashboard() {
   // Map Backend Executive Metrics to UI Arrays
   const _metrics = data?.executiveMetrics || {};
 
-  const contextLabel = selectedDepartments.length === 0 ? 'Organization' : 'Team';
+  const contextLabel = Array.isArray(selectedDepartments) && selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
   const dynamicKpiData = [
-    { title: `${contextLabel} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
-    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${_metrics?.total_employees || 0} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
+    { title: `${String(contextLabel)} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
+    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${String(_metrics?.total_employees || 0)} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -284,14 +284,23 @@ function Dashboard() {
 
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
 
-  // Cleaned up datasets
-  const dynamicBenchIndividualSkills = _metrics.bench_individual_skills || [];
-  
+  // Filtered dataset for dashboard employees
   const filteredDashboardEmployees = useMemo(() => (
     selectedDepartments.length === 0
       ? allEmployees
       : allEmployees.filter((employee) => selectedDepartments.includes(employee.department))
   ), [allEmployees, selectedDepartments]);
+
+  // Derive bench employees with their skills from the filtered employee list
+  const dynamicBenchIndividualSkills = useMemo(() => {
+    return filteredDashboardEmployees
+      .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
+      .slice(0, 10)
+      .map(emp => ({
+        name: emp.employee_name,
+        skills: emp.skills.join(', ')
+      }));
+  }, [filteredDashboardEmployees]);
 
   if (loading) {
     return (
@@ -320,11 +329,11 @@ function Dashboard() {
         <div className="flex justify-between items-end mb-8">
           <div className="flex items-center gap-4">
             <button
-                onClick={() => navigate(-1)}
-                className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
-                title="Go Back"
+              onClick={() => navigate(-1)}
+              className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+              title="Go Back"
             >
-                <ArrowLeft size={24} className="text-slate-600" />
+              <ArrowLeft size={24} className="text-slate-600" />
             </button>
             <div>
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
@@ -615,37 +624,37 @@ function Dashboard() {
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
                 <table className="w-full">
-                    <thead className="sticky top-0 z-10">
-                        <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
-                            <th className="text-left py-2 px-5 bg-white">Employee</th>
-                            <th className="text-left py-2 px-5 bg-white">Skill Set</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
-                            <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
-                                <td className="py-2.5 px-5">
-                                    <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
-                                </td>
-                                <td className="py-2.5 px-5">
-                                    <div className="flex flex-wrap gap-1">
-                                        {row.skills.split(', ').map((skill, sIdx) => (
-                                            <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
-                                                {skill}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </td>
-                            </tr>
-                        )) : (
-                          <tr>
-                            <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
-                                <ShieldAlert opacity={0.5} size={24} />
-                                No resources currently on bench with skills listed.
-                            </td>
-                          </tr>
-                        )}
-                    </tbody>
+                  <thead className="sticky top-0 z-10">
+                    <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                      <th className="text-left py-2 px-5 bg-white">Employee</th>
+                      <th className="text-left py-2 px-5 bg-white">Skill Set</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
+                      <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
+                        <td className="py-2.5 px-5">
+                          <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
+                        </td>
+                        <td className="py-2.5 px-5">
+                          <div className="flex flex-wrap gap-1">
+                            {row.skills.split(', ').map((skill, sIdx) => (
+                              <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                          <ShieldAlert opacity={0.5} size={24} />
+                          No resources currently on bench with skills listed.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -699,12 +708,12 @@ function Dashboard() {
       />
 
       {isNominationModalOpen && (
-        <NominationModal 
-          onClose={() => setIsNominationModalOpen(false)} 
+        <NominationModal
+          onClose={() => setIsNominationModalOpen(false)}
           onSuccess={() => {
             // Simplified refresh: reload the page to see new data
             window.location.reload();
-          }} 
+          }}
         />
       )}
     </div>

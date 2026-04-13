@@ -37,10 +37,12 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
 };
 
 const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
-    if (!resources || resources.length === 0) return null;
+    // Defensively ensure resources is an array and filter out nulls
+    const validResources = Array.isArray(resources) ? resources.filter(Boolean) : [];
+    if (validResources.length === 0) return null;
 
-    const displayMembers = safeResources.slice(0, 3);
-    const remainingCount = Math.max((totalCount || safeResources.length) - displayMembers.length, 0);
+    const displayMembers = validResources.slice(0, 3);
+    const remainingCount = Math.max((totalCount || validResources.length) - displayMembers.length, 0);
 
     return (
         <div className="flex -space-x-1.5 overflow-hidden items-center group/stack cursor-pointer">
@@ -87,9 +89,9 @@ const getProgressColorClasses = (pct) => {
 };
 
 const getStatusBadgeStyle = (pct) => {
-    if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' }; // Green
-    if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' }; // Amber
-    return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
+    if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' };
+    if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' };
+    return { backgroundColor: '#FEF2F2', color: '#991B1B' };
 };
 
 
@@ -202,9 +204,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('grid'); // Only 'grid' remains
+    const [activeView, setActiveView] = useState('grid');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'billable', 'non-billable', 'internal', 'name'
+    const [sortBy, setSortBy] = useState('newest');
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
     const location = useLocation();
@@ -364,9 +366,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     }, {});
 
     const formatStatus = (project) => {
-        // Use raw DB status for display; fall back to normalized if not present
         const base = project.display_status || project.raw_status || project.status || '';
-        // Append sub-status label when status is any variant of "In Progress"
         if ((project.status || '').toLowerCase() === 'in progress') {
             const sub = project.sub_status || project.subStatus;
             const label = sub ? SUB_STATUS_LABELS[sub] || sub : '';
@@ -419,17 +419,15 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             return `${year}-${month}-${day}`;
         };
 
-        const exportData = filteredProjects.map(p => {
-            return {
-                'Project Name': p.name,
-                'Type': p.type,
-                'Status': formatStatus(p),
-                'Billable': p.billable,
-                'Resources': p.resource_count || p.resources || 0,
-                'Start Date': formatDate(p.start_date || p.startDate),
-                'End Date': formatDate(p.end_date || p.endDate)
-            };
-        });
+        const exportData = filteredProjects.map(p => ({
+            'Project Name': p.name,
+            'Type': p.type,
+            'Status': formatStatus(p),
+            'Billable': p.billable,
+            'Resources': p.resource_count || p.resources || 0,
+            'Start Date': formatDate(p.start_date || p.startDate),
+            'End Date': formatDate(p.end_date || p.endDate)
+        }));
 
         const fileName = `Projects_${tableTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`;
 
@@ -455,14 +453,13 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         <div className="w-full space-y-6">
             <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 w-full relative min-h-[600px]">
 
-                {/* Single Line Header Layout */}
+                {/* Header */}
                 <div className="flex flex-wrap md:flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4">
-                    {/* Left Side: Navigation & Grid Toggle */}
+                    {/* Left Side: View Toggles */}
                     <div className="flex items-center gap-5 shrink-0">
                         <button
                             onClick={() => setActiveView('table')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                                }`}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tableTitle} ({filteredProjects.length})
                         </button>
@@ -471,8 +468,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
                         <button
                             onClick={() => setActiveView('chart')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                                }`}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Project Status Bar
                         </button>
@@ -481,8 +477,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
                         <button
                             onClick={() => setActiveView('grid')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-                                }`}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Grid
                         </button>
@@ -490,6 +485,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
                     {/* Right Side: Search, Export, Filter, Sort */}
                     <div className="flex items-center gap-3 shrink-0">
+                        {/* Export */}
                         <div className="relative group">
                             <button
                                 onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
@@ -517,6 +513,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                             )}
                         </div>
 
+                        {/* Search */}
                         <div className="relative w-64 md:w-56 lg:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
                             <input
@@ -528,6 +525,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                             />
                         </div>
 
+                        {/* Filter */}
                         <button
                             onClick={() => setIsFilterPanelOpen(true)}
                             className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
@@ -536,6 +534,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                             {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
                         </button>
 
+                        {/* Sort */}
                         <div className="relative group">
                             <button
                                 onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
@@ -571,6 +570,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                             )}
                         </div>
 
+                        {/* Reset */}
                         {isFilterActive && (
                             <button
                                 onClick={handleClearFilters}
@@ -582,6 +582,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
                 </div>
 
+                {/* Table View */}
                 {activeView === 'table' && (
                     <div className="overflow-x-auto rounded-2xl border border-slate-50">
                         <table className="w-full font-sans">
@@ -701,6 +702,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
                 )}
 
+                {/* Grid View */}
                 {activeView === 'grid' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {filteredProjects.map((project) => (
@@ -725,6 +727,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     </div>
                 )}
 
+                {/* Chart View */}
                 {activeView === 'chart' && (
                     <div className="w-full h-[600px] mt-4 p-6 bg-slate-50/50 rounded-3xl border border-slate-100">
                         <ProjectStatusChart projects={filteredProjects} />

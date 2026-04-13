@@ -275,11 +275,11 @@ const DashboardTables = ({
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="py-2.5 text-center">
-                                        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
-                                            <span title={row.fromProject || 'Bench'}>{row.fromProject || 'Bench'}</span>
+                                    <td className="py-2.5 text-center px-4">
+                                        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-1.5 text-[9px] font-black text-slate-700">
+                                            <span className="whitespace-nowrap" title={row.fromProject || 'Bench'}>{row.fromProject || 'Bench'}</span>
                                             <ArrowRightLeft size={11} className="text-blue-500 flex-shrink-0" />
-                                            <span title={row.toProject || 'Unknown'}>{row.toProject || 'Unknown'}</span>
+                                            <span className="whitespace-nowrap" title={row.toProject || 'Unknown'}>{row.toProject || 'Unknown'}</span>
                                         </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
@@ -307,9 +307,13 @@ const DashboardTables = ({
                                         <span className="font-bold text-slate-800 text-[11px] uppercase tracking-tight leading-none">{row.name}</span>
                                     </td>
                                     <td className="py-2.5 text-center px-4">
-                                        <span className="text-blue-600 text-[10px] font-black uppercase tracking-tight">
-                                            {row.days_in_year} Days in 2026
-                                        </span>
+                                        <div className="flex flex-col gap-1 items-center">
+                                            <div className="text-[9px] font-black uppercase tracking-tight">
+                                                <span className={row.days_in_year > 30 ? 'text-rose-600' : 'text-blue-600'}>
+                                                    {row.days_in_year} Days from last project
+                                                </span>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
                                         <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase shadow-sm border ${row.days_in_year > 30 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
@@ -335,12 +339,9 @@ const DashboardTables = ({
                                 <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.employee || row.name, showBack: true } })}>
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-[8px] font-black text-amber-600 border border-amber-100">
-                                                {getInitials(row.employee || row.name)}
-                                            </div>
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-slate-800 text-xs tracking-tight">{row.employee || row.name || 'Unknown'}</span>
-                                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{row.certificate_name || 'Generic Certification'}</span>
+                                                <span className="text-[10px] text-blue-600 font-black uppercase tracking-tighter mt-0.5">{row.certificate_name}</span>
                                             </div>
                                         </div>
                                     </td>
@@ -378,7 +379,7 @@ const DashboardTables = ({
 
                         <div className="flex-1 flex flex-col gap-3">
                             {recentTrends.length > 0 ? recentTrends.map((trend, idx) => (
-                                <div 
+                                <div
                                     key={idx}
                                     onClick={() => setSelectedTrendIndex(idx)}
                                     className={`p-3 rounded-2xl border transition-all cursor-pointer ${selectedTrendIndex === idx ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}

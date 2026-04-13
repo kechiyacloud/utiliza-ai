@@ -578,8 +578,22 @@ def get_employee_by_id(employee_id: str):
     cur = conn.cursor()
 
     try:
+        has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
+        has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
+        has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
+
+        pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
+        notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
+        notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
+
+        notice_status_expr = (
+            "WHEN p.employee_status ILIKE '%%notice%%' AND p.notice_end_date IS NOT NULL AND p.notice_end_date < CURRENT_DATE THEN 'Resigned'\n                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+            if has_notice_end_date
+            else "WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+        )
+        
         # 1️⃣ Fetch Main Employee Details
-        employee_query = """
+        employee_query = f"""
         WITH AllocationPriority AS (
             SELECT 
                 employee_id,
@@ -614,8 +628,7 @@ def get_employee_by_id(employee_id: str):
             m.shift,
             m.mode_of_work,
             CASE
-                WHEN p.employee_status ILIKE '%%notice%%' AND p.notice_end_date IS NOT NULL AND p.notice_end_date < CURRENT_DATE THEN 'Resigned'
-                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                {notice_status_expr}
                 WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
                 WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
@@ -632,9 +645,9 @@ def get_employee_by_id(employee_id: str):
             END as billable,
             COALESCE(da.total_alloc, 0) as employee_allocations,
             m.date_of_resign,
-            p.pip_start_date,
-            p.notice_start_date,
-            p.notice_end_date,
+            {pip_start_expr} as pip_start_date,
+            {notice_start_expr} as notice_start_date,
+            {notice_end_expr} as notice_end_date,
             p.reporting_manager_id,
             mgr.employee_name as reporting_manager_name
         FROM employee_master m

@@ -200,13 +200,13 @@ def get_dashboard_all(department: Optional[str] = None):
 
         try:
             cur.execute("""
-                SELECT DISTINCT e.employee_name, c.certificate_name
+                SELECT e.employee_name, c.certificate_name, ec.expiry_date
                 FROM employee_certificates ec
                 JOIN employee_master e ON ec.employee_id = e.employee_id
                 JOIN certificates c ON ec.certificate_id = c.certificate_id
-                WHERE 1=1 """ + dept_e_filter + """ ORDER BY e.employee_name
+                WHERE 1=1 """ + dept_e_filter + """ ORDER BY ec.expiry_date ASC
             """, dept_params)
-            certifications = [{"employee": r[0], "certification_name": r[1], "expiry_date": "Completed"} for r in cur.fetchall()]
+            certifications = [{"employee": r[0], "certificate_name": r[1], "expiry_date": r[2]} for r in cur.fetchall()]
         except Exception as e:
             conn.rollback(); print("Error in Certifications:", e); certifications = []
 
