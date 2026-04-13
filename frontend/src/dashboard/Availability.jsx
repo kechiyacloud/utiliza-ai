@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, RotateCcw, X } from 'lucide-react';
+import { CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, RotateCcw, Search, X } from 'lucide-react';
 import { getAvailabilityData, getAvailabilityFilters } from '../api/availabilityApi';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -64,9 +64,15 @@ const Availability = () => {
     const [filterLoading, setFilterLoading] = useState(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedEmployee, setSelectedEmployee] = useState('');
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const timelineRef = useRef(null);
     const exportMenuRef = useRef(null);
     const projectDropdownRef = useRef(null);
+    const calendarRef = useRef(null);
+    const searchRef = useRef(null);
     const isDragging = useRef(false);
     const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
@@ -137,8 +143,26 @@ const Availability = () => {
             .filter((employee) => employee.allocations.length > 0);
     }, [endMonth, selectedProjects, startMonth, data]);
 
+    // Employee search: suggestions shown while typing (starts-with, case-insensitive)
+    const searchSuggestions = useMemo(() => {
+        if (!searchQuery.trim()) return [];
+        const q = searchQuery.trim().toLowerCase();
+        return displayData
+            .filter((emp) => emp.employee_name?.toLowerCase().startsWith(q))
+            .map((emp) => ({ id: emp.employee_id, name: emp.employee_name }))
+            .slice(0, 8); // cap at 8 suggestions
+    }, [searchQuery, displayData]);
+
+    // Apply selected employee filter on top of all other filters
+    const filteredDisplayData = useMemo(() => {
+        if (!selectedEmployee) return displayData;
+        return displayData.filter((emp) =>
+            emp.employee_name?.toLowerCase() === selectedEmployee.toLowerCase()
+        );
+    }, [displayData, selectedEmployee]);
+
     const exportRows = useMemo(() => {
-        return displayData.flatMap((employee) =>
+        return filteredDisplayData.flatMap((employee) =>
             employee.allocations.map((allocation) => ({
                 employee_id: employee.employee_id,
                 employee_name: employee.employee_name,
@@ -151,20 +175,20 @@ const Availability = () => {
                 project_tags: allocation.project_tags || 'N/A'
             }))
         );
-    }, [displayData]);
+    }, [filteredDisplayData]);
 
-    // Derived stats for the preview badge (from displayData — no separate preview state needed)
+    // Derived stats for the preview badge (from filteredDisplayData — no separate preview state needed)
     const previewStats = useMemo(() => {
-        const total = displayData.length;
-        const allocated = displayData.filter((emp) =>
+        const total = filteredDisplayData.length;
+        const allocated = filteredDisplayData.filter((emp) =>
             emp.allocations.some((a) => (a.allocation_percentage || 0) > 0)
         ).length;
-        const bench = displayData.filter((emp) =>
+        const bench = filteredDisplayData.filter((emp) =>
             emp.allocations.every((a) => (a.allocation_percentage || 0) === 0)
         ).length;
-        const departments = new Set(displayData.map((emp) => emp.department).filter(Boolean)).size;
+        const departments = new Set(filteredDisplayData.map((emp) => emp.department).filter(Boolean)).size;
         return { total, allocated, bench, departments };
-    }, [displayData]);
+    }, [filteredDisplayData]);
 
     const loadAvailabilityData = async (department = selectedDept, location = selectedLocation) => {
         try {
@@ -245,6 +269,38 @@ const Availability = () => {
         };
     }, [isProjectDropdownOpen]);
 
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setIsSearchOpen(false);
+            }
+        };
+
+        if (isSearchOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isSearchOpen]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+                setIsCalendarOpen(false);
+            }
+        };
+
+        if (isCalendarOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isCalendarOpen]);
+
     const handleDeptChange = async (value) => {
         setSelectedDept(value);
         setFilterLoading(true);
@@ -271,6 +327,8 @@ const Availability = () => {
         setSelectedDept('');
         setSelectedLocation('');
         setSelectedProjects([]);
+        setSelectedEmployee('');
+        setSearchQuery('');
         const defaultStart = toMonthInputValue(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - PAST_MONTHS, 1));
         const defaultEnd = toMonthInputValue(new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() + FUTURE_MONTHS, 1));
         setStartMonth(defaultStart);
@@ -408,7 +466,7 @@ const Availability = () => {
         );
     }
 
-    const hasActiveFilters = selectedDept || selectedLocation || selectedProjects.length > 0;
+    const hasActiveFilters = selectedDept || selectedLocation || selectedProjects.length > 0 || selectedEmployee;
 
     return (
         <div className="flex h-full flex-col overflow-hidden bg-[#f8fafc] p-3 text-mainTheme">
@@ -419,22 +477,22 @@ const Availability = () => {
 
                     <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                         {/* Preview stats badge */}
-                        <div className="inline-flex items-center divide-x divide-blue-100 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-1 py-1">
-                            <div className="flex flex-col items-center px-3 py-0.5">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total</span>
-                                <span className="text-sm font-black text-blue-600">{previewStats.total}</span>
+                        <div className="inline-flex items-center divide-x divide-blue-200 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-100 via-indigo-50 to-violet-100 px-1 py-1 shadow-sm">
+                            <div className="flex flex-col items-center px-5 py-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Total</span>
+                                <span className="text-xl font-black text-blue-600">{previewStats.total}</span>
                             </div>
-                            <div className="flex flex-col items-center px-3 py-0.5">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Alloc</span>
-                                <span className="text-sm font-black text-emerald-600">{previewStats.allocated}</span>
+                            <div className="flex flex-col items-center px-5 py-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Alloc</span>
+                                <span className="text-xl font-black text-emerald-500">{previewStats.allocated}</span>
                             </div>
-                            <div className="flex flex-col items-center px-3 py-0.5">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Bench</span>
-                                <span className="text-sm font-black text-amber-600">{previewStats.bench}</span>
+                            <div className="flex flex-col items-center px-5 py-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bench</span>
+                                <span className="text-xl font-black text-amber-500">{previewStats.bench}</span>
                             </div>
-                            <div className="flex flex-col items-center px-3 py-0.5">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Dept</span>
-                                <span className="text-sm font-black text-violet-600">{previewStats.departments}</span>
+                            <div className="flex flex-col items-center px-5 py-1.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Dept</span>
+                                <span className="text-xl font-black text-violet-600">{previewStats.departments}</span>
                             </div>
                         </div>
 
@@ -506,11 +564,94 @@ const Availability = () => {
                 </div>
 
                 {/* Info bar: date range + inline filters + employee count */}
-                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                    {/* Date range pill */}
-                    <div className="inline-flex shrink-0 items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">
-                        <CalendarRange size={14} className="text-blue-500" />
-                        {formatDate(parseMonthInput(startMonth))} to {formatDate(new Date((parseMonthInput(endMonth) || new Date()).getFullYear(), (parseMonthInput(endMonth) || new Date()).getMonth() + 1, 0))}
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    {/* Date range pill — clickable calendar picker */}
+                    <div className="relative shrink-0" ref={calendarRef}>
+                        <button
+                            type="button"
+                            onClick={() => setIsCalendarOpen((v) => !v)}
+                            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors ${
+                                isCalendarOpen
+                                    ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+                            }`}
+                        >
+                            <CalendarRange size={16} className="text-blue-500" />
+                            {formatDate(parseMonthInput(startMonth))} — {formatDate(new Date((parseMonthInput(endMonth) || new Date()).getFullYear(), (parseMonthInput(endMonth) || new Date()).getMonth() + 1, 0))}
+                            <ChevronDown size={11} className={`text-blue-400 transition-transform ${isCalendarOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isCalendarOpen && (
+                            <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-2xl border border-blue-100 bg-white p-4 shadow-xl">
+                                <p className="mb-3 text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Date Range</p>
+
+                                <div className="flex flex-col gap-3">
+                                    {/* Start month */}
+                                    <div>
+                                        <label className="mb-1 block text-[11px] font-bold text-slate-500">From</label>
+                                        <input
+                                            type="month"
+                                            value={startMonth}
+                                            max={endMonth}
+                                            onChange={(e) => setStartMonth(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </div>
+
+                                    {/* End month */}
+                                    <div>
+                                        <label className="mb-1 block text-[11px] font-bold text-slate-500">To</label>
+                                        <input
+                                            type="month"
+                                            value={endMonth}
+                                            min={startMonth}
+                                            onChange={(e) => setEndMonth(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Quick presets */}
+                                <div className="mt-4 border-t border-slate-100 pt-3">
+                                    <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Quick Select</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[
+                                            { label: 'This Month', months: 0 },
+                                            { label: '3 Months', months: 3 },
+                                            { label: '6 Months', months: 6 },
+                                            { label: '12 Months', months: 12 },
+                                        ].map(({ label, months }) => {
+                                            const now = new Date();
+                                            const s = toMonthInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+                                            const e = toMonthInputValue(new Date(now.getFullYear(), now.getMonth() + months, 1));
+                                            const isActive = startMonth === s && endMonth === e;
+                                            return (
+                                                <button
+                                                    key={label}
+                                                    type="button"
+                                                    onClick={() => { setStartMonth(s); setEndMonth(e); }}
+                                                    className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${
+                                                        isActive
+                                                            ? 'bg-blue-500 text-white'
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600'
+                                                    }`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCalendarOpen(false)}
+                                    className="mt-3 w-full rounded-xl bg-blue-500 py-2 text-sm font-bold text-white hover:bg-blue-600"
+                                >
+                                    Apply
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Department dropdown */}
@@ -519,19 +660,19 @@ const Availability = () => {
                             value={selectedDept}
                             onChange={(e) => handleDeptChange(e.target.value)}
                             disabled={filterLoading}
-                            className={`appearance-none cursor-pointer rounded-full border py-1.5 pl-3 pr-7 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${
+                            className={`appearance-none cursor-pointer rounded-full border py-2 pl-4 pr-8 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${
                                 selectedDept
                                     ? 'border-blue-200 bg-blue-50 text-blue-700'
                                     : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                             }`}
-                            style={{ maxWidth: '160px' }}
+                            style={{ maxWidth: '180px' }}
                         >
                             <option value="">All Departments</option>
                             {(filters.departments || []).map((dept) => (
                                 <option key={dept} value={dept}>{dept}</option>
                             ))}
                         </select>
-                        <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     </div>
 
                     {/* Location dropdown */}
@@ -540,19 +681,19 @@ const Availability = () => {
                             value={selectedLocation}
                             onChange={(e) => handleLocationChange(e.target.value)}
                             disabled={filterLoading}
-                            className={`appearance-none cursor-pointer rounded-full border py-1.5 pl-3 pr-7 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${
+                            className={`appearance-none cursor-pointer rounded-full border py-2 pl-4 pr-8 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] disabled:cursor-not-allowed disabled:opacity-60 ${
                                 selectedLocation
                                     ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
                                     : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                             }`}
-                            style={{ maxWidth: '140px' }}
+                            style={{ maxWidth: '160px' }}
                         >
                             <option value="">All Locations</option>
                             {(filters.locations || []).map((loc) => (
                                 <option key={loc} value={loc}>{loc}</option>
                             ))}
                         </select>
-                        <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     </div>
 
                     {/* Project multi-select dropdown */}
@@ -560,7 +701,7 @@ const Availability = () => {
                         <button
                             type="button"
                             onClick={() => setIsProjectDropdownOpen((current) => !current)}
-                            className={`inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] ${
+                            className={`inline-flex items-center gap-1.5 rounded-full border py-2 pl-4 pr-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3BA9FB] ${
                                 selectedProjects.length > 0
                                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                     : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -579,7 +720,7 @@ const Availability = () => {
                                 </span>
                             )}
                             {selectedProjects.length === 0 && (
-                                <ChevronDown size={11} className={`text-slate-400 transition-transform ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={13} className={`text-slate-400 transition-transform ${isProjectDropdownOpen ? 'rotate-180' : ''}`} />
                             )}
                         </button>
 
@@ -616,15 +757,82 @@ const Availability = () => {
                         )}
                     </div>
 
+                    {/* Employee search autocomplete */}
+                    <div className="relative" ref={searchRef}>
+                        <div className={`inline-flex items-center gap-2 rounded-full border py-2 pl-3.5 pr-3 text-sm ${
+                            selectedEmployee
+                                ? 'border-violet-200 bg-violet-50'
+                                : 'border-slate-200 bg-slate-50'
+                        }`}>
+                            <Search size={14} className={selectedEmployee ? 'text-violet-500' : 'text-slate-400'} />
+                            <input
+                                type="text"
+                                value={selectedEmployee ? selectedEmployee : searchQuery}
+                                placeholder="Search employee…"
+                                className="w-40 bg-transparent text-sm font-bold text-slate-700 placeholder:font-normal placeholder:text-slate-400 focus:outline-none"
+                                onFocus={() => {
+                                    if (selectedEmployee) {
+                                        setSelectedEmployee('');
+                                        setSearchQuery('');
+                                    }
+                                    setIsSearchOpen(true);
+                                }}
+                                onChange={(e) => {
+                                    setSearchQuery(e.target.value);
+                                    setSelectedEmployee('');
+                                    setIsSearchOpen(true);
+                                }}
+                            />
+                            {(selectedEmployee || searchQuery) && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedEmployee(''); setSearchQuery(''); setIsSearchOpen(false); }}
+                                    className="rounded-full p-0.5 hover:bg-slate-200"
+                                >
+                                    <X size={10} className="text-slate-400" />
+                                </button>
+                            )}
+                        </div>
+
+                        {isSearchOpen && searchSuggestions.length > 0 && (
+                            <div className="absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                                {searchSuggestions.map((emp) => (
+                                    <button
+                                        key={emp.id}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()} // prevent blur before click
+                                        onClick={() => {
+                                            setSelectedEmployee(emp.name);
+                                            setSearchQuery('');
+                                            setIsSearchOpen(false);
+                                        }}
+                                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs hover:bg-violet-50"
+                                    >
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-black text-violet-600">
+                                            {emp.name.charAt(0).toUpperCase()}
+                                        </span>
+                                        <span className="truncate font-semibold text-slate-700">{emp.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {isSearchOpen && searchQuery.trim() && searchSuggestions.length === 0 && (
+                            <div className="absolute left-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xl">
+                                <p className="text-xs text-slate-400">No employees match <span className="font-semibold text-slate-600">"{searchQuery}"</span></p>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Employee count */}
-                    <div className="ml-auto text-xs font-semibold text-slate-500">
+                    <div className="ml-auto text-sm font-semibold text-slate-500">
                         {filterLoading ? (
                             <span className="inline-flex items-center gap-1.5 text-blue-500">
-                                <span className="h-3 w-3 animate-spin rounded-full border-b border-t border-blue-500" />
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-b border-t border-blue-500" />
                                 Loading…
                             </span>
                         ) : (
-                            `${displayData.length} employees loaded`
+                            `${filteredDisplayData.length} employees loaded`
                         )}
                     </div>
                 </div>
@@ -696,7 +904,7 @@ const Availability = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {displayData.map((employee, employeeIndex) => {
+                        {filteredDisplayData.map((employee, employeeIndex) => {
                             const allocations = Array.isArray(employee.allocations) && employee.allocations.length > 0
                                 ? employee.allocations
                                 : [{ project_name: 'Unassigned', allocation_percentage: 0, project_tags: 'N/A', start_date: null, end_date: null }];
