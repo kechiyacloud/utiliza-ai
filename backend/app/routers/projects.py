@@ -824,7 +824,7 @@ def projects_overview(department: Optional[str] = None):
         cur.execute(f"""
             SELECT COUNT(DISTINCT p.project_id) FROM projects p
             {join_clause}
-            WHERE LOWER(p.project_type) = 'external'
+            WHERE LOWER(p.project_type) IN ('external', 'client')
             {where_clause}
         """, tuple(params))
         external = cur.fetchone()[0]
@@ -892,36 +892,32 @@ def projects_list(department: Optional[str] = None):
                 pr.partner_name,
                 p.billable,
                 p.client_id,
-                p.partner_id,
-                p.department_id,
-                d.department_name,
-                p.skills
+                p.partner_id
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
-            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
             {where_clause}
+            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
-        columns = [desc[0] for desc in cur.description]
-        results = [dict(zip(columns, row)) for row in cur.fetchall()]
+        results = cur.fetchall()
 
         return [
             {
                 "project_id": r[0],
                 "project_name": r[1],
                 "status": _normalize_project_status(r[2], strict=False) if r[2] else "Unknown",
-                "sub_status": _normalize_sub_status(r[3], strict=False),
-                "type": _normalize_project_type(r[4], strict=False) if r[4] else "Unknown",
-                "start_date": r[5],
-                "end_date": r[6],
-                "resource_count": r[7],
-                "team_members": r[8] if r[8] else [],
-                "client_name": r[9],
-                "partner_name": r[10],
-                "billable": r[11] if r[11] else "Unknown",
-                "client_id": r[12],
-                "partner_id": r[13],
+                "sub_status": None,
+                "type": _normalize_project_type(r[3], strict=False) if r[3] else "Unknown",
+                "start_date": r[4],
+                "end_date": r[5],
+                "resource_count": r[6],
+                "team_members": r[7] if r[7] else [],
+                "client_name": r[8],
+                "partner_name": r[9],
+                "billable": r[10] if r[10] else "Unknown",
+                "client_id": r[11],
+                "partner_id": r[12],
             }
             for r in results
         ]
@@ -944,11 +940,10 @@ def get_project_details(project_id: str):
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
-                p.client_id, p.partner_id, p.department_id, d.department_name, p.project_type, p.skills
+                p.client_id, p.partner_id, p.project_type
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
-            LEFT JOIN departments d ON p.department_id = d.department_id
             LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
             LEFT JOIN project_scopes ps ON p.project_id = ps.project_id
             WHERE p.project_id = %s
@@ -960,22 +955,25 @@ def get_project_details(project_id: str):
         return {
             "project_id": row[0],
             "project_name": row[1],
-            "project_status": _normalize_project_status(row[2], strict=False) if row[2] else None,
-            "sub_status": _normalize_sub_status(row[3], strict=False),
-            "billable": row[4],
-            "start_date": row[5],
-            "end_date": row[6],
-            "client_name": row[7],
-            "partner_name": row[8],
-            "budget": row[9] or "$0",
-            "billing_type": row[10] or "Not Set",
-            "contract_type": row[11] or "Not Set",
-            "revenue_model": row[12] or "Not Set",
-            "commercial_notes": row[13] or "No notes.",
-            "objective": row[14] or "Not defined.",
-            "deliverables": row[15] or "No deliverables listed.",
-            "milestones": row[16] or "No milestones listed.",
-            "timeline_notes": row[17] or "No timeline notes.",
+            "status": _normalize_project_status(row[2], strict=False) if row[2] else None,
+            "sub_status": None,
+            "billable": row[3],
+            "start_date": row[4],
+            "end_date": row[5],
+            "client_name": row[6],
+            "partner_name": row[7],
+            "budget": row[8] or "$0",
+            "billing_type": row[9] or "Not Set",
+            "contract_type": row[10] or "Not Set",
+            "revenue_model": row[11] or "Not Set",
+            "commercial_notes": row[12] or "No notes.",
+            "objective": row[13] or "Not defined.",
+            "deliverables": row[14] or "No deliverables listed.",
+            "milestones": row[15] or "No milestones listed.",
+            "timeline_notes": row[16] or "No timeline notes.",
+            "client_id": row[17],
+            "partner_id": row[18],
+            "type": row[19]
         }
     finally:
         cur.close()
