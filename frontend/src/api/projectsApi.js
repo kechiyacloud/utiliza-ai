@@ -43,6 +43,7 @@ export const fetchProjectsData = async (department = 'All') => {
                     statusText: "Active", // Default placeholder for secondary health text
                     statusColor: "text-green-500",
                     resources: p.resource_count || 0,
+                    resource_count: p.resource_count || 0,
                     client: clientName,
                     startDate: p.start_date || "",
                     endDate: p.end_date || "",
@@ -53,7 +54,8 @@ export const fetchProjectsData = async (department = 'All') => {
                     statusPillColor: pillColor,
                     billable: (p.billable || '').replace(/\s+/g, ''), // Normalize 'Non - Billable' to 'Non-Billable'
                     icon: p.project_name ? p.project_name.charAt(0).toUpperCase() : "P",
-                    resourceNames: p.resource_names || "None"
+                    resourceNames: p.resource_names || "None",
+                    team_members: p.team_members || []
                 };
             })
         };

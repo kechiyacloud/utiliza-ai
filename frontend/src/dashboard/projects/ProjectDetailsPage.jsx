@@ -222,14 +222,18 @@ function allocPctToHours(pct) {
 
 const clampPct = (val) => {
     const num = Number(val);
-    if (!Number.isFinite(num)) return 0;
-    return Math.max(0, Math.min(100, Math.round(num * 100) / 100));
+    if (!Number.isFinite(num)) return 10;
+    // Limit to max 2 decimal places and range 10-100
+    const rounded = Math.round(num * 100) / 100;
+    return Math.max(10, Math.min(100, rounded));
 };
 
 const clampHours = (val) => {
     const num = Number(val);
-    if (!Number.isFinite(num)) return 0;
-    return Math.max(0, Math.min(WEEK_DEFAULT_HOURS, Math.round(num * 100) / 100));
+    if (!Number.isFinite(num)) return 1;
+    // Limit to max 1 decimal place and range 1-40
+    const rounded = Math.round(num * 10) / 10;
+    return Math.max(1, Math.min(WEEK_DEFAULT_HOURS, rounded));
 };
 
 function parseDate(value) {
@@ -520,11 +524,11 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                                         <label className="text-[10px] font-bold text-slate-500">W{i+1} Hours</label>
                                         <input
                                                 type="number"
-                                                min="0" max="168"
+                                                min="1" max="168"
                                                 value={hours[wk]}
                                                 onChange={e => setHours({
                                                     ...hours,
-                                                    [wk]: e.target.value === '' ? WEEK_DEFAULT_HOURS : (Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : WEEK_DEFAULT_HOURS)
+                                                    [wk]: e.target.value === '' ? 1 : (Number.isFinite(Number(e.target.value)) ? Math.max(1, Number(e.target.value)) : 1)
                                                 })}
                                                 className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-center outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 shadow-sm transition-all"
                                             />
@@ -625,7 +629,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
 
                     const rawPct = norm['allocation_percentage'];
                     const pct = rawPct === '' || rawPct === undefined ? 100 : Number(rawPct);
-                    if (isNaN(pct) || pct < 0 || pct > 100) errors.push('allocation_percentage must be 0–100');
+                    if (isNaN(pct) || pct < 2.5 || pct > 100) errors.push('allocation_percentage must be 2.5–100 (min 1 hour)');
 
                     const nameFromCSV = String(norm['employee_name'] || '').trim();
                     const resolvedName = nameLookup[empId] || nameFromCSV || empId || `Row ${idx + 2}`;
@@ -635,7 +639,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                         employee_id: empId,
                         name: resolvedName,
                         role: String(norm['role_in_project'] || '').trim(),
-                        allocation_pct: isNaN(pct) ? 100 : Math.min(100, Math.max(0, pct)),
+                        allocation_pct: isNaN(pct) ? 100 : Math.min(100, Math.max(2.5, pct)),
                         allocation_start_date: String(norm['allocation_start_date'] || '').trim(),
                         allocation_end_date: String(norm['allocation_end_date'] || '').trim(),
                         _errors: errors,
@@ -890,8 +894,8 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
     const handleAdd = () => {
         if (!selectedEmps.length) return;
         selectedEmps.forEach(({ emp, role, allocationPct: pct }) => {
-            const safePct = Math.min(100, Math.max(0, Number(pct) || 0));
-            const hrs = Math.round((safePct * 40) / 100);
+            const safePct = Math.min(100, Math.max(2.5, Number(pct) || 2.5));
+            const hrs = Math.max(1, Math.round((safePct * 40) / 100));
             onAdd({ employee_id: emp.employee_id, name: emp.employee_name || emp.name || '', role: role || 'No role assigned', allocation_pct: safePct, w1: hrs, w2: hrs, w3: hrs, w4: hrs });
         });
         setConfirmed(true);
@@ -999,9 +1003,9 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Global Allocation %</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm flex-1">
-                                    <input type="number" min="0" max="100" value={globalPct}
-                                        onChange={e => setGlobalPct(e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                                        onBlur={e => { if (e.target.value === '') setGlobalPct(0); }}
+                                    <input type="number" min="2.5" max="100" value={globalPct}
+                                        onChange={e => setGlobalPct(e.target.value === '' ? '' : Math.min(100, Math.max(2.5, Number(e.target.value) || 2.5)))}
+                                        onBlur={e => { if (e.target.value === '' || Number(e.target.value) < 2.5) setGlobalPct(2.5); }}
                                         className="flex-1 min-w-0 text-sm font-bold text-center outline-none bg-transparent" />
                                     <span className="text-slate-400 text-sm font-bold">%</span>
                                 </div>
@@ -1048,9 +1052,9 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Allocation %</label>
                                             <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 flex-1">
-                                                    <input type="number" min="0" max="100" value={empPct}
-                                                        onChange={e => updateRow(emp.employee_id, 'allocationPct', e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                                                        onBlur={e => { if (e.target.value === '') updateRow(emp.employee_id, 'allocationPct', 0); }}
+                                                    <input type="number" min="2.5" max="100" value={empPct}
+                                                        onChange={e => updateRow(emp.employee_id, 'allocationPct', e.target.value === '' ? '' : Math.min(100, Math.max(2.5, Number(e.target.value) || 2.5)))}
+                                                        onBlur={e => { if (e.target.value === '' || Number(e.target.value) < 2.5) updateRow(emp.employee_id, 'allocationPct', 2.5); }}
                                                         className="flex-1 min-w-0 text-xs font-bold text-center outline-none bg-transparent" />
                                                     <span className="text-slate-400 text-xs font-bold">%</span>
                                                 </div>
@@ -1078,7 +1082,7 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
     );
 };
 
-const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
+const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
     const navigate = useNavigate();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -1101,12 +1105,28 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     }, [localRows]);
 
     const handleAddRow = () => {
-        setLocalRows([...localRows, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' })]);
+        setLocalRows([...localRows, normalizeAllocationRow({ 
+            name: '', 
+            role: '', 
+            w1: '', 
+            w2: '', 
+            w3: '', 
+            w4: '',
+            isNew: true // Mark as new for validation rules
+        })]);
     };
 
     const handleInsertRowAfter = (index) => {
         const newRows = [...localRows];
-        newRows.splice(index + 1, 0, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' }));
+        newRows.splice(index + 1, 0, normalizeAllocationRow({ 
+            name: '', 
+            role: '', 
+            w1: '', 
+            w2: '', 
+            w3: '', 
+            w4: '',
+            isNew: true // Mark as new for validation rules
+        }));
         setLocalRows(newRows);
     };
 
@@ -1144,8 +1164,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             const res = await axios.get(`/allocations/${empId}`);
             const allocations = Array.isArray(res.data?.allocations) ? res.data.allocations : [];
             const totalPercent = allocations.reduce((sum, a) => sum + Number(a.percentage || 0), 0);
-            const remainingPercent = Math.max(0, 100 - totalPercent);
-            const hours = Math.round((remainingPercent / 100) * WEEK_DEFAULT_HOURS);
+            const remainingPercent = Math.max(10, 100 - totalPercent);
+            const hours = Math.max(4, Math.round((remainingPercent / 100) * WEEK_DEFAULT_HOURS));
 
             const newRows = [...localRows];
             const currentRow = { ...(newRows[rowIndex] || {}) };
@@ -1176,31 +1196,122 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         if (!currentRow.weekly_hours) currentRow.weekly_hours = {};
 
         if (field === 'allocation_pct') {
-            if (value === '') {
-                currentRow.allocation_pct = '';
+            currentRow.allocation_pct = value;
+        } else if (field.startsWith('week_')) {
+            const yearWeek = field.replace('week_', '');
+            currentRow.weekly_hours[yearWeek] = value;
+        } else if (field === 'allocation_start_date' || field === 'allocation_end_date') {
+            setSaveError(''); // Clear previous errors
+            const newDate = new Date(value);
+            newDate.setHours(0, 0, 0, 0);
+
+            if (field === 'allocation_start_date') {
+                // Validation: Start Date < Project Start Date
+                if (projectStart) {
+                    const ps = new Date(projectStart);
+                    ps.setHours(0, 0, 0, 0);
+                    if (newDate < ps) {
+                        setSaveError(`Start date cannot be before project start date (${projectStart}).`);
+                    }
+                }
+
+                // Validation: For new resources, Start date in past
+                if (currentRow.isNew) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (newDate < today) {
+                        setSaveError("Start date for new resources cannot be in the past.");
+                    }
+                }
+                
+                // Ensure Start Date <= End Date
+                if (currentRow.allocation_end_date) {
+                    const ed = new Date(currentRow.allocation_end_date);
+                    if (newDate > ed) {
+                        setSaveError("Start date cannot be after end date.");
+                    }
+                }
             } else {
-                const cleaned = stripLeadingZeros(value);
-                const pct = clampPct(cleaned);
+                // Validation: End date < Start date
+                if (currentRow.allocation_start_date) {
+                    const sd = new Date(currentRow.allocation_start_date);
+                    if (newDate < sd) {
+                        setSaveError("End date cannot be before start date.");
+                    }
+                }
+                
+                // Validation: End Date > Project End Date
+                if (projectEnd) {
+                    const pe = new Date(projectEnd);
+                    pe.setHours(23, 59, 59, 999);
+                    if (newDate > pe) {
+                        setSaveError(`End date cannot be after project end date (${projectEnd}).`);
+                    }
+                }
+            }
+            currentRow[field] = value;
+        } else {
+            currentRow[field] = value;
+        }
+
+        newRows[index] = currentRow;
+        setLocalRows(newRows);
+    };
+
+    const handleRowBlur = (index, field, value) => {
+        const newRows = [...localRows];
+        const currentRow = { ...(newRows[index] || {}) };
+        if (!currentRow.weekly_hours) currentRow.weekly_hours = {};
+
+        if (field === 'allocation_pct') {
+            const num = Number(value);
+            if (value === '' || isNaN(num) || num < 10 || num > 100) {
+                setSaveError("Allocation must be between 10% and 100%");
+                currentRow.allocation_pct = value;
+            } else {
+                setSaveError(""); // Clear error if valid
+                const pct = clampPct(value);
                 currentRow.allocation_pct = pct;
                 const hrs = clampHours((pct / 100) * WEEK_DEFAULT_HOURS);
-
                 visibleWeeks.forEach(wk => {
                     if (!isWeekWithinAllocationRange(wk, currentRow)) return;
-                    if (wk.isPast) return; // past weeks stay read-only
+                    if (wk.isPast) return; 
                     currentRow.weekly_hours[wk.yearWeek] = hrs;
                 });
             }
         } else if (field.startsWith('week_')) {
             const yearWeek = field.replace('week_', '');
-            if (value === '') {
-                currentRow.weekly_hours[yearWeek] = '';
-            } else {
-                const cleaned = stripLeadingZeros(String(value));
-                const clamped = clampHours(cleaned);
+            const num = Number(value);
+            if (value === '' || isNaN(num) || num < 1) {
+                setSaveError("Minimum weekly allocation is 1 hour.");
+                const clamped = 1;
                 currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = clampPct((clamped / 40) * 100);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
+            } else if (num > 40) {
+                setSaveError("Maximum weekly allocation is 40 hours.");
+                const clamped = 40;
+                currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = 100;
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
+            } else {
+                const clamped = clampHours(value);
+                currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = clampPct((clamped / 40) * 100);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
             }
-        } else {
-            currentRow[field] = value;
         }
 
         newRows[index] = currentRow;
@@ -1391,6 +1502,19 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     const handleSave = async () => {
         setIsSaving(true);
         setSaveError('');
+
+        // Pre-save validation for allocation percentage
+        const hasInvalidAllocation = localRows.some(row => {
+            const pct = Number(row.allocation_pct);
+            return isNaN(pct) || pct < 10 || pct > 100;
+        });
+
+        if (hasInvalidAllocation) {
+            setSaveError("Please fix invalid allocation percentages (must be 10% - 100%) before saving.");
+            setIsSaving(false);
+            return;
+        }
+
         try {
             const payload = {
                 resources: localRows.map((row) => ({
@@ -1597,6 +1721,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             const isLastRow = rowIdx === displayRows.length - 1;
                             const rowTotal = getRowTotal(row);
                             const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+
+                            // Business Logic for edits
+                            const pStatus = (project?.status || project?.project_status || '').toUpperCase();
+                            const isProjectNotStarted = pStatus === 'NOT STARTED' || pStatus === 'PENDING' || pStatus === '';
+                            const isProjectEnded = pStatus === 'ENDED' || pStatus === 'COMPLETED';
+                            
+                            const canEditStartDate = isEditing && (isProjectNotStarted || row.isNew);
+                            const canEditEndDate = isEditing && (!isProjectEnded);
+
                             return (
                                 <React.Fragment key={ridx}>
                                 <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
@@ -1665,14 +1798,14 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                        {isEditing ? (
+                                        {canEditStartDate ? (
                                             <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
                                             row.allocation_start_date || '-'
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                        {isEditing ? (
+                                        {canEditEndDate ? (
                                             <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
                                             row.allocation_end_date || '-'
@@ -1683,15 +1816,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                             <div className="flex items-center gap-1 justify-center">
                                                 <input
                                                     type="number"
-                                                    min="0"
+                                                    min="10"
                                                     max="100"
                                                     step="0.01"
-                                                    placeholder="0"
+                                                    placeholder="10"
                                                     value={row.allocation_pct === '' ? '' : (row.allocation_pct ?? getAllocationPct(row))}
                                                     onChange={(e) => handleRowChange(ridx, 'allocation_pct', e.target.value)}
-                                                    onBlur={(e) => {
-                                                        if (e.target.value === '') handleRowChange(ridx, 'allocation_pct', 0);
-                                                    }}
+                                                    onBlur={(e) => handleRowBlur(ridx, 'allocation_pct', e.target.value)}
                                                     className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                 />
                                             </div>
@@ -1736,24 +1867,14 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     <div className="flex flex-col items-center gap-1">
                                                         <input
                                                             type="number"
-                                                            min="0"
-                                                            max={Math.min(40, remainingAllowed)}
+                                                            min="1"
+                                                            max="40"
                                                             step="0.1"
-                                                            value={rawVal === '' ? '' : Math.min(40, safeHours)}
+                                                            value={rawVal === undefined || rawVal === '' ? '' : rawVal}
                                                             disabled={!isCellEditable}
                                                             onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                                                            onChange={(e) => {
-                                                                let val = Number(e.target.value);
-                                                                if (Number.isNaN(val)) {
-                                                                    handleRowChange(ridx, `week_${wk.yearWeek}`, '');
-                                                                    return;
-                                                                }
-                                                                const clamped = Math.max(0, Math.min(40, val, remainingAllowed));
-                                                                handleRowChange(ridx, `week_${wk.yearWeek}`, clamped);
-                                                            }}
-                                                            onBlur={(e) => {
-                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 0);
-                                                            }}
+                                                            onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
+                                                            onBlur={(e) => handleRowBlur(ridx, `week_${wk.yearWeek}`, e.target.value)}
                                                             className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${
                                                                 safeHours > WEEK_DEFAULT_HOURS
                                                                     ? 'border-rose-400 text-rose-600'
@@ -1978,11 +2099,7 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                             {project.client || 'No client selected'}
                         </span>
                         <div className="ml-2 flex items-center gap-3">
-                            <AvatarStack 
-                                members={resources.map(r => ({ name: r.name, photo_url: r.photo_url, id: r.employee_id }))} 
-                                totalCount={headcount} 
-                                size="w-9 h-9"
-                            />
+
                             {headcount > 0 && (
                                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
                                     {headcount} Team Members
@@ -2575,6 +2692,7 @@ const ProjectDetailsPage = () => {
                         projectId={id} 
                         projectStart={project.start_date}
                         projectEnd={project.end_date}
+                        project={project}
                         rows={resources} 
                         employees={employees} 
                         rolesList={rolesList} 

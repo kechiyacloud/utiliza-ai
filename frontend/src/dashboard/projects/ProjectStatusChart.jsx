@@ -2,6 +2,55 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown } from 'lucide-react';
 
+const AvatarCircle = ({ name, avatar_url, size = 'w-10 h-10' }) => {
+    return (
+        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+            {avatar_url ? (
+                <img 
+                    src={avatar_url} 
+                    alt={name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '';
+                        e.target.parentElement.innerHTML = `<span class="text-[8px] font-bold text-slate-400 font-sans">${name?.[0]?.toUpperCase() || '?'}</span>`;
+                    }}
+                />
+            ) : (
+                <span className="text-[8px] font-bold text-slate-400 font-sans">{name?.[0]?.toUpperCase() || '?'}</span>
+            )}
+        </div>
+    );
+};
+
+const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
+    if (!resources || resources.length === 0) return null;
+    
+    const displayMembers = resources.slice(0, 3);
+    const remainingCount = Math.max((totalCount || resources.length) - displayMembers.length, 0);
+
+    return (
+        <div className="flex -space-x-1.5 overflow-hidden items-center group/stack cursor-pointer">
+            {displayMembers.map((user, i) => {
+                const avatar = user.avatar_url || user.photo_url || user.profile_image;
+                return (
+                    <AvatarCircle 
+                        key={user.id || user.employee_id || i} 
+                        name={user.name || user.employee_name || 'Unknown'} 
+                        avatar_url={avatar} 
+                        size={size}
+                    />
+                );
+            })}
+            {remainingCount > 0 && (
+                <div className={`${size} rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[7px] font-black text-blue-600 shadow-sm z-10 transition-transform group-hover/stack:translate-x-0.5`}>
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ProjectStatusChart = ({ projects }) => {
     const navigate = useNavigate();
     const today = new Date();
@@ -99,19 +148,28 @@ const ProjectStatusChart = ({ projects }) => {
                         >
                             <div className="flex justify-between items-start text-sm font-semibold text-gray-800">
                                 <span className="truncate pr-3">{p.name}</span>
-                                <span className={`text-xs font-bold ${colors.text}`}>{pct}%</span>
+                                <div className="flex items-center gap-3">
+                                    <AvatarStack 
+                                        resources={p.team_members || p.resources || p.allocations || []} 
+                                        totalCount={p.resource_count || (p.team_members || p.resources || []).length || 0} 
+                                        size="w-6 h-6" 
+                                    />
+                                    <span className={`text-xs font-bold ${colors.text}`}>{pct}%</span>
+                                </div>
                             </div>
 
-                            <div className="mt-2 inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-full transition-colors duration-200 flex-wrap"
-                                style={{ maxWidth: "100%" }}
-                                aria-label="Progress summary">
-                                <span className={`${getBadgeStyle(pct)} inline-flex items-center gap-1 px-3 py-1 rounded-full`}>
-                                    <span className="text-[11px] font-semibold">{daysLeft} days left</span>
-                                    <span className="text-[12px] font-extrabold">• {pct}% completed</span>
-                                </span>
+                            <div className="flex items-center justify-between mt-2">
+                                <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors duration-200 flex-wrap"
+                                    style={{ maxWidth: "100%" }}
+                                    aria-label="Progress summary">
+                                    <span className={`${getBadgeStyle(pct)} inline-flex items-center gap-1 px-3 py-1 rounded-full`}>
+                                        <span className="text-[10px] font-semibold">{daysLeft} days left</span>
+                                        <span className="text-[11px] font-extrabold">• {pct}% completed</span>
+                                    </span>
+                                </div>
                             </div>
 
-                            <div className="w-full bg-gray-200 rounded-full h-3 mt-3 relative group transition-all">
+                            <div className="w-full bg-gray-200 rounded-full h-3 mt-2 relative group transition-all">
                                 {/* Arrow marker */}
                                 <div
                                     className="absolute -left-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-6 border-t-transparent border-b-transparent border-r-gray-400 opacity-80"
@@ -119,7 +177,7 @@ const ProjectStatusChart = ({ projects }) => {
 
                                 {/* Tooltip */}
                                 {(hoveredId === (p.id || p.name)) && (
-                                    <div className="absolute left-0 -top-10 z-10 px-3 py-2 rounded-lg shadow-md bg-white border border-gray-100 text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                                    <div className="absolute left-0 -top-10 z-10 px-3 py-2 rounded-lg shadow-md bg-white border border-gray-100 text-[11px] font-semibold text-gray-700 whitespace-nowrap font-sans">
                                         {daysLeft} days left · {pct}% completed
                                     </div>
                                 )}
@@ -132,10 +190,10 @@ const ProjectStatusChart = ({ projects }) => {
                                 />
                             </div>
                             <div className="text-xs text-gray-500 mt-3 flex justify-between gap-2">
-                                <span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+                                <span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold font-sans">
                                     Start: {p.startDate || p.start_date || 'N/A'}
                                 </span>
-                                <span className="px-2 py-1 rounded-lg bg-amber-50 text-orange-700 font-semibold">
+                                <span className="px-2 py-1 rounded-lg bg-amber-50 text-orange-700 font-semibold font-sans">
                                     End: {p.endDate || p.end_date || 'N/A'}
                                 </span>
                             </div>

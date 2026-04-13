@@ -232,6 +232,14 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         }
     }, [project]);
 
+    const hasProjectStarted = useMemo(() => {
+        if (!project || (!project.start_date && !project.startDate)) return false;
+        const start = new Date(project.start_date || project.startDate);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return start <= now;
+    }, [project]);
+
     if (!isOpen) return null;
 
     const handleChange = (e) => {
@@ -252,6 +260,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const handleClientSelect = (item) => {
         setFormData(prev => ({ ...prev, clientId: String(item.id), client: item.name }));
     };
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -455,13 +464,18 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Start Date</label>
+                                    <label className={`text-xs font-bold uppercase ${hasProjectStarted ? 'text-blue-600' : 'text-gray-500'}`}>
+                                        Start Date {hasProjectStarted && <span className="text-[10px] lowercase font-medium ml-1">(Started)</span>}
+                                    </label>
                                     <input
                                         type="date"
                                         name="startDate"
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                        className={`p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 
+                                            ${hasProjectStarted ? 'opacity-70 cursor-not-allowed bg-slate-100 border-blue-100 text-blue-700 font-bold' : ''}`}
                                         value={formData.startDate}
                                         onChange={handleChange}
+                                        disabled={hasProjectStarted}
+                                        title={hasProjectStarted ? "Start date cannot be changed once the project has started" : ""}
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1">
