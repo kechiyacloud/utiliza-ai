@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
@@ -37,6 +37,7 @@ import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import NominationModal from './employee/NominationModal';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { Building2 } from 'lucide-react';
+import { useDataRefresh } from '../context';
 
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -58,6 +59,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 function Dashboard() {
+  const { refreshKey } = useDataRefresh();
+  const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [forcedTab] = useState(null);
@@ -99,12 +102,16 @@ function Dashboard() {
 
   useEffect(() => {
     const loadData = async () => {
+      const forceRefresh = refreshKey > 0 && lastHandledRefreshKeyRef.current !== refreshKey;
+      if (forceRefresh) {
+        lastHandledRefreshKeyRef.current = refreshKey;
+      }
       try {
         // Parallel fetch for all initial dashboard requirements
         const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
-          fetchDashboardData(false, deptParam),
-          getEmployeeList(),
+          fetchDashboardData(forceRefresh, deptParam),
+          getEmployeeList(forceRefresh),
           fetchTodos(),
           fetchDepartments()
         ]);
@@ -133,7 +140,7 @@ function Dashboard() {
       }
     };
     loadData();
-  }, [selectedDepartments]);
+  }, [selectedDepartments, refreshKey]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
 

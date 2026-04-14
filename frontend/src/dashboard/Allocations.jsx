@@ -13,10 +13,12 @@ import AllocationFilters from './allocation/AllocationFilters';
 import ForecastBenchList from './allocation/ForecastBenchList';
 import PossibleProjectMatches from './allocation/PossibleProjectMatches';
 import { fetchAllocationData, fetchForecastBench, fetchPossibleProjects } from '../api/allocationApi';
+import { useDataRefresh } from '../context';
 
 function Allocations() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { refreshKey } = useDataRefresh();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -57,7 +59,7 @@ function Allocations() {
       }
     };
     loadData();
-  }, [filters]); // Re-fetch when filters change
+  }, [filters, refreshKey]); // Re-fetch when filters or global refresh key changes
 
   // Handle URL Hash Scrolling
   useEffect(() => {

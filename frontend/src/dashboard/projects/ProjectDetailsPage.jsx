@@ -1086,6 +1086,7 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
 
 const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
     const navigate = useNavigate();
+    const { triggerRefresh } = useDataRefresh();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -1554,6 +1555,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
             await axios.put(`/projects/${projectId}/resources`, payload);
             if (onUpdate) await onUpdate();
+            triggerRefresh();
             setStatusMessage('Changes saved successfully!');
             setIsEditing(false);
         } catch (error) {
@@ -1576,6 +1578,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             await axios.put(`/projects/${projectId}/resources`, { resources: [] });
             setLocalRows([]);
             if (onUpdate) await onUpdate();
+            triggerRefresh();
             setIsDeleteAllModalOpen(false);
             setIsEditing(true);
             setStatusMessage('All resources deleted successfully');
