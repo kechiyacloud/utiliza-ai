@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
+import { useDataRefresh } from '../../context';
 import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
@@ -12,6 +13,7 @@ const AddEmployee = () => {
     const isEditMode = location.state?.isEditMode || false;
     const editData = location.state?.editData || null;
     const editEmployeeId = location.state?.editEmployeeId || editData?.employee_id || editData?.id || null;
+    const { triggerRefresh } = useDataRefresh();
 
     const [currentSection, setCurrentSection] = useState('personal'); // personal, professional, project, preview
     const [loading, setLoading] = useState(false);
@@ -52,6 +54,10 @@ const AddEmployee = () => {
         employee_status: 'Bench',
         employee_allocations: 0,
         reporting_manager_id: '',
+        date_of_resign: '',
+        pip_start_date: '',
+        notice_start_date: '',
+        notice_end_date: '',
         skills: [],
         certificates: [], // Array of {name: '', file: null, fileData: ''}
 
@@ -107,6 +113,10 @@ const AddEmployee = () => {
                 employee_status: source.status?.allocated || source.employee_status || 'Bench',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
                 reporting_manager_id: source.reporting_manager_id || '',
+                date_of_resign: normalizeDate(source.date_of_resign),
+                pip_start_date: normalizeDate(source.pip_start_date),
+                notice_start_date: normalizeDate(source.notice_start_date),
+                notice_end_date: normalizeDate(source.notice_end_date),
                 skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
                 certificates: (source.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
                 projects: (source.projects || []).map(p => ({
@@ -399,28 +409,20 @@ const AddEmployee = () => {
         }
     };
 
-    // Auto-calculate status and allocation based on project selection
+    // Auto-calculate status and allocation based on project selection.
+    // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     useEffect(() => {
-        // Calculate total allocation from all projects
-        const totalAllocation = formData.projects.reduce((sum, project) => {
-            return sum + (parseInt(project.project_allocation) || 0);
-        }, 0);
-
-        if (formData.projects.length > 0 && totalAllocation > 0) {
-            // If project is assigned with allocation, set status to Allocated
-            setFormData(prev => ({
-                ...prev,
-                employee_status: 'Allocated',
-                employee_allocations: totalAllocation
-            }));
-        } else {
-            // If no project assigned, set to Bench
-            setFormData(prev => ({
-                ...prev,
-                employee_status: 'Bench',
-                employee_allocations: 0
-            }));
-        }
+        const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
+        setFormData(prev => {
+            if (MANUAL_STATUSES.some(s => (prev.employee_status || '').toLowerCase().includes(s))) {
+                return prev; // preserve manual status unchanged
+            }
+            const totalAllocation = prev.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
+            if (prev.projects.length > 0 && totalAllocation > 0) {
+                return { ...prev, employee_status: 'Allocated', employee_allocations: totalAllocation };
+            }
+            return { ...prev, employee_status: 'Bench', employee_allocations: 0 };
+        });
     }, [formData.projects]);
 
     const handleSubmit = async () => {
@@ -443,6 +445,10 @@ const AddEmployee = () => {
                 employee_status: formData.employee_status,
                 employee_allocations: formData.employee_allocations,
                 reporting_manager_id: formData.reporting_manager_id || null,
+                date_of_resign: formData.date_of_resign || null,
+                pip_start_date: formData.pip_start_date || null,
+                notice_start_date: formData.notice_start_date || null,
+                notice_end_date: formData.notice_end_date || null,
                 skills: formData.skills,
                 certificates: formData.certificates.map(c => ({ name: typeof c === 'string' ? c : (c.name || '') })),
                 projects: formData.projects.map(p => ({
@@ -457,6 +463,7 @@ const AddEmployee = () => {
                 await createEmployee(payload);
             }
 
+            triggerRefresh(); // global signal that data changed
             navigate('/info/employee');
         } catch (error) {
             console.error('Error saving employee:', error);
@@ -714,10 +721,83 @@ const AddEmployee = () => {
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
-                    <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
-                        {formData.employee_status}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Auto-calculated based on project allocation</p>
+                    {isEditMode ? (
+                        <select
+                            name="employee_status"
+                            value={formData.employee_status}
+                            onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <optgroup label="Auto-calculated">
+                                <option value="Bench">Bench</option>
+                                <option value="Partially bench">Partially bench</option>
+                                <option value="Partially allocated">Partially allocated</option>
+                                <option value="Allocated">Allocated</option>
+                            </optgroup>
+                            <optgroup label="Manually set">
+                                <option value="Notice period">Notice period</option>
+                                <option value="PIP">PIP</option>
+                                <option value="Resigned">Resigned</option>
+                            </optgroup>
+                        </select>
+                    ) : (
+                        <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
+                            {formData.employee_status}
+                        </div>
+                    )}
+                    {!isEditMode && (
+                        <p className="text-xs text-gray-500 mt-1">Auto-calculated based on project allocation</p>
+                    )}
+                    {isEditMode && formData.employee_status === 'Notice period' && (
+                        <div className="mt-2 space-y-2">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Notice Start Date</label>
+                                <input
+                                    type="date"
+                                    name="notice_start_date"
+                                    value={formData.notice_start_date}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Notice End Date</label>
+                                <input
+                                    type="date"
+                                    name="notice_end_date"
+                                    value={formData.notice_end_date}
+                                    onChange={handleInputChange}
+                                    min={formData.notice_start_date || undefined}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                            <p className="text-xs text-amber-600">Employee will automatically become Resigned after the end date.</p>
+                        </div>
+                    )}
+                    {isEditMode && formData.employee_status === 'Resigned' && (
+                        <div className="mt-2">
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Resignation Date</label>
+                            <input
+                                type="date"
+                                name="date_of_resign"
+                                value={formData.date_of_resign}
+                                onChange={handleInputChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                    )}
+                    {isEditMode && formData.employee_status === 'PIP' && (
+                        <div className="mt-2">
+                            <label className="block text-xs font-bold text-gray-700 mb-1">PIP Start Date</label>
+                            <input
+                                type="date"
+                                name="pip_start_date"
+                                value={formData.pip_start_date}
+                                onChange={handleInputChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                    )}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>

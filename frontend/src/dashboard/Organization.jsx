@@ -3,6 +3,7 @@ import { Search, Mail, Phone, MapPin, Briefcase, Calendar, X, BarChart2, Network
 import { getEmployeeList } from '../api/employeeApi';
 import { fetchDashboardData } from '../api/dashboardApi';
 import OrganizationInsights from './OrganizationInsights';
+import { useDataRefresh } from '../context';
 
 const Organization = () => {
     const [departments, setDepartments] = useState([]);
@@ -15,11 +16,13 @@ const Organization = () => {
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
 
+    const { refreshKey } = useDataRefresh();
+
     // Fetch Data
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const employees = await getEmployeeList();
+                const employees = await getEmployeeList(refreshKey > 0);
 
                 // Group employees by department
                 const deptMap = {};
@@ -60,7 +63,7 @@ const Organization = () => {
             }
         };
         fetchData();
-    }, []);
+    }, [refreshKey]);
 
     useEffect(() => {
         if (viewMode !== 'insights' || metrics || metricsLoading) {
@@ -107,8 +110,12 @@ const Organization = () => {
             {/* Header */}
             <div className="p-4 bg-white border-b border-slate-200 shadow-sm z-20 flex justify-between items-center shrink-0">
                 <div>
-                    <h1 className="text-xl font-bold text-slate-800">Organization Map</h1>
-                    <p className="text-slate-500 text-xs">Navigate through the department hierarchy.</p>
+                    <h1 className="text-xl font-bold text-slate-800">
+                        {activeDeptId ? 'Team Map' : 'Organization Map'}
+                    </h1>
+                    <p className="text-slate-500 text-xs">
+                        {activeDeptId ? 'Focused view of your team hierarchy.' : 'Navigate through the department hierarchy.'}
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2">

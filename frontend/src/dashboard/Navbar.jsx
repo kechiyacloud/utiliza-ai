@@ -9,23 +9,23 @@ const Navbar = () => {
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(false);
 
-    const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
+    const userEmail = sessionStorage.getItem('userEmail') || 'user@example.com';
     const userName = (userEmail || '').split('@')[0] || 'User';
     const userInitials = (userName || 'U').substring(0, 2).toUpperCase();
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard' },
         { icon: FolderKanban, label: 'Projects', path: 'projects' },
-        { icon: Users, label: 'Employee', path: 'employee' },
-        { icon: PieChart, label: 'Allocation', path: 'allocation' },
+        { icon: Users, label: 'Employees', path: 'employees/list' },
+        { icon: PieChart, label: 'Allocations', path: 'allocation' },
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
-        { icon: Briefcase, label: 'Client', path: 'client' },
+        { icon: Briefcase, label: 'Clients', path: 'client' },
         { icon: Settings, label: 'Settings', path: 'settings' },
     ];
 
     const handleLogout = () => {
         // Clear any auth tokens/session data
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         sessionStorage.clear();
         navigate('/login');
     };
@@ -60,7 +60,7 @@ const Navbar = () => {
                         return (
                             <button
                                 key={index}
-                                onClick={() => navigate(item.path)}
+                                onClick={() => navigate('/info/' + item.path)}
                                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 group relative
                                     ${isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}
                                     ${isCollapsed ? 'justify-center' : ''}
@@ -89,7 +89,16 @@ const Navbar = () => {
                             try {
                                 const response = await api.get(`/employee/by-email/${userEmail}`);
                                 if (response.data && response.data.employee_id) {
-                                    navigate(`/info/employee/${response.data.employee_id}`);
+                                    navigate(`/info/employee/${response.data.employee_id}`, {
+                                        state: {
+                                            from: {
+                                                pathname: location.pathname,
+                                                search: location.search,
+                                                hash: location.hash,
+                                                state: location.state || null
+                                            }
+                                        }
+                                    });
                                 }
                             } catch (error) {
                                 console.error("Could not fetch user profile ID", error);

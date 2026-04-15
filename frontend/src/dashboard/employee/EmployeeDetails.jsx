@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useDataRefresh } from '../../context'
 import {
     Phone,
     Mail,
@@ -13,7 +14,7 @@ import {
     Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
@@ -92,7 +93,9 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 
 const EmployeeDetails = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
+    const { triggerRefresh } = useDataRefresh();
     // State
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -102,6 +105,19 @@ const EmployeeDetails = () => {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const SKILLS_PREVIEW_COUNT = 7;
+    const returnTarget = location.state?.from;
+    const backLabel = returnTarget?.pathname?.includes('availability')
+        ? 'Back to Availability'
+        : 'Go Back';
+
+    const handleGoBack = () => {
+        if (returnTarget?.pathname) {
+            const targetPath = `${returnTarget.pathname}${returnTarget.search || ''}${returnTarget.hash || ''}`;
+            navigate(targetPath, { state: returnTarget.state || null });
+            return;
+        }
+        navigate(-1);
+    };
 
     useEffect(() => {
         const fetchEmployeeDetails = async () => {
@@ -201,11 +217,11 @@ const EmployeeDetails = () => {
             <div className="p-6 bg-slate-50 min-h-screen flex flex-col items-center justify-center gap-4">
                 <div className="text-red-500 font-medium">{error || "Employee not found"}</div>
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={handleGoBack}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Go Back
+                    {backLabel}
                 </button>
             </div>
         )
@@ -306,6 +322,7 @@ const EmployeeDetails = () => {
                     setIsDeleting(true);
                     try {
                         await deleteEmployee(id);
+                        triggerRefresh();
                         navigate('/info/employee');
                     } catch (err) {
                         console.error('Delete failed', err);
@@ -322,11 +339,11 @@ const EmployeeDetails = () => {
             {/* Back Button */}
             <div>
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={handleGoBack}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
                 >
                     <ArrowLeft size={16} />
-                    Go Back
+                    {backLabel}
                 </button>
             </div>
 
@@ -437,7 +454,18 @@ const EmployeeDetails = () => {
                             </div>
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">CD Exp</p>
-                                <p className="font-semibold text-slate-700">{userData.cdExperience} Yrs</p>
+                                <p className="font-semibold text-slate-700">
+                                    {userData.joiningDate
+                                        ? (() => {
+                                            const joined = new Date(userData.joiningDate);
+                                            const now = new Date();
+                                            const years = (now - joined) / (1000 * 60 * 60 * 24 * 365.25);
+                                            return years >= 1
+                                                ? `${Math.floor(years)} Yr${Math.floor(years) !== 1 ? 's' : ''}`
+                                                : `${Math.round(years * 12)} Mo`;
+                                        })()
+                                        : `${userData.cdExperience ?? '—'} Yrs`}
+                                </p>
                             </div>
                         </div>
                         <div>
@@ -535,7 +563,7 @@ const EmployeeDetails = () => {
                             className="flex justify-between items-center cursor-pointer mb-4 group"
                             onClick={() => setShowDetailedSkills(!showDetailedSkills)}
                         >
-                            <h2 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Master Skills & Concentration</h2>
+                            <h2 className="text-lg font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Skills</h2>
                             <div className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 transition-colors">
                                 <ChevronRight size={16} className={`transition-transform duration-200 ${showDetailedSkills ? 'rotate-90' : ''}`} />
                             </div>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { loadLogoAsBase64, buildPDFHeader } from '../utils/exportUtils';
+import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
 import cdBlueLogo from '../assets/CD-Blue.svg';
 import { 
   ArrowLeft, 
@@ -25,10 +25,13 @@ import { fetchPossibleProjects } from '../api/allocationApi';
 import PossibleProjectMatches from './allocation/PossibleProjectMatches';
 import { getSkillTopic } from '../utils/skillTopics';
 import { getEmployeeList } from '../api/employeeApi';
+import { useDataRefresh } from '../context';
 
 const FullAnalytics = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { refreshKey } = useDataRefresh();
+  const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDept, setSelectedDept] = useState(location.state?.departmentFilter || 'Overall');
@@ -43,9 +46,13 @@ const FullAnalytics = () => {
 
   useEffect(() => {
     const loadData = async () => {
+      const forceRefresh = refreshKey > 0 && lastHandledRefreshKeyRef.current !== refreshKey;
+      if (forceRefresh) {
+        lastHandledRefreshKeyRef.current = refreshKey;
+      }
       setLoading(true);
       try {
-        const res = await fetchDashboardData(false, selectedDept);
+        const res = await fetchDashboardData(forceRefresh, selectedDept);
         setData(res?.data);
       } catch (error) {
         console.error("Failed to load analytics data", error);
@@ -54,12 +61,12 @@ const FullAnalytics = () => {
       }
     };
     loadData();
-  }, [selectedDept]);
+  }, [selectedDept, refreshKey]);
 
   useEffect(() => {
     const loadDepartments = async () => {
       try {
-        const employees = await getEmployeeList();
+        const employees = await getEmployeeList(refreshKey > 0);
         const departments = [...new Set((employees || []).map((employee) => employee.department).filter(Boolean))].sort();
         setDepartmentOptions(['Overall', ...departments]);
       } catch (error) {
@@ -67,7 +74,7 @@ const FullAnalytics = () => {
       }
     };
     loadDepartments();
-  }, []);
+  }, [refreshKey]);
 
   const handleEmployeeClick = async (employee) => {
     setSelectedEmpForProjects(employee);
@@ -200,11 +207,12 @@ const FullAnalytics = () => {
         startY: y,
         theme: 'striped',
         headStyles: { fillColor: BRAND_BLUE, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        styles: { fontSize: 8, cellPadding: 3 },
+        styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [30, 41, 59] },
         alternateRowStyles: { fillColor: [240, 249, 255] },
         margin: { left: 14, right: 14, bottom: 18 },
       });
 
+      addPDFFooter(doc);
       doc.save(`workforce-pulse-analytics-${selectedDept}.pdf`);
     } catch (error) {
       console.error('Failed to export analytics PDF', error);

@@ -1,283 +1,344 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, User, Download, Users, Briefcase, Zap, TrendingUp } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { getEmployeeList } from '../../api/employeeApi';
-import EmployeeStatusTag from '../../components/EmployeeStatusTag';
-import { normalizeSkillName } from '../../utils/skillTopics';
+import React, { useEffect, useState, useMemo, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
+import BulkImportModal from './BulkImportModal'
+import EmployeeTable from './EmployeeTable'
+import NewJoinerCard from './NewJoinerCard'
+import FilterOverlay from './FilterOverlay'
+import SkillsOverview from './insights/SkillsOverview'
+import { getEmployeeList } from '../../api/employeeApi'
+import { normalizeSkillName } from '../../utils/skillTopics'
+import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
-// Helper function to calculate tenure
-const calculateTenure = (joiningDate) => {
-    if (!joiningDate) return 'N/A';
+const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
+  <div
+    className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between transition-all hover:shadow-md cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+    onClick={onClick}
+  >
+    <div className="flex-1">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
+      <div className="flex items-center justify-between">
+        <h3 className={`font-extrabold text-gray-800 ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-xl'}`}>
+          {loading ? (
+            <span className="text-gray-400">...</span>
+          ) : error ? (
+            <span className="text-red-500">—</span>
+          ) : (
+            <span>{value ?? '—'}</span>
+          )}
+        </h3>
+        {Icon && <Icon className={`w-5 h-5 ${colorClass?.replace('bg-', 'text-').replace('10', '500') || 'text-gray-400'} opacity-20`} />}
+      </div>
+    </div>
+    <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
+      <Icon size={20} className={colorClass.replace('bg-', 'text-').replace('10', '500')} />
+    </div>
+  </div>
+)
 
-    const start = new Date(joiningDate);
-    const now = new Date();
+function EmployeeMasterList() {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [showBulkDropdown, setShowBulkDropdown] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const bulkDropdownRef = useRef(null);
 
-    let years = now.getFullYear() - start.getFullYear();
-    let months = now.getMonth() - start.getMonth();
+  // Filter States
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    departments: [],
+    types: [],
+    skills: [],
+    locations: [],
+    statusTags: [],
+    designations: []
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const location = useLocation();
+  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
+  const [activeDrawer, setActiveDrawer] = useState(null);
 
-    if (months < 0) {
-        years--;
-        months += 12;
+  // Department chip selector
+  const [selectedDepts, setSelectedDepts] = useState(() => {
+    const initialDepartment = location.state?.departmentFilter;
+    if (initialDepartment && initialDepartment !== 'Overall') {
+      return initialDepartment.includes(',') ? initialDepartment.split(',') : [initialDepartment];
     }
-
-    if (years === 0 && months === 0) {
-        return 'Less than 1 month';
+    try {
+      const saved = localStorage.getItem('employee_department_filter');
+      if (saved) return JSON.parse(saved);
+    } catch (err) {
+      console.warn('Failed to parse saved department filter:', err);
     }
+    return [];
+  });
 
-    const yearStr = years > 0 ? `${years} Yr${years > 1 ? 's' : ''}` : '';
-    const monthStr = months > 0 ? `${months} Mo${months > 1 ? 's' : ''}` : '';
+  useEffect(() => {
+    localStorage.setItem('employee_department_filter', JSON.stringify(selectedDepts));
+  }, [selectedDepts]);
 
-    return [yearStr, monthStr].filter(Boolean).join(' ');
-};
+  const allDepts = useMemo(() =>
+    [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()
+    , [allEmployees]);
 
-const StatCard = ({ icon: Icon, value, label, colorTheme = 'blue' }) => {
-    const themeStyles = {
-        blue: { bg: 'bg-blue-50', text: 'text-blue-500', border: 'border-blue-100' },
-        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-500', border: 'border-emerald-100' },
-        rose: { bg: 'bg-rose-50', text: 'text-rose-500', border: 'border-rose-100' },
-        amber: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100' },
-        slate: { bg: 'bg-slate-50', text: 'text-slate-500', border: 'border-slate-100' }
-    };
-    const theme = themeStyles[colorTheme] || themeStyles.blue;
+  const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+    if (!selectedSkills.length) return true;
 
-    return (
-        <div className={`bg-white p-4 rounded-2xl shadow-sm border ${theme.border} flex flex-col items-start relative overflow-hidden flex-1`}>
-            <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full blur-3xl opacity-20 ${theme.bg}`}></div>
-            <div className="flex w-full items-start justify-between z-10 mb-2">
-                <div className={`p-1.5 rounded-lg ${theme.bg} ${theme.text}`}>
-                    <Icon size={20} strokeWidth={2.5} />
-                </div>
-            </div>
-            <div className="relative z-10">
-                <h3 className="text-2xl font-bold text-slate-900 tracking-tight leading-none mb-1">{value || 0}</h3>
-                <p className="text-slate-500 text-[10px] font-bold tracking-wider uppercase">{label}</p>
-            </div>
-        </div>
+    const normalizedEmployeeSkills = new Set(
+      (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
     );
-};
 
+    return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+  };
 
-export default function EmployeeMasterList() {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const [employees, setEmployees] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [sortOrder, setSortOrder] = useState('desc'); // 'desc' for newest first
-    const [filterLabel, setFilterLabel] = useState("");
+  useEffect(() => {
+    let mounted = true
 
-    useEffect(() => {
-        const fetchEmployees = async () => {
-            try {
-                const data = await getEmployeeList();
-                // Sort by date of joining (newest first by default)
-                const sorted = [...data].sort((a, b) => {
-                    const dateA = a.date_of_joining ? new Date(a.date_of_joining) : new Date(0);
-                    const dateB = b.date_of_joining ? new Date(b.date_of_joining) : new Date(0);
-                    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
-                });
-
-                // Filter logic
-                const cardFilter = location.state?.cardFilter;
-                const deptFilter = location.state?.departmentFilter;
-                const searchTerm = String(location.state?.search || '').trim().toLowerCase();
-                
-                let filtered = [...sorted];
-                let label = "";
-
-                if (deptFilter) {
-                    filtered = filtered.filter(emp => emp.department === deptFilter);
-                    label += ` (${deptFilter})`;
-                }
-
-                if (cardFilter === 'bench') {
-                    filtered = filtered.filter(emp => (emp.employee_status || '').toLowerCase() === 'bench' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
-                    label += " - Bench Only";
-                } else if (cardFilter === 'billable') {
-                    filtered = filtered.filter(emp => emp.billable === 'billable' && (!emp.employee_status || !emp.employee_status.toLowerCase().includes('notice')));
-                    label += " - Billable Only";
-                }
-
-                if (searchTerm) {
-                    filtered = filtered.filter((emp) => {
-                        const normalizedSkills = (emp.skills || []).map((skill) => normalizeSkillName(skill).toLowerCase());
-                        return (
-                            (emp.employee_name || '').toLowerCase().includes(searchTerm) ||
-                            (emp.employee_id || '').toLowerCase().includes(searchTerm) ||
-                            (emp.role_designation || '').toLowerCase().includes(searchTerm) ||
-                            (emp.department || '').toLowerCase().includes(searchTerm) ||
-                            (emp.location || '').toLowerCase().includes(searchTerm) ||
-                            normalizedSkills.some((skill) => skill.includes(searchTerm))
-                        );
-                    });
-                    label += ` - Search: ${location.state?.search}`;
-                }
-
-                setEmployees(filtered);
-                setFilterLabel(label);
-            } catch (err) {
-                console.error("Error fetching employees:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchEmployees();
-    }, [sortOrder, location.state?.cardFilter, location.state?.departmentFilter, location.state?.search]);
-
-    const stats = React.useMemo(() => {
-        const now = new Date();
-        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-        return {
-            total: employees.length,
-            onProjects: employees.filter(emp => (emp.billable || '').toLowerCase() === 'billable').length,
-            onBench: employees.filter(emp => (emp.employee_status || '').toLowerCase() === 'bench').length,
-            newJoiners: employees.filter(emp => {
-                const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                return joiningDate && joiningDate >= thirtyDaysAgo;
-            }).length
-        };
-    }, [employees]);
-
-    const contextLabel = location.state?.departmentFilter ? 'Team' : 'Organization';
-
-    const toggleSortOrder = () => {
-        setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
-    };
-
-    if (loading) {
-        return (
-            <div className="p-6 h-full flex items-center justify-center">
-                <p className="text-gray-400 text-lg">Loading {contextLabel.toLowerCase()} records...</p>
-            </div>
-        );
+    const fetchAllData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await getEmployeeList()
+        if (!mounted) return
+        setAllEmployees(data)
+      } catch (err) {
+        if (mounted) setError(err?.message || 'Failed to load')
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
-    return (
-        <div className="p-6 h-full flex flex-col gap-6 animate-fade-in overflow-hidden">
+    fetchAllData()
+    return () => { mounted = false }
+  }, [])
 
-            {/* Header */}
-            <div className="flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-4">
-                    {location.state?.showBack && (
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                            title="Go Back"
-                        >
-                            <ArrowLeft size={20} className="text-gray-600" />
-                        </button>
-                    )}
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-800">
-                            {contextLabel} Master List{filterLabel}
-                        </h1>
-                        <p className="text-gray-500 text-sm">A full list of employees showing when they started.</p>
-                    </div>
-                </div>
-                <div className="text-sm text-gray-500 font-medium bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
-                    {contextLabel === 'Team' ? 'Team Size' : 'Total Talent'}: <span className="text-gray-800 font-bold">{employees.length}</span>
-                </div>
-            </div>
+  const combinedFilters = useMemo(() => ({
+    ...filters,
+    departments: selectedDepts.length > 0 ? selectedDepts : filters.departments,
+    search: searchQuery,
+    cardFilter: cardFilter
+  }), [filters, selectedDepts, searchQuery, cardFilter]);
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
-                <StatCard 
-                    icon={Users} 
-                    value={stats.total} 
-                    label={`Total ${contextLabel === 'Team' ? 'Team' : 'Talent'}`} 
-                    colorTheme="slate" 
-                />
-                <StatCard 
-                    icon={Briefcase} 
-                    value={stats.onProjects} 
-                    label="On Projects" 
-                    colorTheme="blue" 
-                />
-                <StatCard 
-                    icon={Zap} 
-                    value={stats.onBench} 
-                    label="Available Now" 
-                    colorTheme="rose" 
-                />
-                <StatCard 
-                    icon={TrendingUp} 
-                    value={stats.newJoiners} 
-                    label="Joined Recently" 
-                    colorTheme="emerald" 
-                />
-            </div>
+  const baseGroup = useMemo(() => {
+    return allEmployees.filter(emp => {
+      const matchesDept = !combinedFilters.departments?.length || combinedFilters.departments.includes(emp.department);
+      const matchesType = !combinedFilters.types?.length || combinedFilters.types.includes(emp.employee_type);
+      const matchesLocation = !combinedFilters.locations?.length || combinedFilters.locations.includes(emp.location);
+      const matchesSkills = employeeHasMatchingSkill(emp.skills, combinedFilters.skills);
+      const matchesDesig = !combinedFilters.designations?.length || combinedFilters.designations.includes(emp.role_designation);
 
-            {/* Table Container */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 overflow-hidden flex flex-col">
+      const sv = combinedFilters.search?.toLowerCase().trim();
+      const matchesSearch = !sv || (
+          emp.employee_name?.toLowerCase().includes(sv) ||
+          emp.employee_id?.toLowerCase().includes(sv) ||
+          emp.role_designation?.toLowerCase().includes(sv) ||
+          emp.location?.toLowerCase().includes(sv) ||
+          emp.department?.toLowerCase().includes(sv) ||
+          (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
+      );
 
-                <div className="overflow-y-auto flex-1">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
-                            <tr className="text-xs text-gray-600 uppercase tracking-wider">
-                                <th className="py-3 pl-6 font-bold">Employee Details</th>
-                                <th className="py-3 font-bold">Role & Department</th>
-                                <th className="py-3 font-bold">Location</th>
-                                <th className="py-3 pr-6 font-bold text-right">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {employees.map((emp, index) => {
-                                const initials = emp.employee_name?.split(' ').map(n => n[0]).slice(0, 2).join('') || '??';
-                                const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
+      return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
+    });
+  }, [allEmployees, combinedFilters]);
 
-                                return (
-                                    <tr
-                                        key={emp.employee_id || index}
-                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                    >
-                                        {/* Employee Details */}
-                                        <td className="py-3 pl-6">
-                                            <div className="flex items-center gap-3">
-                                                {emp.photo_url ? (
-                                                    <img
-                                                        src={emp.photo_url}
-                                                        alt={emp.employee_name}
-                                                        className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
-                                                    />
-                                                ) : (
-                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm">
-                                                        {initials}
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <div className="text-gray-800 text-sm font-semibold">{emp.employee_name || 'N/A'}</div>
-                                                    <div className="text-gray-500 text-xs">{emp.employee_id || 'N/A'}</div>
-                                                </div>
-                                            </div>
-                                        </td>
+  const contextLabel = combinedFilters.departments?.length > 0 ? 'Team' : 'Organization';
 
-                                        {/* Role & Department */}
-                                        <td className="py-3">
-                                            <div className="text-gray-800 text-sm font-medium">{emp.role_designation || 'N/A'}</div>
-                                            <div className="text-gray-500 text-xs">{emp.department || 'N/A'}</div>
-                                        </td>
+  const totalEmployeesCount = baseGroup.length;
+  const benchEmployeesCount = baseGroup.filter(e => (e.employee_allocations || 0) <= 0).length;
+  const noticeEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
 
-                                        {/* Location */}
-                                        <td className="py-3 text-gray-600 text-sm">
-                                            {emp.location || 'N/A'}
-                                        </td>
+  return (
+    <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
+      <FilterOverlay
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filters={filters}
+        onFilterChange={setFilters}
+        employees={allEmployees}
+      />
 
-                                        {/* Status */}
-                                        <td className="py-3 pr-6 text-right">
-                                            <EmployeeStatusTag status={emp.employee_status} billable={emp.billable} size="sm" />
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-
-                    {employees.length === 0 && (
-                        <div className="p-10 text-center text-gray-400">
-                            No employees found.
-                        </div>
-                    )}
-                </div>
-            </div>
+      {/* Header & Actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+            title="Go Back"
+          >
+            <ArrowLeft size={24} className="text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Organization Management</h1>
+            <p className="text-gray-500 font-medium tracking-tight">See how your organization is doing and manage people records.</p>
+          </div>
         </div>
-    );
+
+        <div className="flex flex-wrap items-center gap-3">
+
+          {/* Add Employee Button */}
+          <button
+            onClick={() => navigate('/info/employee/add')}
+            className="flex items-center justify-center p-2.5 bg-white border border-gray-100 text-gray-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm"
+            title="Add Single Employee"
+          >
+            <UserPlus size={18} />
+          </button>
+
+          {/* Department Selector */}
+          <MultiSelectDropdown
+            options={allDepts}
+            selectedValues={selectedDepts}
+            onChange={setSelectedDepts}
+            placeholder="Select Departments"
+            icon={Building2}
+          />
+
+          {/* Bulk Actions Button */}
+          <div className="relative" ref={bulkDropdownRef}>
+            <button
+              onClick={() => setShowBulkDropdown(prev => !prev)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
+            >
+              <Upload size={16} />
+              Bulk Actions
+              <ChevronDown size={14} className={`transition-transform ${showBulkDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showBulkDropdown && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-30 overflow-hidden">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-poppins">Bulk Employee Actions</p>
+                </div>
+                <button
+                  onClick={() => { setShowBulkDropdown(false); setShowBulkModal(true); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left font-poppins"
+                >
+                  <Upload size={16} className="text-blue-500" />
+                  <div>
+                    <p className="font-bold">Import Employees</p>
+                    <p className="text-xs text-gray-400 font-medium">CSV, Excel, JSON, PDF</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setShowBulkDropdown(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-left font-poppins"
+                >
+                  <Download size={16} className="text-emerald-500" />
+                  <div>
+                    <p className="font-bold">Export to CSV</p>
+                    <p className="text-xs text-gray-400 font-medium">Download current list</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          label="TOTAL EMPLOYEES"
+          value={totalEmployeesCount}
+          icon={Users}
+          colorClass="bg-blue-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === null}
+          onClick={() => setCardFilter(null)}
+        />
+        <StatCard
+          label="TOTAL BENCH"
+          value={benchEmployeesCount}
+          icon={BriefcaseBusiness}
+          colorClass="bg-orange-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'bench'}
+          onClick={() => setCardFilter('bench')}
+        />
+        <StatCard
+          label="NOTICE PERIOD"
+          value={noticeEmployeesCount}
+          icon={Hourglass}
+          colorClass="bg-red-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'notice'}
+          onClick={() => setCardFilter('notice')}
+        />
+        <NewJoinerCard employees={baseGroup} isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
+        <StatCard
+          label="SKILL SUMMARY"
+          value="Tap to View"
+          icon={Award}
+          colorClass="bg-purple-500"
+          loading={loading}
+          error={error}
+          onClick={() => setActiveDrawer('skills')}
+        />
+      </div>
+
+      {/* Employee Table */}
+      <div className='flex-1 w-full mt-4'>
+        <EmployeeTable
+          contextLabel={contextLabel}
+          employees={allEmployees}
+          loading={loading}
+          onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
+          onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
+          onEmployeeDelete={(deletedId) => {
+            setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
+          }}
+          filters={combinedFilters}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onFilterClick={() => setIsFilterOpen(true)}
+        />
+      </div>
+
+      {/* Sliding Drawer for Insights */}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-full md:w-[600px] lg:w-[800px] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${activeDrawer ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+          <h2 className="text-xl font-bold text-gray-800">
+            Skills Overview
+          </h2>
+          <button
+            onClick={() => setActiveDrawer(null)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+          {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
+        </div>
+      </div>
+
+      {/* Backdrop */}
+      {activeDrawer && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40"
+          onClick={() => setActiveDrawer(null)}
+        />
+      )}
+
+      {/* Click-outside to close dropdown */}
+      {showBulkDropdown && (
+        <div className="fixed inset-0 z-20" onClick={() => setShowBulkDropdown(false)} />
+      )}
+
+      {/* Bulk Import Modal */}
+      {showBulkModal && (
+        <BulkImportModal onClose={() => setShowBulkModal(false)} />
+      )}
+    </div>
+  )
 }
+
+export default EmployeeMasterList

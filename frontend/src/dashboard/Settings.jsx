@@ -46,7 +46,7 @@ const labelCls = 'block text-xs font-bold text-gray-500 uppercase tracking-wider
 // ─────────────────────────────────────────────
 
 const ProfileSection = ({ employeeData, loading, notLinked }) => {
-    const email = localStorage.getItem('userEmail') || '';
+    const email = sessionStorage.getItem('userEmail') || '';
     const username = email.split('@')[0] || 'User';
 
     if (loading) {
@@ -113,16 +113,16 @@ const ProfileSection = ({ employeeData, loading, notLinked }) => {
 
             {/* Fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <InfoField icon={Mail}      label="Email"           value={employeeData.email} />
-                <InfoField icon={Phone}     label="Phone"           value={employeeData.phone} />
-                <InfoField icon={MapPin}    label="Location"        value={employeeData.location} />
-                <InfoField icon={Building2} label="Department"      value={employeeData.department} />
-                <InfoField icon={Briefcase} label="Designation"     value={employeeData.designation || employeeData.role} />
-                <InfoField icon={Laptop}    label="Work Mode"       value={employeeData.mode_of_work} />
-                <InfoField icon={Calendar}  label="Date of Joining" value={formatDate(employeeData.date_of_joining)} />
-                <InfoField icon={Clock}     label="Total Experience" value={employeeData.total_experience ? `${employeeData.total_experience} years` : '—'} />
-                <InfoField icon={Award}     label="Shift"           value={employeeData.shift} />
-                <InfoField icon={User}      label="Employee Type"   value={employeeData.employee_type} />
+                <InfoField icon={Mail} label="Email" value={employeeData.email} />
+                <InfoField icon={Phone} label="Phone" value={employeeData.phone} />
+                <InfoField icon={MapPin} label="Location" value={employeeData.location} />
+                <InfoField icon={Building2} label="Department" value={employeeData.department} />
+                <InfoField icon={Briefcase} label="Designation" value={employeeData.designation || employeeData.role} />
+                <InfoField icon={Laptop} label="Work Mode" value={employeeData.mode_of_work} />
+                <InfoField icon={Calendar} label="Date of Joining" value={formatDate(employeeData.date_of_joining)} />
+                <InfoField icon={Clock} label="Total Experience" value={employeeData.total_experience ? `${employeeData.total_experience} years` : '—'} />
+                <InfoField icon={Award} label="Shift" value={employeeData.shift} />
+                <InfoField icon={User} label="Employee Type" value={employeeData.employee_type} />
             </div>
         </div>
     );
@@ -146,7 +146,7 @@ const FeedbackSection = ({ employeeData }) => {
         setStatus(null);
         setErrorMsg('');
 
-        const email = localStorage.getItem('userEmail') || '';
+        const email = sessionStorage.getItem('userEmail') || '';
         try {
             await submitFeedback({
                 employee_id: employeeData?.employee_id || null,
@@ -324,9 +324,9 @@ const AutoReportsSection = () => (
 // ─────────────────────────────────────────────
 
 const TABS = [
-    { id: 'profile',  label: 'Profile',      icon: User },
-    { id: 'feedback', label: 'Feedback',     icon: MessageSquare },
-    { id: 'reports',  label: 'Auto Reports', icon: BarChart2 },
+    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+    { id: 'reports', label: 'Auto Reports', icon: BarChart2 },
 ];
 
 function Settings() {
@@ -340,7 +340,7 @@ function Settings() {
             setEmpLoading(true);
             setEmpNotLinked(false);
             try {
-                const email = localStorage.getItem('userEmail');
+                const email = sessionStorage.getItem('userEmail');
                 if (!email) { setEmpNotLinked(true); return; }
 
                 const idRes = await api.get(`/employee/by-email/${email}`);
@@ -396,7 +396,7 @@ function Settings() {
                     notLinked={empNotLinked}
                 />
             )}
-{activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
+            {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
             {activeTab === 'reports' && <AutoReportsSection />}
         </div>
     );

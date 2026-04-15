@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Users, Briefcase, Building2, User } from 'lucide-react';
 
-const WorkforceSplitView = ({ isOpen, onClose, employees }) => {
+const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organization' }) => {
   if (!isOpen) return null;
 
   const bench = employees.filter(e => (e.employee_status || '').toLowerCase() === 'bench');
@@ -62,7 +62,7 @@ const WorkforceSplitView = ({ isOpen, onClose, employees }) => {
           <div>
             <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
               <Users className="text-blue-500" />
-              Workforce Allocation Details
+              {contextLabel} Allocation Details
             </h2>
             <p className="text-sm text-slate-500 font-medium">Categorized view of current workforce status and assignment</p>
           </div>

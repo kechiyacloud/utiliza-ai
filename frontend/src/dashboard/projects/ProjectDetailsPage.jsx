@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload } from 'lucide-react';
+import { useDataRefresh } from '../../context';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
-import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
+import { exportToCSV, exportToExcel, loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../../utils/exportUtils';
+import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import EditProjectPanel from './EditProjectPanel';
 
 const toMessage = (val, fallback = 'Something went wrong') => {
     if (!val && val !== 0) return fallback;
@@ -92,6 +95,52 @@ function buildWeekDescriptor(mondayDate, index) {
     };
 }
 
+const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
+    return (
+        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+            {photo_url ? (
+                <img 
+                    src={photo_url} 
+                    alt={name} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '';
+                        e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-slate-400">${name?.[0].toUpperCase()}</span>`;
+                    }}
+                />
+            ) : (
+                <span className="text-xs font-bold text-slate-400">{name?.[0].toUpperCase()}</span>
+            )}
+        </div>
+    );
+};
+
+const AvatarStack = ({ members, totalCount, size = 'w-8 h-8' }) => {
+    if (!members || members.length === 0) return null;
+    
+    const displayMembers = members.slice(0, 4);
+    const remainingCount = totalCount - displayMembers.length;
+
+    return (
+        <div className="flex -space-x-3 overflow-hidden items-center group/stack cursor-pointer">
+            {displayMembers.map((member, i) => (
+                <AvatarCircle 
+                    key={member.id || member.employee_id || i} 
+                    name={member.name} 
+                    photo_url={member.photo_url} 
+                    size={size}
+                />
+            ))}
+            {remainingCount > 0 && (
+                <div className={`${size} rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 shadow-sm z-10 transition-transform group-hover/stack:translate-x-1`}>
+                    +{remainingCount}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export function getWeekStatus(weekStartDate, weekEndDate, today = new Date()) {
     const start = new Date(weekStartDate); start.setHours(0,0,0,0);
     const end = new Date(weekEndDate); end.setHours(23,59,59,999);
@@ -176,14 +225,18 @@ function allocPctToHours(pct) {
 
 const clampPct = (val) => {
     const num = Number(val);
-    if (!Number.isFinite(num)) return 0;
-    return Math.max(0, Math.min(100, Math.round(num * 100) / 100));
+    if (!Number.isFinite(num)) return 10;
+    // Limit to max 2 decimal places and range 10-100
+    const rounded = Math.round(num * 100) / 100;
+    return Math.max(10, Math.min(100, rounded));
 };
 
 const clampHours = (val) => {
     const num = Number(val);
-    if (!Number.isFinite(num)) return 0;
-    return Math.max(0, Math.min(WEEK_DEFAULT_HOURS, Math.round(num * 100) / 100));
+    if (!Number.isFinite(num)) return 1;
+    // Limit to max 1 decimal place and range 1-40
+    const rounded = Math.round(num * 10) / 10;
+    return Math.max(1, Math.min(WEEK_DEFAULT_HOURS, rounded));
 };
 
 function parseDate(value) {
@@ -474,11 +527,11 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                                         <label className="text-[10px] font-bold text-slate-500">W{i+1} Hours</label>
                                         <input
                                                 type="number"
-                                                min="0" max="168"
+                                                min="1" max="168"
                                                 value={hours[wk]}
                                                 onChange={e => setHours({
                                                     ...hours,
-                                                    [wk]: e.target.value === '' ? WEEK_DEFAULT_HOURS : (Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : WEEK_DEFAULT_HOURS)
+                                                    [wk]: e.target.value === '' ? 1 : (Number.isFinite(Number(e.target.value)) ? Math.max(1, Number(e.target.value)) : 1)
                                                 })}
                                                 className="w-full p-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-center outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 shadow-sm transition-all"
                                             />
@@ -579,7 +632,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
 
                     const rawPct = norm['allocation_percentage'];
                     const pct = rawPct === '' || rawPct === undefined ? 100 : Number(rawPct);
-                    if (isNaN(pct) || pct < 0 || pct > 100) errors.push('allocation_percentage must be 0–100');
+                    if (isNaN(pct) || pct < 2.5 || pct > 100) errors.push('allocation_percentage must be 2.5–100 (min 1 hour)');
 
                     const nameFromCSV = String(norm['employee_name'] || '').trim();
                     const resolvedName = nameLookup[empId] || nameFromCSV || empId || `Row ${idx + 2}`;
@@ -589,7 +642,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                         employee_id: empId,
                         name: resolvedName,
                         role: String(norm['role_in_project'] || '').trim(),
-                        allocation_pct: isNaN(pct) ? 100 : Math.min(100, Math.max(0, pct)),
+                        allocation_pct: isNaN(pct) ? 100 : Math.min(100, Math.max(2.5, pct)),
                         allocation_start_date: String(norm['allocation_start_date'] || '').trim(),
                         allocation_end_date: String(norm['allocation_end_date'] || '').trim(),
                         _errors: errors,
@@ -844,8 +897,8 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
     const handleAdd = () => {
         if (!selectedEmps.length) return;
         selectedEmps.forEach(({ emp, role, allocationPct: pct }) => {
-            const safePct = Math.min(100, Math.max(0, Number(pct) || 0));
-            const hrs = Math.round((safePct * 40) / 100);
+            const safePct = Math.min(100, Math.max(2.5, Number(pct) || 2.5));
+            const hrs = Math.max(1, Math.round((safePct * 40) / 100));
             onAdd({ employee_id: emp.employee_id, name: emp.employee_name || emp.name || '', role: role || 'No role assigned', allocation_pct: safePct, w1: hrs, w2: hrs, w3: hrs, w4: hrs });
         });
         setConfirmed(true);
@@ -953,9 +1006,9 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Global Allocation %</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm flex-1">
-                                    <input type="number" min="0" max="100" value={globalPct}
-                                        onChange={e => setGlobalPct(e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                                        onBlur={e => { if (e.target.value === '') setGlobalPct(0); }}
+                                    <input type="number" min="2.5" max="100" value={globalPct}
+                                        onChange={e => setGlobalPct(e.target.value === '' ? '' : Math.min(100, Math.max(2.5, Number(e.target.value) || 2.5)))}
+                                        onBlur={e => { if (e.target.value === '' || Number(e.target.value) < 2.5) setGlobalPct(2.5); }}
                                         className="flex-1 min-w-0 text-sm font-bold text-center outline-none bg-transparent" />
                                     <span className="text-slate-400 text-sm font-bold">%</span>
                                 </div>
@@ -1002,9 +1055,9 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Allocation %</label>
                                             <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 flex-1">
-                                                    <input type="number" min="0" max="100" value={empPct}
-                                                        onChange={e => updateRow(emp.employee_id, 'allocationPct', e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                                                        onBlur={e => { if (e.target.value === '') updateRow(emp.employee_id, 'allocationPct', 0); }}
+                                                    <input type="number" min="2.5" max="100" value={empPct}
+                                                        onChange={e => updateRow(emp.employee_id, 'allocationPct', e.target.value === '' ? '' : Math.min(100, Math.max(2.5, Number(e.target.value) || 2.5)))}
+                                                        onBlur={e => { if (e.target.value === '' || Number(e.target.value) < 2.5) updateRow(emp.employee_id, 'allocationPct', 2.5); }}
                                                         className="flex-1 min-w-0 text-xs font-bold text-center outline-none bg-transparent" />
                                                     <span className="text-slate-400 text-xs font-bold">%</span>
                                                 </div>
@@ -1032,7 +1085,7 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
     );
 };
 
-const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
+const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
     const navigate = useNavigate();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -1045,6 +1098,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     const [saveError, setSaveError] = useState('');
     const [statusMessage, setStatusMessage] = useState('');
     const [localRows, setLocalRows] = useState(rows);
+    const PROJECT_WEEKLY_HOURS_ERROR = 'Max 40 hrs/week allowed per project';
 
     useEffect(() => {
         setLocalRows((rows || []).map(normalizeAllocationRow));
@@ -1055,13 +1109,32 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     }, [localRows]);
 
     const handleAddRow = () => {
-        setLocalRows([...localRows, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' })]);
+        const nextRows = [...localRows, normalizeAllocationRow({ 
+            name: '', 
+            role: '', 
+            w1: '', 
+            w2: '', 
+            w3: '', 
+            w4: '',
+            isNew: true // Mark as new for validation rules
+        })];
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const handleInsertRowAfter = (index) => {
         const newRows = [...localRows];
-        newRows.splice(index + 1, 0, normalizeAllocationRow({ name: '', role: '', w1: '', w2: '', w3: '', w4: '' }));
+        newRows.splice(index + 1, 0, normalizeAllocationRow({ 
+            name: '', 
+            role: '', 
+            w1: '', 
+            w2: '', 
+            w3: '', 
+            w4: '',
+            isNew: true // Mark as new for validation rules
+        }));
         setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
     };
 
     const getRowTotal = (row) => {
@@ -1071,16 +1144,55 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         }, 0);
     };
 
+    const hasProjectWeeklyOverflow = (rowsToValidate = []) => {
+        const totalsByResource = new Map();
+
+        (rowsToValidate || []).forEach((row) => {
+            const employeeId = String(row?.employee_id || '').trim();
+            const name = String(row?.name || '').trim();
+            const resourceKey = employeeId ? `emp:${employeeId.toLowerCase()}` : (name ? `name:${name.toLowerCase()}` : '');
+            if (!resourceKey) return;
+
+            const weeklyTotals = totalsByResource.get(resourceKey) || new Map();
+            Object.entries(row?.weekly_hours || {}).forEach(([yearWeek, rawHours]) => {
+                const hours = Number(rawHours);
+                if (!Number.isFinite(hours) || hours <= 0) return;
+                const next = (weeklyTotals.get(yearWeek) || 0) + hours;
+                weeklyTotals.set(yearWeek, next);
+            });
+            totalsByResource.set(resourceKey, weeklyTotals);
+        });
+
+        for (const weeklyTotals of totalsByResource.values()) {
+            for (const totalHours of weeklyTotals.values()) {
+                if (totalHours > WEEK_DEFAULT_HOURS + 1e-6) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const syncProjectHoursValidation = (rowsToValidate = []) => {
+        const overflow = hasProjectWeeklyOverflow(rowsToValidate);
+        if (overflow) {
+            setSaveError(PROJECT_WEEKLY_HOURS_ERROR);
+            return true;
+        }
+        setSaveError((prev) => (prev === PROJECT_WEEKLY_HOURS_ERROR ? '' : prev));
+        return false;
+    };
+
     const handleRemoveRow = (index) => {
-        setLocalRows(localRows.filter((_, i) => i !== index));
+        const nextRows = localRows.filter((_, i) => i !== index);
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const getOtherProjectHours = (empId, yearWeek) => {
-        if (!empId || !globalAllocations) return 0;
-        const totalAllProjects = (globalAllocations[empId] || {})[yearWeek] || 0;
-        const thisProjectRow = rows.find(r => r.employee_id === empId);
-        const thisProjectDBHours = thisProjectRow ? Number((thisProjectRow.weekly_hours || {})[yearWeek] || 0) : 0;
-        return totalAllProjects - thisProjectDBHours;
+        // Validation is project-scoped only. Cross-project capacity is intentionally ignored.
+        if (!empId || !yearWeek || !globalAllocations) return 0;
+        return 0;
     };
 
     const generateWeeklyHours = (hours, row) => {
@@ -1091,37 +1203,25 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         return weekly;
     };
 
-    const handleEmployeeSelect = async (employee, rowIndex) => {
+    const handleEmployeeSelect = (employee, rowIndex) => {
         const empId = employee.employee_id || employee.id;
         const empName = employee.employee_name || employee.name;
-        try {
-            const res = await axios.get(`/allocations/${empId}`);
-            const allocations = Array.isArray(res.data?.allocations) ? res.data.allocations : [];
-            const totalPercent = allocations.reduce((sum, a) => sum + Number(a.percentage || 0), 0);
-            const remainingPercent = Math.max(0, 100 - totalPercent);
-            const hours = Math.round((remainingPercent / 100) * WEEK_DEFAULT_HOURS);
+        const allocationPct = 100;
+        const hours = Math.round((allocationPct / 100) * WEEK_DEFAULT_HOURS);
 
-            const newRows = [...localRows];
-            const currentRow = { ...(newRows[rowIndex] || {}) };
-            currentRow.employee_id = empId;
-            currentRow.name = empName;
-            currentRow.allocation_pct = remainingPercent;
-            currentRow.weekly_hours = {
-                ...currentRow.weekly_hours,
-                ...generateWeeklyHours(hours, currentRow)
-            };
-            newRows[rowIndex] = currentRow;
-            setLocalRows(newRows);
-
-            if (remainingPercent <= 0) {
-                setStatusMessage(`Employee ${empName} is fully allocated (100%).`);
-            } else {
-                setStatusMessage(`Auto-filled ${remainingPercent}% (${hours}h/wk) for ${empName}.`);
-            }
-        } catch (error) {
-            console.error('Failed to load employee allocations', error);
-            setStatusMessage('Could not fetch allocation data for this employee.');
-        }
+        const newRows = [...localRows];
+        const currentRow = { ...(newRows[rowIndex] || {}) };
+        currentRow.employee_id = empId;
+        currentRow.name = empName;
+        currentRow.allocation_pct = allocationPct;
+        currentRow.weekly_hours = {
+            ...currentRow.weekly_hours,
+            ...generateWeeklyHours(hours, currentRow)
+        };
+        newRows[rowIndex] = currentRow;
+        setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
+        setStatusMessage(`Auto-filled ${allocationPct}% (${hours}h/wk) for ${empName}.`);
     };
 
     const handleRowChange = (index, field, value) => {
@@ -1130,35 +1230,153 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         if (!currentRow.weekly_hours) currentRow.weekly_hours = {};
 
         if (field === 'allocation_pct') {
-            if (value === '') {
-                currentRow.allocation_pct = '';
-            } else {
-                const cleaned = stripLeadingZeros(value);
-                const pct = clampPct(cleaned);
-                currentRow.allocation_pct = pct;
-                const hrs = clampHours((pct / 100) * WEEK_DEFAULT_HOURS);
-
+            currentRow.allocation_pct = value;
+            const num = Number(value);
+            // Recalculate instantly on change
+            if (!isNaN(num) && num >= 0) {
+                const hrs = clampHours((num / 100) * WEEK_DEFAULT_HOURS);
                 visibleWeeks.forEach(wk => {
                     if (!isWeekWithinAllocationRange(wk, currentRow)) return;
-                    if (wk.isPast) return; // past weeks stay read-only
+                    if (wk.isPast) return; 
                     currentRow.weekly_hours[wk.yearWeek] = hrs;
                 });
             }
         } else if (field.startsWith('week_')) {
             const yearWeek = field.replace('week_', '');
-            if (value === '') {
-                currentRow.weekly_hours[yearWeek] = '';
-            } else {
-                const cleaned = stripLeadingZeros(String(value));
-                const clamped = clampHours(cleaned);
-                currentRow.weekly_hours[yearWeek] = clamped;
+            currentRow.weekly_hours[yearWeek] = value;
+        } else if (field === 'allocation_start_date' || field === 'allocation_end_date') {
+            setSaveError(''); // Clear previous errors
+
+            // Allow clearing end date for resources
+            if (field === 'allocation_end_date' && !value) {
+                currentRow[field] = value;
+                newRows[index] = currentRow;
+                setLocalRows(newRows);
+                return;
             }
+
+            const newDate = new Date(value);
+            if (isNaN(newDate)) {
+                 currentRow[field] = value;
+                 newRows[index] = currentRow;
+                 setLocalRows(newRows);
+                 return;
+            }
+            newDate.setHours(0, 0, 0, 0);
+
+            if (field === 'allocation_start_date') {
+                // Validation: Start Date < Project Start Date
+                if (projectStart) {
+                    const ps = new Date(projectStart);
+                    ps.setHours(0, 0, 0, 0);
+                    if (newDate < ps) {
+                        setSaveError(`Start date cannot be before project start date (${projectStart}).`);
+                    }
+                }
+
+                // Validation: For new resources, Start date in past
+                if (currentRow.isNew) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (newDate < today) {
+                        setSaveError("Start date for new resources cannot be in the past.");
+                    }
+                }
+                
+                // Ensure Start Date <= End Date
+                if (currentRow.allocation_end_date) {
+                    const ed = new Date(currentRow.allocation_end_date);
+                    if (newDate > ed) {
+                        setSaveError("Start date cannot be after end date.");
+                    }
+                }
+            } else {
+                // Validation: End date < Start date
+                if (currentRow.allocation_start_date) {
+                    const sd = new Date(currentRow.allocation_start_date);
+                    if (newDate < sd) {
+                        setSaveError("End date cannot be before start date.");
+                    }
+                }
+                
+                // Validation: End Date > Project End Date
+                if (projectEnd) {
+                    const pe = new Date(projectEnd);
+                    pe.setHours(23, 59, 59, 999);
+                    if (newDate > pe) {
+                        setSaveError(`End date cannot be after project end date (${projectEnd}).`);
+                    }
+                }
+            }
+            currentRow[field] = value;
         } else {
             currentRow[field] = value;
         }
 
         newRows[index] = currentRow;
         setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
+    };
+
+    const handleRowBlur = (index, field, value) => {
+        const newRows = [...localRows];
+        const currentRow = { ...(newRows[index] || {}) };
+        if (!currentRow.weekly_hours) currentRow.weekly_hours = {};
+
+        if (field === 'allocation_pct') {
+            const num = Number(value);
+            if (value === '' || isNaN(num) || num < 10 || num > 100) {
+                setSaveError("Allocation must be between 10% and 100%");
+                currentRow.allocation_pct = value;
+            } else {
+                setSaveError(""); // Clear error if valid
+                const pct = clampPct(value);
+                currentRow.allocation_pct = pct;
+                const hrs = clampHours((pct / 100) * WEEK_DEFAULT_HOURS);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return; 
+                    currentRow.weekly_hours[wk.yearWeek] = hrs;
+                });
+            }
+        } else if (field.startsWith('week_')) {
+            const yearWeek = field.replace('week_', '');
+            const num = Number(value);
+            if (value === '' || isNaN(num) || num < 1) {
+                setSaveError("Minimum weekly allocation is 1 hour.");
+                const clamped = 1;
+                currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = clampPct((clamped / 40) * 100);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
+            } else if (num > 40) {
+                setSaveError("Maximum weekly allocation is 40 hours.");
+                const clamped = 40;
+                currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = 100;
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
+            } else {
+                const clamped = clampHours(value);
+                currentRow.weekly_hours[yearWeek] = clamped;
+                currentRow.allocation_pct = clampPct((clamped / 40) * 100);
+                visibleWeeks.forEach(wk => {
+                    if (!isWeekWithinAllocationRange(wk, currentRow)) return;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = clamped;
+                });
+            }
+        }
+
+        newRows[index] = currentRow;
+        setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
     };
 
     const handleBulkConfirm = (selectedEmployees, bulkHours) => {
@@ -1168,7 +1386,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             role: emp.role_designation,
             ...normalizeAllocationRow(bulkHours)
         }));
-        setLocalRows([...localRows, ...newResources]);
+        const nextRows = [...localRows, ...newResources];
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const handleExport = async (format) => {
@@ -1197,36 +1417,29 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
             exportToExcel(exportData, fileName);
         } else if (format === 'pdf') {
             try {
-                const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                 const pageWidth = doc.internal.pageSize.getWidth();
-                const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const today = new Date().toLocaleString('en-GB');
 
-                // ── Title block ──
-                doc.setFillColor(30, 64, 175);
-                doc.rect(0, 0, pageWidth, 52, 'F');
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(18);
-                doc.setTextColor(255, 255, 255);
-                doc.text('Resource Allocation', 36, 28);
-
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-                doc.setTextColor(200, 216, 255);
-                doc.text(`Project: ${projectId}`, 36, 43);
-                doc.text(`Generated: ${today}`, pageWidth - 36, 43, { align: 'right' });
+                // ── Branded header ──
+                let logoBase64 = null;
+                try { logoBase64 = await loadLogoAsBase64(cdBlueLogo); } catch { /* skip */ }
+                const subtitle = `Project: ${projectId}  |  Generated: ${today}`;
+                let y = buildPDFHeader(doc, logoBase64, 'Resource Allocation', subtitle);
 
                 // ── Summary strip ──
-                doc.setFillColor(241, 245, 249);
-                doc.rect(0, 52, pageWidth, 22, 'F');
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(8.5);
-                doc.setTextColor(100, 116, 139);
-                doc.text(`Total Resources: ${localRows.length}`, 36, 66);
                 const grandTotal = visibleWeeks.reduce((s, wk) => s + localRows.reduce((a, r) => {
                     const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                     return a + (withinRange ? Number(hours || 0) : 0);
                 }, 0), 0);
-                doc.text(`Total Hours Allocated: ${grandTotal}h`, 200, 66);
+                doc.setFillColor(241, 245, 249);
+                doc.rect(0, y, pageWidth, 9, 'F');
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.5);
+                doc.setTextColor(100, 116, 139);
+                doc.text(`Total Resources: ${localRows.length}`, 13, y + 6);
+                doc.text(`Total Hours Allocated: ${grandTotal}h`, 75, y + 6);
+                y += 11;
 
                 // ── Table ──
                 const head = [[
@@ -1242,7 +1455,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                     const rowWeeks = visibleWeeks.map(wk => {
                         const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                         const safeHours = Number(hours || 0);
-                        return withinRange && safeHours > 0 ? `${safeHours}h` : 'â€”';
+                        return withinRange && safeHours > 0 ? `${safeHours}h` : '\u2013';
                     });
                     return [
                         r.name || '-',
@@ -1256,44 +1469,42 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                 });
 
                 const colStyles = {
-                    0: { cellWidth: 110, halign: 'left', fontStyle: 'bold' },
-                    1: { cellWidth: 90, halign: 'left' },
-                    2: { cellWidth: 62, halign: 'center' },
-                    3: { cellWidth: 62, halign: 'center' },
-                    4: { cellWidth: 48, halign: 'center', fontStyle: 'bold' },
+                    0: { cellWidth: 39, halign: 'left', fontStyle: 'bold' },
+                    1: { cellWidth: 32, halign: 'left' },
+                    2: { cellWidth: 22, halign: 'center' },
+                    3: { cellWidth: 22, halign: 'center' },
+                    4: { cellWidth: 17, halign: 'center', fontStyle: 'bold' },
                 };
-                
-                // Dynamic columns logic
                 visibleWeeks.forEach((wk, i) => {
-                    colStyles[5 + i] = { cellWidth: 48, halign: 'center' };
+                    colStyles[5 + i] = { cellWidth: 17, halign: 'center' };
                 });
                 const totalColIdx = 5 + visibleWeeks.length;
-                colStyles[totalColIdx] = { cellWidth: 54, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] };
+                colStyles[totalColIdx] = { cellWidth: 19, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] };
 
                 autoTable(doc, {
                     head,
                     body,
-                    startY: 80,
-                    margin: { left: 36, right: 36 },
+                    startY: y,
+                    margin: { left: 13, right: 13, bottom: 18 },
                     styles: {
                         fontSize: 8.5,
-                        cellPadding: { top: 6, right: 8, bottom: 6, left: 8 },
+                        cellPadding: { top: 2, right: 3, bottom: 2, left: 3 },
                         lineColor: [226, 232, 240],
-                        lineWidth: 0.5,
+                        lineWidth: 0.3,
                         font: 'helvetica',
                         textColor: [30, 41, 59],
                         overflow: 'linebreak',
                     },
                     headStyles: {
-                        fillColor: [30, 64, 175],
+                        fillColor: [59, 169, 251],
                         textColor: [255, 255, 255],
                         fontStyle: 'bold',
-                        fontSize: 8.5,
+                        fontSize: 9,
                         halign: 'center',
-                        cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
+                        cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
                     },
                     columnStyles: colStyles,
-                    alternateRowStyles: { fillColor: [248, 250, 252] },
+                    alternateRowStyles: { fillColor: [240, 249, 255] },
                     rowStyles: { fillColor: [255, 255, 255] },
                     foot: [[
                         'TOTAL', '', '', '', '',
@@ -1309,7 +1520,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                         fontStyle: 'bold',
                         fontSize: 8.5,
                         halign: 'center',
-                        cellPadding: { top: 7, right: 8, bottom: 7, left: 8 },
+                        cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 },
                     },
                     didParseCell(data) {
                         if (data.section === 'foot' && data.column.index === 0) {
@@ -1319,21 +1530,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                     showFoot: 'lastPage',
                 });
 
-                // ── Page numbers ──
-                const totalPages = doc.internal.getNumberOfPages();
-                for (let i = 1; i <= totalPages; i++) {
-                    doc.setPage(i);
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(8);
-                    doc.setTextColor(148, 163, 184);
-                    doc.text(
-                        `Page ${i} of ${totalPages}`,
-                        pageWidth / 2,
-                        doc.internal.pageSize.getHeight() - 14,
-                        { align: 'center' }
-                    );
-                }
-
+                addPDFFooter(doc);
                 doc.save(`${fileName}.pdf`);
             } catch (error) {
                 console.error('PDF export failed:', error);
@@ -1345,6 +1542,25 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     const handleSave = async () => {
         setIsSaving(true);
         setSaveError('');
+
+        if (hasProjectWeeklyOverflow(localRows)) {
+            setSaveError(PROJECT_WEEKLY_HOURS_ERROR);
+            setIsSaving(false);
+            return;
+        }
+
+        // Pre-save validation for allocation percentage
+        const hasInvalidAllocation = localRows.some(row => {
+            const pct = Number(row.allocation_pct);
+            return isNaN(pct) || pct < 10 || pct > 100;
+        });
+
+        if (hasInvalidAllocation) {
+            setSaveError("Please fix invalid allocation percentages (must be 10% - 100%) before saving.");
+            setIsSaving(false);
+            return;
+        }
+
         try {
             const payload = {
                 resources: localRows.map((row) => ({
@@ -1400,6 +1616,11 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
         return () => clearTimeout(timer);
     }, [statusMessage]);
 
+    useEffect(() => {
+        setSaveError('');
+        setStatusMessage('');
+    }, [projectId]);
+
     const columnTotals = useMemo(() =>
         visibleWeeks.map(wk =>
             localRows.reduce((sum, r) => {
@@ -1437,9 +1658,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             </button>
                             <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
                                 <Users size={14} /> Import Resources
-                            </button>
-                            <button onClick={() => setIsImportFileModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-xs font-bold hover:bg-violet-100 transition-colors">
-                                <Upload size={14} /> Import from File
                             </button>
                             <button onClick={() => setIsDeleteAllModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors">
                                 <Trash2 size={14} /> Clear All Resources
@@ -1554,6 +1772,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                             const isLastRow = rowIdx === displayRows.length - 1;
                             const rowTotal = getRowTotal(row);
                             const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+
+                            // Business Logic for edits
+                            const pStatus = (project?.status || project?.project_status || '').toUpperCase();
+                            const isProjectNotStarted = pStatus === 'NOT STARTED' || pStatus === 'PENDING' || pStatus === '';
+                            const isProjectEnded = pStatus === 'ENDED' || pStatus === 'COMPLETED';
+                            
+                            const canEditStartDate = isEditing && (isProjectNotStarted || row.isNew);
+                            const canEditEndDate = isEditing && (!isProjectEnded);
+
                             return (
                                 <React.Fragment key={ridx}>
                                 <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
@@ -1589,14 +1816,20 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                             />
                                         ) : (
                                             row.employee_id ? (
-                                                <Link
-                                                    to={`/info/employee/${row.employee_id}`}
-                                                    className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
-                                                >
-                                                    {row.name || '-'}
-                                                </Link>
+                                                <div className="flex items-center gap-3">
+                                                    <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
+                                                    <Link
+                                                        to={`/info/employee/${row.employee_id}`}
+                                                        className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
+                                                    >
+                                                        {row.name || '-'}
+                                                    </Link>
+                                                </div>
                                             ) : (
-                                                row.name || '-'
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
+                                                    <span>{row.name || '-'}</span>
+                                                </div>
                                             )
                                         )}
                                     </td>
@@ -1616,14 +1849,14 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                        {isEditing ? (
+                                        {canEditStartDate ? (
                                             <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
                                             row.allocation_start_date || '-'
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                        {isEditing ? (
+                                        {canEditEndDate ? (
                                             <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                         ) : (
                                             row.allocation_end_date || '-'
@@ -1636,13 +1869,11 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     type="number"
                                                     min="0"
                                                     max="100"
-                                                    step="0.01"
-                                                    placeholder="0"
+                                                    step="any"
+                                                    placeholder="10"
                                                     value={row.allocation_pct === '' ? '' : (row.allocation_pct ?? getAllocationPct(row))}
                                                     onChange={(e) => handleRowChange(ridx, 'allocation_pct', e.target.value)}
-                                                    onBlur={(e) => {
-                                                        if (e.target.value === '') handleRowChange(ridx, 'allocation_pct', 0);
-                                                    }}
+                                                    onBlur={(e) => handleRowBlur(ridx, 'allocation_pct', e.target.value)}
                                                     className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                 />
                                             </div>
@@ -1687,24 +1918,14 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
                                                     <div className="flex flex-col items-center gap-1">
                                                         <input
                                                             type="number"
-                                                            min="0"
-                                                            max={Math.min(40, remainingAllowed)}
+                                                            min="1"
+                                                            max="40"
                                                             step="0.1"
-                                                            value={rawVal === '' ? '' : Math.min(40, safeHours)}
+                                                            value={rawVal === undefined || rawVal === '' ? '' : rawVal}
                                                             disabled={!isCellEditable}
                                                             onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                                                            onChange={(e) => {
-                                                                let val = Number(e.target.value);
-                                                                if (Number.isNaN(val)) {
-                                                                    handleRowChange(ridx, `week_${wk.yearWeek}`, '');
-                                                                    return;
-                                                                }
-                                                                const clamped = Math.max(0, Math.min(40, val, remainingAllowed));
-                                                                handleRowChange(ridx, `week_${wk.yearWeek}`, clamped);
-                                                            }}
-                                                            onBlur={(e) => {
-                                                                if (e.target.value === '') handleRowChange(ridx, `week_${wk.yearWeek}`, 0);
-                                                            }}
+                                                            onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
+                                                            onBlur={(e) => handleRowBlur(ridx, `week_${wk.yearWeek}`, e.target.value)}
                                                             className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${
                                                                 safeHours > WEEK_DEFAULT_HOURS
                                                                     ? 'border-rose-400 text-rose-600'
@@ -1878,24 +2099,40 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, rows, employees,
     );
 };
 
-const OngoingProjectInfoCard = ({ project, resources }) => {
+const calculateProjectProgress = (project) => {
+    const today = new Date();
+    const start = new Date(project.startDate || project.start_date || project.start);
+    const end = new Date(project.endDate || project.end_date || project.end);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const msDay = 1000 * 60 * 60 * 24;
+    const totalDuration = Math.max((end - start) / msDay, 1);
+    const elapsed = Math.max((today - start) / msDay, 0);
+    let pct = Math.round((elapsed / totalDuration) * 100);
+    if (today < start) pct = 0;
+    if (today > end) pct = 100;
+    return Math.min(Math.max(pct, 0), 100);
+};
+
+const getStatusBadgeClasses = (pct) => {
+    if (pct <= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    if (pct <= 60) return 'bg-amber-50 text-amber-700 border-amber-100';
+    return 'bg-rose-50 text-rose-700 border-rose-100';
+};
+
+const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const headcount = resources.length;
     const projectName = project?.name || project?.project_name || 'Untitled Project';
-    const projectTypeLabel = (project?.type || '').toLowerCase() === 'internal' ? 'Internal' : 'Client';
+    const projectTypeRaw = project?.type || project?.project_type || '';
+    const projectTypeLabel = projectTypeRaw.toLowerCase() === 'internal' ? 'Internal' : 'External';
     const projectStatus = project?.status || project?.project_status || 'Not Set';
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
-    const projectStatusKey = projectStatus.toLowerCase();
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
-    const statusClasses = projectStatusKey === 'completed'
-        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-        : projectStatusKey === 'in progress'
-            ? 'bg-blue-50 text-blue-700 border-blue-100'
-            : projectStatusKey === 'on hold'
-                ? 'bg-amber-50 text-amber-700 border-amber-100'
-                : 'bg-slate-50 text-slate-700 border-slate-200';
+    
+    const progressPct = calculateProjectProgress(project);
+    const statusClasses = getStatusBadgeClasses(progressPct);
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card">
             <div className="flex items-start gap-4 w-full md:w-auto min-w-0">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
                     {avatarLetter}
@@ -1911,67 +2148,37 @@ const OngoingProjectInfoCard = ({ project, resources }) => {
                         </span>
                         <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
                             <Briefcase size={14} className="text-slate-400" />
-                            {project.client || 'No client selected'}
+                            {project.client_name || project.client || 'No client selected'}
                         </span>
+                        <div className="ml-2 flex items-center gap-3">
+
+                            {headcount > 0 && (
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                                    {headcount} Team Members
+                                </span>
+                            )}
+                        </div>
                     </div>
+                    {/* PROJECT SKILLS DISPLAY */}
+                    {project.skills && project.skills.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                            {project.skills.map(s => (
+                                <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm">
+                                    {s}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-8 w-full md:w-auto pb-4 md:pb-0 border-b md:border-b-0 border-slate-50">
-                {projectStatusKey === 'in progress' && (
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                            SOW Status
-                        </span>
-                        <span
-                            className="text-[12px] font-semibold px-2.5 py-1 rounded-full border w-fit"
-                            style={{
-                                backgroundColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#ECFDF3' : '#FEF2F2',
-                                color: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#15803D' : '#B91C1C',
-                                borderColor: projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? '#BBF7D0' : '#FECACA'
-                            }}
-                        >
-                            {projectSubStatus
-                                ? (projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed' ? 'SOW Signed' : 'SOW Not Signed')
-                                : 'SOW - NA'}
-                        </span>
-                    </div>
-                )}
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <CalendarDays size={12} /> Timeline
-                    </span>
-                    <span className="text-sm font-bold text-slate-700">
-                        {project.startDate || project.start_date || 'N/A'} - {project.endDate || project.end_date || 'TBD'}
-                    </span>
-                </div>
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <Users size={12} /> Team Size
-                    </span>
-                    <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-black text-slate-800">{headcount}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Resources</span>
-                    </div>
-                </div>
-
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                        <Activity size={12} /> Billing
-                    </span>
-                    <span
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold border w-fit"
-                        style={{
-                            backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',
-                            color: project.billable === 'Billable' ? '#5B21B6' : '#374151',
-                            borderColor: project.billable === 'Billable' ? '#DDD6FE' : '#E5E7EB'
-                        }}
-                    >
-                        {project.type} ({project.billable || 'Non-Billable'})
-                    </span>
-                </div>
+            <div className="flex flex-col items-end gap-2">
+                <button 
+                    onClick={onEdit}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 group-hover/card:border-blue-100"
+                >
+                    <Pencil size={14} /> Edit Project Details
+                </button>
             </div>
         </div>
     );
@@ -2017,68 +2224,63 @@ const ConfirmDeleteAllModal = ({ isOpen, onCancel, onConfirm, isDeleting }) => {
 };
 
 const ProjectHealthCard = ({ project, resources }) => {
-    const totalWeeklyHours = resources.reduce((sum, r) => sum + Number(r.w4 || 0), 0);
+    // 1. SOW Status
+    const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
+    const isSowSigned = projectSubStatus === 'SOW_SIGNED' || projectSubStatus === 'Signed';
+    const sowStatusText = project.status === 'In Progress' 
+        ? (isSowSigned ? 'SOW Signed' : 'SOW Not Signed')
+        : 'SOW - NA';
+
+    // 2. Timeline
+    const startDate = project.start_date || project.startDate || 'TBD';
+    const endDate = project.end_date || project.endDate || 'TBD';
+    const timeline = `${startDate} - ${endDate}`;
+
+    // 3. Team Size
     const headcount = resources.length;
-    
-    // Theoretical 100% capacity for currently allocated team (assuming 40h/week each)
-    const totalCapacity = headcount * 40;
-    const utilizationPct = totalCapacity > 0 ? Math.round((totalWeeklyHours / totalCapacity) * 100) : 0;
+
+    // 4. Billing
+    const billingText = project.billable ? `${project.type} (${project.billable})` : (project.billing_type || project.billingType || 'Not Set');
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-100 flex flex-col justify-between min-h-[110px]">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Project Health</span>
-                    <Activity size={16} className="opacity-80" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">SOW Status</span>
+                    <FileText size={16} className="text-blue-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black flex items-baseline gap-1">
-                        On Track
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    </div>
-                    <p className="text-[10px] opacity-70 font-medium">Last updated today</p>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {sowStatusText}
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Headcount</span>
-                    <Users size={16} className="text-blue-500" />
+            <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-widest">Timeline</span>
+                    <CalendarDays size={16} className="text-indigo-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black text-slate-800">{headcount}</div>
-                    <div className="flex items-center text-[10px] text-emerald-600 font-bold">
-                        <span>Active Team Members</span>
-                    </div>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {timeline}
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weekly Effort</span>
-                    <Clock size={16} className="text-indigo-500" />
+            <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest">Team Size</span>
+                    <Users size={16} className="text-emerald-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-2xl font-black text-slate-800">{totalWeeklyHours}h</div>
-                    <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
-                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${utilizationPct}%` }} />
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">{utilizationPct}% Overall Utilization</p>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {headcount} Resources
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next Milestone</span>
-                    <Zap size={16} className="text-amber-500" />
+            <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100 shadow-sm flex flex-col justify-center h-[85px] transition-all hover:shadow-md">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-amber-600/70 uppercase tracking-widest">Billing</span>
+                    <CreditCard size={16} className="text-amber-500" />
                 </div>
-                <div className="mt-2">
-                    <div className="text-sm font-bold text-slate-800 truncate">Final Review Sync</div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                        <div className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-bold border border-amber-100">
-                            {project.endDate || project.end_date || 'TBD'}
-                        </div>
-                    </div>
+                <div className="text-sm font-black text-slate-800 truncate">
+                    {billingText}
                 </div>
             </div>
         </div>
@@ -2381,6 +2583,7 @@ const ProjectDetailsPage = () => {
     const { id } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
+    const { refreshKey } = useDataRefresh();
     const [project, setProject] = useState(() => location.state?.project || null);
     const [loading, setLoading] = useState(true);
     const [resources, setResources] = useState([]);
@@ -2388,6 +2591,7 @@ const ProjectDetailsPage = () => {
     const [rolesList, setRolesList] = useState([]);
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
+    const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
 
     const allocationStartBoundary = useMemo(() => {
         const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
@@ -2469,9 +2673,21 @@ const ProjectDetailsPage = () => {
         }
     };
 
+    const handleProjectSave = async (payload) => {
+        try {
+            const response = await axios.put(`/projects/${id}`, payload);
+            console.log('Project Update API Response:', response.data);
+            setIsEditPanelOpen(false);
+            loadProjectData();
+        } catch (error) {
+            console.error('Project Update Error:', error);
+            throw error;
+        }
+    };
+
     useEffect(() => {
         if (id) loadProjectData();
-    }, [id]);
+    }, [id, refreshKey]);
 
     // Utilization counts and filters were removed per user request to replace them with View Tabs
 
@@ -2491,16 +2707,16 @@ const ProjectDetailsPage = () => {
     }
 
     return (
-        <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30">
+        <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
             <div className="mb-5">
                 <button
                     onClick={() => navigate('/info/projects')}
                     className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mb-4 w-fit"
                 >
-                    <ArrowLeft size={16} /> Back to Dashboard
+                    <ArrowLeft size={16} /> Back to Project Overview
                 </button>
 
-                <OngoingProjectInfoCard project={project} resources={resources} />
+                <OngoingProjectInfoCard project={project} resources={resources} onEdit={() => setIsEditPanelOpen(true)} />
             </div>
 
             <div className="flex flex-col gap-5">
@@ -2557,6 +2773,7 @@ const ProjectDetailsPage = () => {
                         projectId={id} 
                         projectStart={project.start_date}
                         projectEnd={project.end_date}
+                        project={project}
                         rows={resources} 
                         employees={employees} 
                         rolesList={rolesList} 
@@ -2570,7 +2787,7 @@ const ProjectDetailsPage = () => {
                 </div>
 
                 {/* Scope & Commercial side-by-side below allocation */}
-                {false && (
+                <div>
                     <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div>
                             <ScopeSection project={project} onUpdate={loadProjectData} />
@@ -2579,8 +2796,15 @@ const ProjectDetailsPage = () => {
                             <CommercialSection project={project} onUpdate={loadProjectData} />
                         </div>
                     </div>
-                )}
+                </div>
             </div>
+
+            <EditProjectPanel 
+                isOpen={isEditPanelOpen}
+                onClose={() => setIsEditPanelOpen(false)}
+                project={project}
+                onSave={handleProjectSave}
+            />
         </div>
     );
 };

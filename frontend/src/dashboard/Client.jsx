@@ -2,8 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Plus, FileText, ArrowLeft, Lock } from 'lucide-react';
 
 // ── MASK: remove this block to restore the Client Dashboard ──────────────────
-const ClientMask = () => (
-    <div className="flex h-full w-full items-center justify-center bg-slate-50">
+const ClientMask = ({ onBack }) => (
+    <div className="flex h-full w-full items-center justify-center bg-slate-50 relative">
+        {onBack && (
+            <button 
+                onClick={onBack}
+                className="absolute top-6 left-6 p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-slate-200 shadow-sm group"
+                title="Go Back"
+            >
+                <ArrowLeft size={24} className="text-slate-400 group-hover:text-slate-600" />
+            </button>
+        )}
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-16 py-14 shadow-sm text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
                 <Lock size={28} className="text-slate-400" />
@@ -144,24 +153,22 @@ const Client = () => {
   }
 
   // ── MASK: replace `return <ClientMask />;` with the block below to restore ──
-  return <ClientMask />;
+  return <ClientMask onBack={() => navigate(-1)} />;
   /* eslint-disable no-unreachable */
   return (
     <div className="p-6 space-y-6 animate-in fade-in duration-500 pb-20 relative min-h-screen">
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          {location.state?.showBack && (
-            <button
+          <button
               onClick={() => navigate(-1)}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
               title="Go Back"
-            >
+          >
               <ArrowLeft size={20} className="text-slate-600" />
-            </button>
-          )}
+          </button>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Strategic Partners</h1>
+            <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Client Dashboard</h1>
             <p className="text-slate-400 text-sm font-normal mt-1">Manage client relationships, track budgets, and monitor project health</p>
           </div>
         </div>

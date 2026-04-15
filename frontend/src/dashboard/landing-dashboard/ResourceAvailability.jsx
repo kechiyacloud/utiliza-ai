@@ -1,8 +1,9 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const ResourceAvailability = ({ availability }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     if (!availability) return null;
 
     return (
@@ -28,8 +29,16 @@ const ResourceAvailability = ({ availability }) => {
                                 key={item.id}
                                 className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
                                 onClick={() => {
-                                    sessionStorage.setItem('returnToResourceAvailability', 'true');
-                                    navigate(`/info/employee/${item.id}`);
+                                    navigate(`/info/employee/${item.id}`, {
+                                        state: {
+                                            from: {
+                                                pathname: location.pathname,
+                                                search: location.search,
+                                                hash: location.hash,
+                                                state: location.state || null
+                                            }
+                                        }
+                                    });
                                 }}
                             >
                                 <td className="py-3.5 flex items-center gap-3">

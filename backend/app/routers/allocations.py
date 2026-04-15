@@ -24,57 +24,68 @@ def allocation_metrics(
         params = []
         
         if department and department != 'All Departments':
-            where_clauses.append("em.department = %s")
-            params.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            where_clauses.append("em.department = ANY(%s)")
+            params.append(dept_list)
         if location and location != 'All Locations':
             where_clauses.append("em.location = %s")
             params.append(location)
 
-        # 1. Total Resources
-        tr_query = "SELECT COUNT(*) FROM employee_master em LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id"
+        # 1. Total Resources (Active employees only)
+        tr_query = "SELECT COUNT(*) FROM employee_master em WHERE em.date_of_resign IS NULL"
         tr_where = list(where_clauses)
+        tr_params = list(params)
+        
         if resource_type == 'Billable Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
+            tr_params.append('%billab%')
         elif resource_type == 'Internal Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND LOWER(pa.project_tags) = 'non-billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
+            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
+            tr_params.append('%non%billab%')
         elif resource_type == 'Bench Strength':
             tr_where.append("COALESCE((SELECT SUM(pa3.allocation_percentage) FROM projects_allocation pa3 WHERE pa3.employee_id = em.employee_id AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
             
         if tr_where:
-            tr_query += " WHERE " + " AND ".join(tr_where)
-        cur.execute(tr_query, tuple(params))
+            tr_query += " AND " + " AND ".join(tr_where)
+        cur.execute(tr_query, tuple(tr_params))
         total_resources = cur.fetchone()[0]
 
-        # 2. Billable Count
+        # 2. Billable Count (Headcount with Billable tag)
         billable_query = """
             SELECT COUNT(DISTINCT pa.employee_id)
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
-            WHERE LOWER(pa.project_tags) = 'billable'
+            WHERE pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND em.date_of_resign IS NULL
         """
         b_where = list(where_clauses)
+        b_params = ['%billab%', '%non%'] + list(params)
+        
         if resource_type == 'Bench Strength':
              b_where.append("1=0")
         if b_where:
             billable_query += " AND " + " AND ".join(b_where)
-        cur.execute(billable_query, tuple(params))
+        cur.execute(billable_query, tuple(b_params))
         billable_count = cur.fetchone()[0]
 
-        # 3. Non-Billable Count
+        # 3. Non-Billable Count (Headcount with Non-Billable tag)
         non_billable_query = """
             SELECT COUNT(DISTINCT pa.employee_id)
             FROM projects_allocation pa
-            JOIN employee_master em pa.employee_id = em.employee_id
-            WHERE LOWER(pa.project_tags) = 'non-billable'
+            JOIN employee_master em ON pa.employee_id = em.employee_id
+            WHERE pa.project_tags ILIKE %s
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND em.date_of_resign IS NULL
         """
         nb_where = list(where_clauses)
+        nb_params = ['%non%billab%'] + list(params)
+        
         if resource_type == 'Bench Strength':
              nb_where.append("1=0")
         if nb_where:
             non_billable_query += " AND " + " AND ".join(nb_where)
-        cur.execute(non_billable_query, tuple(params))
+        cur.execute(non_billable_query, tuple(nb_params))
         non_billable_count = cur.fetchone()[0]
 
         # 4. Bench Strength
@@ -96,15 +107,19 @@ def allocation_metrics(
         if resource_type == 'Bench Strength':
              avg_utilization = 0
         else:
-            util_query = """
-                SELECT COALESCE(SUM(pa.allocation_percentage), 0) / NULLIF((SELECT COUNT(*) FROM employee_master em {0}), 0)
-                FROM projects_allocation pa
-                JOIN employee_master em ON pa.employee_id = em.employee_id
-                WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-            """.format(" WHERE " + " AND ".join(where_clauses) if where_clauses else "")
-            
-            # Need params twice for SUM and for NULLIF subquery
-            cur.execute(util_query, tuple(params + params))
+            # Use a robust LEFT JOIN to accurately calculate average utilization 
+            # across the filtered employee set, ensuring numerator and denominator stay in sync.
+            util_where_clause = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+            util_query = f"""
+                SELECT 
+                    COALESCE(SUM(pa.allocation_percentage), 0)::FLOAT / 
+                    NULLIF(COUNT(DISTINCT em.employee_id), 0)
+                FROM employee_master em
+                LEFT JOIN projects_allocation pa ON em.employee_id = pa.employee_id 
+                    AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                {util_where_clause}
+            """
+            cur.execute(util_query, tuple(params))
             avg_utilization_val = cur.fetchone()[0]
             avg_utilization = round(float(avg_utilization_val or 0), 2)
 
@@ -117,15 +132,21 @@ def allocation_metrics(
                     SELECT pa.employee_id
                     FROM projects_allocation pa
                     JOIN employee_master em ON pa.employee_id = em.employee_id
-                    WHERE LOWER(pa.project_tags) = 'billable'
+                    WHERE pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s
+
                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                     {0}
                     GROUP BY pa.employee_id
                     HAVING SUM(pa.allocation_percentage) > 100
                 ) overalloc
             """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
-            cur.execute(overalloc_query, tuple(params))
-            overallocated = cur.fetchone()[0]
+            over_params = list(params)
+            over_params.insert(0, '%billable%')
+            over_params.insert(1, '%non%billab%')
+            cur.execute(overalloc_query, tuple(over_params))
+
+            row = cur.fetchone()
+            overallocated = row[0] if row else 0
 
         return {
             "totalResources": {"value": total_resources, "label": "Total Resources"},
@@ -162,8 +183,8 @@ def allocation_projects(
             SELECT
                 pa.project_id,
                 p.project_name,
-                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS billable_count,
-                COUNT(DISTINCT CASE WHEN LOWER(pa.project_tags) = 'non-billable' AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS non_billable_count
+                COUNT(DISTINCT CASE WHEN (pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s) AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS billable_count,
+                COUNT(DISTINCT CASE WHEN pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS non_billable_count
             FROM projects_allocation pa
             JOIN projects p ON pa.project_id = p.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
@@ -173,16 +194,17 @@ def allocation_projects(
         params = []
         
         if department and department != 'All Departments':
-            where_clauses.append("em.department = %s")
-            params.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            where_clauses.append("em.department = ANY(%s)")
+            params.append(dept_list)
         if location and location != 'All Locations':
             where_clauses.append("em.location = %s")
             params.append(location)
             
         if resource_type == 'Billable Only':
-            where_clauses.append("LOWER(pa.project_tags) = 'billable'")
+            where_clauses.append("(pa.project_tags ILIKE '%%billable%%' AND pa.project_tags NOT ILIKE '%%non%%billable%%')")
         elif resource_type == 'Internal Only':
-            where_clauses.append("LOWER(pa.project_tags) = 'non-billable'")
+            where_clauses.append("pa.project_tags ILIKE '%%non%%billable%%'")
         elif resource_type == 'Bench Strength':
             where_clauses.append("COALESCE((SELECT SUM(pa4.allocation_percentage) FROM projects_allocation pa4 WHERE pa4.employee_id = em.employee_id AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
 
@@ -192,7 +214,9 @@ def allocation_projects(
         query += " GROUP BY pa.project_id, p.project_name"
         query += " ORDER BY p.project_name"
         
-        cur.execute(query, tuple(params))
+        proj_params = ['%billable%', '%non%billab%', '%non%billab%'] + list(params)
+        cur.execute(query, tuple(proj_params))
+
         rows = cur.fetchall()
 
         return [
@@ -281,8 +305,9 @@ def organization_utilization(
         where_clauses = []
         params = []
         if department and department != 'All Departments':
-            where_clauses.append("em.department = %s")
-            params.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            where_clauses.append("em.department = ANY(%s)")
+            params.append(dept_list)
         if location and location != 'All Locations':
             where_clauses.append("em.location = %s")
             params.append(location)
@@ -310,8 +335,9 @@ def organization_utilization(
         where_clauses_b = []
         params_b = []
         if department and department != 'All Departments':
-            where_clauses_b.append("em.department = %s")
-            params_b.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            where_clauses_b.append("em.department = ANY(%s)")
+            params_b.append(dept_list)
         if location and location != 'All Locations':
             where_clauses_b.append("em.location = %s")
             params_b.append(location)
@@ -393,9 +419,9 @@ def department_allocation_breakdown(
                     em.employee_id,
                     em.department,
                     CASE
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%%billable%%' AND LOWER(pa.project_tags) NOT LIKE '%%non%%')) THEN 1
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND LOWER(pa.project_tags) LIKE '%%nonbillable%%')) THEN 2
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND LOWER(pa.project_tags) LIKE '%%billable%%' AND LOWER(pa.project_tags) NOT LIKE '%%non%%')) THEN 3
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 1
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 2
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 3
                         ELSE 4
                     END as status_rank
                 FROM employee_master em
@@ -410,9 +436,10 @@ def department_allocation_breakdown(
             FROM EmpStatus
             GROUP BY department
             ORDER BY department
-        """.format(" AND ".join(where_clauses))
+        """.format(" AND ".join(where_clauses) if where_clauses else "TRUE")
 
-        cur.execute(query, tuple(params))
+        chart_params = ['%billab%', '%non%', '%non%billab%', '%billab%', '%non%'] + list(params)
+        cur.execute(query, tuple(chart_params))
         rows = cur.fetchall()
 
         return [
@@ -461,8 +488,9 @@ def get_forecast_bench(
         """
         params = []
         if department and department != 'All Departments':
-            query += " AND em.department = %s"
-            params.append(department)
+            dept_list = [d.strip() for d in department.split(',')]
+            query += " AND em.department = ANY(%s)"
+            params.append(dept_list)
         if location and location != 'All Locations':
             query += " AND em.location = %s"
             params.append(location)

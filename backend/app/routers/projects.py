@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 import uuid
+import json
 from typing import Dict, List, Optional
 
 import psycopg2
@@ -36,6 +37,7 @@ class ProjectUpdate(BaseModel):
     client_id: Optional[str] = None
     partner_id: Optional[str] = None
     partner: Optional[str] = None
+    department_id: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     sub_status: Optional[str] = None
@@ -124,6 +126,7 @@ class ProjectCreate(BaseModel):
     end_date: Optional[date] = None
     team_members: List[TeamMemberCreate] = []
     sub_status: Optional[str] = None
+    skills: List[str] = []
 
 
 VALID_PROJECT_TYPES = {"client", "internal", "partner", "poc"}
@@ -140,14 +143,14 @@ PROJECT_STATUS_ALIASES = {
     "on hold": "On Hold",
     "delayed": "On Hold",
     "blocked": "On Hold",
-    "closed": "Completed",
-    "completed": "Completed",
-    "done": "Completed",
-    "ended": "Completed",
-    "end": "Completed",
-    "finished": "Completed",
+    "closed": "COMPLETED",
+    "completed": "COMPLETED",
+    "done": "COMPLETED",
+    "ended": "COMPLETED",
+    "end": "COMPLETED",
+    "finished": "COMPLETED",
 }
-VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "Completed"}
+VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "COMPLETED"}
 VALID_SUB_STATUSES = {"SOW_SIGNED": "SOW Signed", "SOW_NOT_SIGNED": "SOW Not Signed"}
 PROJECT_TYPE_ALIASES = {
     "client": "Client",
@@ -181,7 +184,13 @@ def _parse_optional_date(value: Optional[str]):
         raise HTTPException(status_code=422, detail=f"Invalid date format '{value}'. Expected YYYY-MM-DD.") from exc
 
 
-def _normalize_project_status(value: Optional[str], strict: bool = True) -> Optional[str]:
+def _normalize_project_status(value: Optional[str], end_date: Optional[date] = None, strict: bool = True) -> Optional[str]:
+    from datetime import date as dt_date
+    
+    # 1. Date-based completion check (yesterday/past date logic)
+    if end_date and end_date < dt_date.today():
+        return "COMPLETED"
+
     normalized = _normalize_text(value)
     if not normalized:
         if strict:
@@ -190,13 +199,15 @@ def _normalize_project_status(value: Optional[str], strict: bool = True) -> Opti
 
     key = " ".join(normalized.lower().split())
     canonical = PROJECT_STATUS_ALIASES.get(key)
-    if canonical:
-        return canonical
-
-    if strict:
-        allowed = ", ".join(sorted(VALID_PROJECT_STATUSES))
-        raise HTTPException(status_code=422, detail=f"Project status must be one of: {allowed}.")
-    return normalized
+    
+    res = canonical if canonical else (normalized if not strict else "In Progress")
+    
+    # 2. Date-based status override
+    # If project end_date is today or in future, it CANNOT be COMPLETED
+    if end_date and end_date >= dt_date.today() and res == "COMPLETED":
+        return "In Progress"
+        
+    return res
 
 
 def _normalize_sub_status(value: Optional[str], strict: bool = False) -> Optional[str]:
@@ -374,6 +385,12 @@ def _available_capacity_pct(existing_weekly_load: dict) -> int:
 
 
 def _validate_capacity(existing_weekly_load: dict, new_weekly_load: dict):
+    """
+    Validate that the new allocation itself does not exceed 40 hrs/week per project.
+    Cross-project totals are allowed to exceed 40 hrs — an employee can work on
+    multiple projects simultaneously (e.g. 50% Project A + 50% Project B + 25% Project C).
+    The 40 hr cap here guards against a single project being allocated more than 100%.
+    """
     today = date.today()
     today_iso = today.isocalendar()
     current_week = (today_iso[0], today_iso[1])
@@ -382,11 +399,11 @@ def _validate_capacity(existing_weekly_load: dict, new_weekly_load: dict):
         # Skip past weeks — historical data cannot be changed; only future capacity matters
         if wk < current_week:
             continue
-        total = hours + existing_weekly_load.get(wk, 0)
-        if total > HOURS_PER_FTE + 1e-6:
-            over_weeks.append(f"{wk[0]}-W{wk[1]:02d} ({total}h)")
+        # Only check the new project's own allocation — NOT the cross-project sum
+        if hours > HOURS_PER_FTE + 1e-6:
+            over_weeks.append(f"{wk[0]}-W{wk[1]:02d} ({hours}h)")
     if over_weeks:
-        raise HTTPException(status_code=422, detail="Max allowed is 40 hrs/week")
+        raise HTTPException(status_code=422, detail="A single project allocation cannot exceed 40 hrs/week (100%).")
 
 
 def _capacity_snapshot(cur, employee_ids: list):
@@ -750,47 +767,78 @@ def _build_simple_pdf(lines: List[str]) -> bytes:
 
 
 @router.get("/overview")
-def projects_overview():
+def projects_overview(department: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM projects")
+        where_clause = ""
+        join_clause = ""
+        params = []
+        
+        if department and department.lower() != 'all':
+            join_clause = """
+                JOIN projects_allocation pa ON p.project_id = pa.project_id
+                JOIN employee_master em ON pa.employee_id = em.employee_id
+            """
+            where_clause = "AND em.department = %s"
+            params = [department]
+
+        # 1. Total Projects
+        cur.execute(f"SELECT COUNT(DISTINCT p.project_id) FROM projects p {join_clause} WHERE 1=1 {where_clause}", tuple(params))
         total = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('live', 'in progress', 'running', 'active', 'ongoing')
-        """)
+        # 2. Ongoing (Exclude Not Started/Upcoming and projects that have ended)
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
+              AND LOWER(p.project_status) NOT IN ('not started', 'planned', 'upcoming')
+              AND (p.start_date IS NULL OR p.start_date <= CURRENT_DATE)
+            {where_clause}
+        """, tuple(params))
         ongoing = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('closed', 'completed', 'done', 'ended', 'finished', 'end')
-        """)
+        # 3. Completed (Only if end_date has passed)
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE p.end_date < CURRENT_DATE
+            {where_clause}
+        """, tuple(params))
         completed = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_status) IN ('not started', 'planned', 'upcoming') OR start_date > CURRENT_DATE
-        """)
+        # 4. Upcoming (Status based OR start date in future)
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
+              AND (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
+            {where_clause}
+        """, tuple(params))
         upcoming = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) IN ('internal', 'poc')
-        """)
+        # 5. Internal
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_type) IN ('internal', 'poc')
+            {where_clause}
+        """, tuple(params))
         internal = cur.fetchone()[0]
 
-        cur.execute("""
-            SELECT COUNT(*) FROM projects
-            WHERE LOWER(project_type) = 'client'
-        """)
-        client = cur.fetchone()[0]
+        # 6. Client
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            {join_clause}
+            WHERE LOWER(p.project_type) IN ('external', 'client')
+            {where_clause}
+        """, tuple(params))
+        external = cur.fetchone()[0]
 
         return {
             "total_projects": total,
             "internal_projects": internal,
-            "client_projects": client,
+            "external_projects": external,
             "ongoing_projects": ongoing,
             "upcoming_projects": upcoming,
             "completed_projects": completed,
@@ -804,58 +852,85 @@ def projects_overview():
 
 
 @router.get("/list")
-def projects_list():
+def projects_list(department: Optional[str] = None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        where_clause = ""
+        params = []
+        if department and department.lower() != 'all':
+            where_clause = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_dept
+                    JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
+                    WHERE pa_dept.project_id = p.project_id
+                      AND em_dept.department = %s
+                )
+            """
+            params = [department]
+
+        cur.execute(f"""
             SELECT
                 p.project_id,
                 p.project_name,
                 p.project_status,
-                p.sub_status,
                 p.project_type,
                 p.start_date,
                 p.end_date,
-                COUNT(DISTINCT pa.employee_id) AS resource_count,
-                STRING_AGG(DISTINCT em.employee_name, ', ') AS resource_names,
+                (
+                    SELECT COUNT(DISTINCT pa_all.employee_id)
+                    FROM projects_allocation pa_all
+                    WHERE pa_all.project_id = p.project_id
+                      AND (pa_all.allocation_end_date IS NULL OR pa_all.allocation_end_date >= CURRENT_DATE)
+                ) AS resource_count,
+                (
+                    SELECT JSON_AGG(json_row)
+                    FROM (
+                        SELECT JSON_BUILD_OBJECT('name', em2.employee_name, 'id', em2.employee_id, 'photo_url', em2.photo_url) AS json_row
+                        FROM projects_allocation pa2
+                        JOIN employee_master em2 ON pa2.employee_id = em2.employee_id
+                        WHERE pa2.project_id = p.project_id
+                          AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                        ORDER BY pa2.allocation_percentage DESC
+                        LIMIT 6
+                    ) AS limited_members
+                ) AS team_members,
                 c.client_name,
                 pr.partner_name,
                 p.billable,
                 p.client_id,
                 p.partner_id
             FROM projects p
-            LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-            LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
-            GROUP BY p.project_id, p.project_name, p.project_status, p.sub_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
+            {where_clause}
+            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
             ORDER BY p.start_date DESC NULLS LAST
-        """)
-        rows = cur.fetchall()
+        """, tuple(params))
+        results = cur.fetchall()
 
         return [
             {
                 "project_id": r[0],
                 "project_name": r[1],
                 "status": _normalize_project_status(r[2], strict=False) if r[2] else "Unknown",
-                "sub_status": _normalize_sub_status(r[3], strict=False),
-                "type": _normalize_project_type(r[4], strict=False) if r[4] else "Unknown",
-                "start_date": r[5],
-                "end_date": r[6],
-                "resource_count": r[7],
-                "resource_names": r[8] if r[8] else "",
-                "client_name": r[9],
-                "partner_name": r[10],
-                "billable": r[11] if r[11] else "Unknown",
-                "client_id": r[12],
-                "partner_id": r[13],
+                "sub_status": None,
+                "type": _normalize_project_type(r[3], strict=False) if r[3] else "Unknown",
+                "start_date": r[4],
+                "end_date": r[5],
+                "resource_count": r[6],
+                "team_members": r[7] if r[7] else [],
+                "client_name": r[8],
+                "partner_name": r[9],
+                "billable": r[10] if r[10] else "Unknown",
+                "client_id": r[11],
+                "partner_id": r[12],
             }
-            for r in rows
+            for r in results
         ]
     except Exception as e:
         print("PROJECTS LIST ERROR:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:
         cur.close()
         release_db_connection(conn)
@@ -868,10 +943,11 @@ def get_project_details(project_id: str):
     try:
         cur.execute("""
             SELECT 
-                p.project_id, p.project_name, p.project_status, p.sub_status, p.billable, p.start_date, p.end_date,
+                p.project_id, p.project_name, p.project_status, p.billable, p.start_date, p.end_date,
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
-                ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes
+                ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
+                p.client_id, p.partner_id, p.project_type
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
@@ -886,22 +962,25 @@ def get_project_details(project_id: str):
         return {
             "project_id": row[0],
             "project_name": row[1],
-            "project_status": _normalize_project_status(row[2], strict=False) if row[2] else None,
-            "sub_status": _normalize_sub_status(row[3], strict=False),
-            "billable": row[4],
-            "start_date": row[5],
-            "end_date": row[6],
-            "client_name": row[7],
-            "partner_name": row[8],
-            "budget": row[9] or "$0",
-            "billing_type": row[10] or "Not Set",
-            "contract_type": row[11] or "Not Set",
-            "revenue_model": row[12] or "Not Set",
-            "commercial_notes": row[13] or "No notes.",
-            "objective": row[14] or "Not defined.",
-            "deliverables": row[15] or "No deliverables listed.",
-            "milestones": row[16] or "No milestones listed.",
-            "timeline_notes": row[17] or "No timeline notes.",
+            "status": _normalize_project_status(row[2], strict=False) if row[2] else None,
+            "sub_status": None,
+            "billable": row[3],
+            "start_date": row[4],
+            "end_date": row[5],
+            "client_name": row[6],
+            "partner_name": row[7],
+            "budget": row[8] or "$0",
+            "billing_type": row[9] or "Not Set",
+            "contract_type": row[10] or "Not Set",
+            "revenue_model": row[11] or "Not Set",
+            "commercial_notes": row[12] or "No notes.",
+            "objective": row[13] or "Not defined.",
+            "deliverables": row[14] or "No deliverables listed.",
+            "milestones": row[15] or "No milestones listed.",
+            "timeline_notes": row[16] or "No timeline notes.",
+            "client_id": row[17],
+            "partner_id": row[18],
+            "type": row[19]
         }
     finally:
         cur.close()
@@ -928,18 +1007,28 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
             WHERE project_id = %s
         """, (start_date_val, end_date_val, project_id))
 
-        # Replace commercial details
-        cur.execute("DELETE FROM project_commercials WHERE project_id = %s", (project_id,))
+        # Partial update for commercial details
+        # We use INSERT ON CONFLICT to ensure the row exists, and COALESCE to keep existing data if current is None
         cur.execute("""
             INSERT INTO project_commercials (project_id, budget, billing_type, contract_type, revenue_model, commercial_notes)
             VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (project_id) DO UPDATE SET
+                budget = COALESCE(EXCLUDED.budget, project_commercials.budget),
+                billing_type = COALESCE(EXCLUDED.billing_type, project_commercials.billing_type),
+                contract_type = COALESCE(EXCLUDED.contract_type, project_commercials.contract_type),
+                revenue_model = COALESCE(EXCLUDED.revenue_model, project_commercials.revenue_model),
+                commercial_notes = COALESCE(EXCLUDED.commercial_notes, project_commercials.commercial_notes)
         """, (project_id, details.budget, details.billing_type, details.contract_type, details.revenue_model, details.commercial_notes))
         
-        # Replace scope details
-        cur.execute("DELETE FROM project_scopes WHERE project_id = %s", (project_id,))
+        # Partial update for scope details
         cur.execute("""
             INSERT INTO project_scopes (project_id, objective, deliverables, milestones, timeline_notes)
             VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (project_id) DO UPDATE SET
+                objective = COALESCE(EXCLUDED.objective, project_scopes.objective),
+                deliverables = COALESCE(EXCLUDED.deliverables, project_scopes.deliverables),
+                milestones = COALESCE(EXCLUDED.milestones, project_scopes.milestones),
+                timeline_notes = COALESCE(EXCLUDED.timeline_notes, project_scopes.timeline_notes)
         """, (project_id, details.objective, details.deliverables, details.milestones, details.timeline_notes))
         
         conn.commit()
@@ -974,7 +1063,8 @@ def project_resources(project_id: str):
                 wa.allocation_year,
                 wa.week_number,
                 COALESCE(wa.allocated_hours, 0),
-                pa.project_tags
+                pa.project_tags,
+                em.photo_url
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
             LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
@@ -1015,6 +1105,7 @@ def project_resources(project_id: str):
                     "allocation_end_date": str(r[6]) if r[6] else None,
                     "allocation_percentage": r[7] or 0,
                     "billable_shadow": billable_shadow,
+                    "photo_url": r[12],
                     "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
                     "weekly_hours": {},
                     "_has_weekly_data": False,
@@ -1292,11 +1383,11 @@ def update_project(project_id: str, updates: ProjectUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT project_status, sub_status FROM projects WHERE project_id = %s", (project_id,))
+        cur.execute("SELECT project_status FROM projects WHERE project_id = %s", (project_id,))
         current_row = cur.fetchone()
         if not current_row:
             raise HTTPException(status_code=404, detail="Project not found")
-        current_status, current_sub_status = current_row
+        current_status = current_row[0]
 
         payload = _model_payload(updates)
         if not payload:
@@ -1311,9 +1402,8 @@ def update_project(project_id: str, updates: ProjectUpdate):
         sub_status_value = payload.get("sub_status")
         normalized_status = None
         normalized_sub_status = None
-        if status_value is not None or sub_status_value is not None:
-            base_status = status_value if status_value is not None else current_status
-            normalized_status, normalized_sub_status = _validate_status_and_substatus(base_status, sub_status_value if sub_status_value is not None else current_sub_status)
+        if status_value is not None:
+            normalized_status, _ = _validate_status_and_substatus(status_value, None)
 
         updates_map = {}
 
@@ -1321,6 +1411,8 @@ def update_project(project_id: str, updates: ProjectUpdate):
             project_name = _normalize_text(payload["project_name"])
             if not project_name:
                 raise HTTPException(status_code=422, detail="Project name cannot be empty.")
+            if len(project_name) > 255:
+                raise HTTPException(status_code=422, detail="Project name cannot exceed 255 characters.")
             updates_map["project_name"] = project_name
 
         if "project_status" in payload:
@@ -1360,16 +1452,26 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if not updates_map:
             raise HTTPException(status_code=400, detail="No valid project fields were provided.")
 
+        print(f"UPDATING PROJECT {project_id} WITH:", updates_map)
         fields = [f"{col} = %s" for col in updates_map.keys()]
         values = list(updates_map.values())
         values.append(project_id)
 
-        # Debugging: final query and values
-        print("UPDATE projects SET", ", ".join(fields), "WHERE project_id = %s", "VALUES:", values)
-
         cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
         conn.commit()
-        return {"message": "Project updated successfully"}
+
+        # Verification step as requested
+        cur.execute("SELECT project_name, project_status FROM projects WHERE project_id = %s", (project_id,))
+        verified_row = cur.fetchone()
+        new_name = verified_row[0] if verified_row else "NOT FOUND"
+        new_status = verified_row[1] if verified_row else "NOT FOUND"
+        print(f"DB verification for project {project_id}: Name='{new_name}', Status='{new_status}'")
+
+        return {
+            "message": "Project updated successfully",
+            "updated_fields": updates_map,
+            "current_name": new_name
+        }
     except HTTPException:
         conn.rollback()
         raise

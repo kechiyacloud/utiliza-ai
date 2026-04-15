@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDataRefresh } from '../../context';
 import * as XLSX from 'xlsx';
 import {
     X, Upload, Download, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
@@ -36,6 +37,7 @@ const STEP_LABELS = ['Scope', 'Period', 'Template', 'Upload', 'Review'];
 const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
+    const { triggerRefresh } = useDataRefresh();
 
     // Step 1
     const [importScope, setImportScope] = useState(null);   // "department" | "project"
@@ -187,6 +189,7 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
             });
             onClose();
             onImportSuccess();
+            triggerRefresh(); // trigger auto-refresh for allocations/dashboard
         } catch (err) {
             setReviewError(err.response?.data?.detail || err.message || 'Save failed. Please try again.');
         } finally {

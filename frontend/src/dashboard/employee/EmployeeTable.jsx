@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronRight, Search, Filter, SquarePen, Trash2 } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
@@ -11,6 +11,8 @@ const AllocationBar = ({ percentage, status }) => {
     const s = (status || '').toLowerCase().trim();
     let color = 'bg-emerald-500'; // default: Allocated
     if (s.includes('notice')) color = 'bg-red-400';
+    else if (s.includes('pip')) color = 'bg-yellow-400';
+    else if (s.includes('resign')) color = 'bg-gray-300';
     else if (s === 'bench') color = 'bg-orange-400';
     else if (s === 'partially bench') color = 'bg-blue-400';
     else if (s === 'partially allocated') color = 'bg-purple-400';
@@ -48,11 +50,12 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, filters, searchValue, onSearchChange, onFilterClick, contextLabel = 'Employee' }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, filters, searchValue, onSearchChange, onFilterClick }) => {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isSortOpen, setIsSortOpen] = useState(false);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
         const saved = sessionStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
@@ -111,11 +114,15 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable'; break;
                     case 'bench':
                         matchesCardFilter = (emp.employee_allocations || 0) <= 0; break;
-                    case 'notice':
-                        matchesCardFilter = emp.employee_status?.toLowerCase().includes('notice'); break;
-                    case 'new-joiner':
+                    case 'notice': {
+                        const s = (emp.employee_status || '').toLowerCase();
+                        matchesCardFilter = s.includes('notice') || s.includes('pip'); break;
+                    }
+                    case 'new-joiner': {
                         const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo; break;
+                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo; 
+                        break;
+                    }
                     case 'top-performer':
                         matchesCardFilter = emp.employee_allocations >= 100; break;
                     default: matchesCardFilter = true;
@@ -127,9 +134,67 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             matchesSkills && matchesCardFilter && matchesStatusTag && matchesDesignation;
     });
 
-    const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+    // Sort State with "Long Term Memory" (localStorage)
+    const [sortConfig, setSortConfig] = useState(() => {
+        const saved = localStorage.getItem('employee_sort_config');
+        return saved ? JSON.parse(saved) : { key: 'employee_name', direction: 'asc', label: 'Name (A-Z)' };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('employee_sort_config', JSON.stringify(sortConfig));
+    }, [sortConfig]);
+
+    const sortOptions = [
+        { key: 'employee_name', direction: 'asc', label: 'Name (A-Z)' },
+        { key: 'employee_name', direction: 'desc', label: 'Name (Z-A)' },
+        { key: 'employee_allocations', direction: 'desc', label: 'Allocation: High-to-Low' },
+        { key: 'employee_allocations', direction: 'asc', label: 'Allocation: Low-to-High' },
+        { key: 'date_of_joining', direction: 'desc', label: 'Joined: Newest First' },
+        { key: 'date_of_joining', direction: 'asc', label: 'Joined: Oldest First' }
+    ];
+
+    const sortedEmployees = useMemo(() => {
+        const sortableItems = [...filteredEmployees];
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                let aVal = a[sortConfig.key];
+                let bVal = b[sortConfig.key];
+
+                // Handle nulls / N/A
+                const isAEmpty = aVal === undefined || aVal === null || String(aVal).trim() === '' || String(aVal).trim().toLowerCase() === 'n/a';
+                const isBEmpty = bVal === undefined || bVal === null || String(bVal).trim() === '' || String(bVal).trim().toLowerCase() === 'n/a';
+                if (isAEmpty && isBEmpty) return 0;
+                if (isAEmpty) return 1;
+                if (isBEmpty) return -1;
+
+                // Date logic
+                if (sortConfig.key === 'date_of_joining') {
+                    // YYYY-MM-DD strings sort perfectly as strings
+                    // We just need to handle the direction
+                    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                    return a.employee_name.localeCompare(b.employee_name);
+                }
+
+                // Numerical or String logic
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                } else {
+                    const strA = String(aVal).toLowerCase();
+                    const strB = String(bVal).toLowerCase();
+                    if (strA < strB) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (strA > strB) return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+                return a.employee_name.localeCompare(b.employee_name);
+            });
+        }
+        return sortableItems;
+    }, [filteredEmployees, sortConfig]);
+
+    const totalPages = Math.ceil(sortedEmployees.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const currentEmployees = filteredEmployees.slice(startIndex, startIndex + itemsPerPage);
+    const currentEmployees = sortedEmployees.slice(startIndex, startIndex + itemsPerPage);
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
@@ -157,9 +222,9 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-bold text-gray-800">{contextLabel} Directory</h3>
-                    <span className="text-xs text-gray-400 font-medium">
-                        {filteredEmployees.length} {filters?.cardFilter === 'bench' ? 'bench ' : ''}employees
+                    <h3 className="text-lg font-bold text-gray-800">Organization Directory</h3>
+                    <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+                        {filteredEmployees.length} employees
                     </span>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -169,10 +234,44 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         <input
                             type="text"
                             placeholder="Find an employee or skill..."
-                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all"
+                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all font-poppins"
                             value={searchValue || ''}
                             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
                         />
+                    </div>
+
+                    {/* Sort Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setIsSortOpen(!isSortOpen)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-semibold transition-all shadow-sm ${isSortOpen ? 'bg-gray-100 border-gray-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                        >
+                            <ArrowUpDown size={18} className="text-gray-400" />
+                            Sort
+                        </button>
+                        {isSortOpen && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl z-20 overflow-hidden animate-fade-in">
+                                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Sort Order</p>
+                                </div>
+                                <div className="py-1">
+                                    {sortOptions.map((opt) => (
+                                        <button
+                                            key={opt.label}
+                                            onClick={() => {
+                                                setSortConfig(opt);
+                                                setIsSortOpen(false);
+                                            }}
+                                            className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                                        >
+                                            <span className={sortConfig.label === opt.label ? 'font-bold text-blue-600' : ''}>{opt.label}</span>
+                                            {sortConfig.label === opt.label && <Check size={14} className="text-blue-600" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {isSortOpen && <div className="fixed inset-0 z-10" onClick={() => setIsSortOpen(false)} />}
                     </div>
 
                     {/* Filter Button with badge */}

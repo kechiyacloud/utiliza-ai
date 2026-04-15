@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Users } from 'lucide-react';
 
 const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);
@@ -20,20 +21,26 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     }, [employees]);
 
     useEffect(() => {
-        if (joiners.length <= 1) return; // Don't cycle if only one or none
+        if (joiners.length <= 1) return;
 
         const interval = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % joiners.length);
-        }, 5000); // 5 seconds per slide
+        }, 5000);
         return () => clearInterval(interval);
     }, [joiners.length]);
 
     if (joiners.length === 0) {
         return (
-            <div className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between h-full ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}>
-                <div className="w-full">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">New Joiner</p>
-                    <p className="text-xs text-gray-500 font-medium">No results</p>
+            <div 
+                className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between h-full cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+                onClick={onClick}
+            >
+                <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">NEW JOINER</p>
+                    <h3 className="font-extrabold text-sm text-gray-800 mt-1">No results</h3>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-400 bg-opacity-10">
+                    <Users size={20} className="text-slate-500" />
                 </div>
             </div>
         );
@@ -47,7 +54,7 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
             onClick={onClick}
         >
             <div className="w-full">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">New Joiner</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">NEW JOINER</p>
 
                 <div key={currentIndex} className="flex items-center gap-2 animate-fade-in">
                     {joiner.photo_url ? (
@@ -66,6 +73,9 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
                         <p className="text-[9px] text-gray-500 font-medium truncate">{joiner.role_designation}</p>
                     </div>
                 </div>
+            </div>
+            <div className="p-2 rounded-lg bg-slate-400 bg-opacity-10 flex-shrink-0">
+                <Users size={20} className="text-slate-500" />
             </div>
         </div>
     );

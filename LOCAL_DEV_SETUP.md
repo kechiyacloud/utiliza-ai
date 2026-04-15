@@ -100,3 +100,10 @@ docker compose -f docker-compose.local.yml stop postgres redis
 - `vite.config.js` proxy target is set to `http://localhost:8000` — no hosts file or admin access needed.
 - `backend/.env` is not modified — DB and Redis hostnames are overridden via `export` in the terminal.
 - Docker setup in `docker-compose.full.yml` remains intact for EC2 deployment.
+
+
+# Important Command in local setup
+
+## For Killing 8000 port
+
+- "sudo fuser -k 8000/tcp"

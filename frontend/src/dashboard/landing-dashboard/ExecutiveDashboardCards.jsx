@@ -39,9 +39,11 @@ const Card = ({ icon: Icon, value, label, subtext, alertCount, onClick, colorThe
     );
 };
 
-const ExecutiveDashboardCards = ({ data, selectedDepartment }) => {
+const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
     const navigate = useNavigate();
     if (!data) return null;
+
+    const deptFilterParam = selectedDepartments && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined;
 
     return (
         <>
@@ -56,7 +58,8 @@ const ExecutiveDashboardCards = ({ data, selectedDepartment }) => {
                     navigate('/info/employees/list', { 
                         state: { 
                             showBack: true,
-                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                            departmentFilter: deptFilterParam,
+                            fromDashboard: true
                         } 
                     });
                 }}
@@ -72,7 +75,8 @@ const ExecutiveDashboardCards = ({ data, selectedDepartment }) => {
                     navigate('/info/client', { 
                         state: { 
                             showBack: true,
-                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                            departmentFilter: deptFilterParam,
+                            fromDashboard: true
                         } 
                     });
                 }}
@@ -89,7 +93,8 @@ const ExecutiveDashboardCards = ({ data, selectedDepartment }) => {
                     navigate('/info/projects', { 
                         state: { 
                             showBack: true,
-                            departmentFilter: selectedDepartment !== 'Overall' ? selectedDepartment : undefined
+                            departmentFilter: deptFilterParam,
+                            fromDashboard: true
                         } 
                     });
                 }}

@@ -13,7 +13,7 @@ import {
     AlertCircle,
     CheckCircle2
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const DashboardTables = ({
     availability = [],
@@ -31,6 +31,7 @@ const DashboardTables = ({
     const [utilizationSubTab, setUtilizationSubTab] = useState('employee');
     const [selectedTrendIndex, setSelectedTrendIndex] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const recentTrends = (trends || []).slice(-3);
 
     useEffect(() => {
@@ -42,30 +43,6 @@ const DashboardTables = ({
     useEffect(() => {
         setSelectedTrendIndex(recentTrends.length > 0 ? recentTrends.length - 1 : null);
     }, [trends]);
-
-    const getSkillGapMeta = (allocatedCount, availableCount) => {
-        if (allocatedCount > availableCount) {
-            return {
-                label: 'Shortage',
-                tone: 'bg-rose-50 text-rose-600 border-rose-100',
-                bar: 'bg-rose-500'
-            };
-        }
-
-        if (allocatedCount === availableCount) {
-            return {
-                label: 'Balanced',
-                tone: 'bg-amber-50 text-amber-600 border-amber-100',
-                bar: 'bg-amber-500'
-            };
-        }
-
-        return {
-            label: 'Surplus',
-            tone: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-            bar: 'bg-emerald-500'
-        };
-    };
 
     const formatDate = (dateStr) => {
         if (!dateStr) return 'TBD';
@@ -158,7 +135,7 @@ const DashboardTables = ({
                     )}
                     {activeTab === 'transitions' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Recent project changes: where people moved from and where they went</p>}
                     {activeTab === 'optimization' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Available people sorted by how long they've been waiting for a project</p>}
-                    {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">People whose certificates are expiring soon</p>}
+                    {activeTab === 'certifications' && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">People whose certificates are available</p>}
                 </div>
             </div>
 
@@ -195,7 +172,7 @@ const DashboardTables = ({
                                             </div>
                                         </td>
                                         <td className="py-2.5 text-center">
-                                            <span className="font-bold text-slate-600 text-[10px] truncate max-w-[100px] inline-block">{row.project}</span>
+                                            <span className="font-bold text-slate-600 text-[10px] inline-block">{row.project}</span>
                                         </td>
                                         <td className="py-2.5 text-center">
                                             <span className={`px-2 py-0.5 rounded text-[8px] font-black border ${urgency}`}>
@@ -223,7 +200,7 @@ const DashboardTables = ({
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {highUtilizationEmployee.length > 0 ? highUtilizationEmployee.map((row, idx) => (
-                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/info/employee/${row.id}`)}>
+                                <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/info/employee/${row.id}`, { state: { from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state || null } } })}>
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
                                             <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500 border border-slate-200 uppercase">
@@ -298,11 +275,11 @@ const DashboardTables = ({
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="py-2.5 text-center">
-                                        <div className="inline-flex max-w-[180px] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
-                                            <span className="truncate max-w-[62px]" title={row.fromProject || 'Bench'}>{row.fromProject || 'Bench'}</span>
+                                    <td className="py-2.5 text-center px-4">
+                                        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-1.5 text-[9px] font-black text-slate-700">
+                                            <span className="whitespace-nowrap" title={row.fromProject || 'Bench'}>{row.fromProject || 'Bench'}</span>
                                             <ArrowRightLeft size={11} className="text-blue-500 flex-shrink-0" />
-                                            <span className="truncate max-w-[62px]" title={row.toProject || 'Unknown'}>{row.toProject || 'Unknown'}</span>
+                                            <span className="whitespace-nowrap" title={row.toProject || 'Unknown'}>{row.toProject || 'Unknown'}</span>
                                         </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
@@ -318,9 +295,9 @@ const DashboardTables = ({
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
                             <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
-                                <th className="text-left py-2 px-5">Resource (2026 Sentiment)</th>
-                                <th className="text-center py-2">Bench Sentinel</th>
-                                <th className="text-right py-2 px-5">Pulse Status</th>
+                                <th className="text-left py-2 px-5">Resource</th>
+                                <th className="text-center py-2">Bench Aging</th>
+                                <th className="text-right py-2 px-5">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -330,18 +307,11 @@ const DashboardTables = ({
                                         <span className="font-bold text-slate-800 text-[11px] uppercase tracking-tight leading-none">{row.name}</span>
                                     </td>
                                     <td className="py-2.5 text-center px-4">
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-tight">
+                                        <div className="flex flex-col gap-1 items-center">
+                                            <div className="text-[9px] font-black uppercase tracking-tight">
                                                 <span className={row.days_in_year > 30 ? 'text-rose-600' : 'text-blue-600'}>
-                                                    {row.days_in_year} Days in 2026
+                                                    {row.days_in_year} Days from last project
                                                 </span>
-                                                <span className="text-slate-400">{row.year_percentage}%</span>
-                                            </div>
-                                            <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                                <div 
-                                                    className={`h-full rounded-full transition-all duration-500 ${row.days_in_year > 30 ? 'bg-rose-500' : 'bg-blue-500'}`}
-                                                    style={{ width: `${row.year_percentage}%` }}
-                                                ></div>
                                             </div>
                                         </div>
                                     </td>
@@ -369,14 +339,14 @@ const DashboardTables = ({
                                 <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.employee || row.name, showBack: true } })}>
                                     <td className="py-2.5 px-5">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center text-[8px] font-black text-amber-600 border border-amber-100">
-                                                {getInitials(row.employee || row.name)}
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-slate-800 text-xs tracking-tight">{row.employee || row.name || 'Unknown'}</span>
+                                                <span className="text-[10px] text-blue-600 font-black uppercase tracking-tighter mt-0.5">{row.certificate_name}</span>
                                             </div>
-                                            <span className="font-bold text-slate-800 text-xs tracking-tight">{row.employee || row.name || 'Unknown'}</span>
                                         </div>
                                     </td>
                                     <td className="py-2.5 px-5 text-right">
-                                        <span className="text-slate-400 font-mono text-[9px] font-bold">{formatDate(row.expiryDate || row.expiry_date)}</span>
+                                        <span className="text-slate-400 font-mono text-[9px] font-bold">{formatDate(row.expiry_date || row.expiryDate)}</span>
                                     </td>
                                 </tr>
                             )) : <EmptyTable icon={Award} message="No certification expiry records." colSpan={2} />}
@@ -409,7 +379,7 @@ const DashboardTables = ({
 
                         <div className="flex-1 flex flex-col gap-3">
                             {recentTrends.length > 0 ? recentTrends.map((trend, idx) => (
-                                <div 
+                                <div
                                     key={idx}
                                     onClick={() => setSelectedTrendIndex(idx)}
                                     className={`p-3 rounded-2xl border transition-all cursor-pointer ${selectedTrendIndex === idx ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}

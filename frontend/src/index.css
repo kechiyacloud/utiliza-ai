@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html, body {
+    font-family: 'Poppins', sans-serif;
+  }
+}
+
+.font-technical {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}
+
 .input-field{
     @apply p-2 px-4 rounded bg-[#ffffff20] text-white placeholder-white placeholder:text-xs placeholder:opacity-70 border border-transparent transition-all duration-200 ease-in-out;
 }

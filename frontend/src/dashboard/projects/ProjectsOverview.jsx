@@ -1,167 +1,141 @@
 import React from 'react';
-import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock } from 'lucide-react';
+import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, description, subLabel, icon: Icon, onClick, active, customColors }) => {
-    const subtitle = description && subLabel ? `${description} (${subLabel})` : description || subLabel || '';
-    const cardTint = customColors?.cardBg || '#FFFFFF';
-    const cardBorder = customColors?.border || '#E2E8F0';
-    const accent = customColors?.accent || customColors?.text || '#475569';
-    const activeRing = customColors?.ring || '#BFDBFE';
+const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
     return (
         <div
             onClick={onClick}
-            className={`p-3.5 rounded-lg border border-l-4 h-full min-h-[124px] flex flex-col justify-between cursor-pointer transition-all duration-200 ${
-                active ? 'ring-2 ring-offset-0 shadow-sm' : 'hover:shadow-sm hover:-translate-y-0.5'
-            }`}
-            style={{
-                backgroundColor: cardTint,
-                borderColor: cardBorder,
-                borderLeftColor: accent,
-                ...(active ? { boxShadow: `0 0 0 2px ${activeRing}` } : {})
-            }}
+            className={`rounded-xl p-3.5 border transition-all duration-500 cursor-pointer flex flex-col justify-between h-24 shadow-sm relative group ${active
+                    ? 'bg-blue-50/30 border-blue-500 ring-2 ring-blue-100 ring-offset-0'
+                    : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-md'
+                }`}
         >
-            <div className="flex items-center justify-between mb-2">
-                <div
-                    className="p-1.5 rounded-md"
-                    style={{
-                        backgroundColor: customColors?.bg || '#F1F5F9',
-                        color: customColors?.text || '#475569'
-                    }}
-                >
+            <div className="flex justify-between items-start flex-row-reverse w-full">
+                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
                     <Icon size={16} />
                 </div>
+                {active && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse absolute top-4 left-4"></div>
+                )}
             </div>
 
-            <div className="flex flex-col items-start gap-1.5">
-                <p className="text-3xl font-bold leading-none text-slate-900 tracking-tight">{value}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">{label}</p>
-                {subtitle && (
-                    <p className="text-[11px] text-gray-500 leading-snug">{subtitle}</p>
-                )}
+            <div className="flex flex-col mt-auto">
+                <p className={`text-xl font-semibold transition-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
+                    {value}
+                </p>
+                <p className="text-sm font-medium text-slate-500">
+                    {label}
+                </p>
             </div>
         </div>
     );
 };
 
-const ProjectsOverview = ({ stats, activeFilter, onFilterChange, onProjectAdded }) => {
+const ProjectsOverview = ({
+    stats,
+    activeFilter,
+    onFilterChange,
+    onProjectAdded,
+    selectedDepartment = '',
+    onDepartmentChange = () => { },
+    departments = []
+}) => {
     const navigate = useNavigate();
     const location = useLocation();
 
     if (!stats) return null;
 
     return (
-        <div className="w-full flex flex-col gap-4 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex justify-between items-start">
+        <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
                     {location.state?.showBack && (
                         <button
                             onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                            className="p-2.5 hover:bg-white hover:shadow-md rounded-xl transition-all flex-shrink-0 text-slate-500 hover:text-blue-600 border border-transparent hover:border-blue-100"
                             title="Go Back"
                         >
-                            <ArrowLeft size={20} className="text-gray-600" />
+                            <ArrowLeft size={20} />
                         </button>
                     )}
                     <div>
-                        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Projects Overview</h1>
-                        <p className="text-gray-500 text-sm mt-1 font-medium">Manage and monitor all active and upcoming projects.</p>
+                        <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">Projects Overview</h1>
+                        <p className="text-slate-500 text-sm mt-1 font-normal">
+                            {selectedDepartment === '' || selectedDepartment === 'All Departments' ? 'All Organization Projects' : `${selectedDepartment} Department`}
+                        </p>
                     </div>
                 </div>
-                <button
-                    onClick={() => navigate('/info/projects/add')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
-                >
-                    + Add New Project
-                </button>
+
+                <div className="flex items-center gap-2">
+                    {/* Department Filter Dropdown */}
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                            <Layers size={13} className="text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                        </div>
+                        <select
+                            value={selectedDepartment}
+                            onChange={(e) => onDepartmentChange(e.target.value)}
+                            className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
+                        >
+                            <option value="">All Department</option>
+                            {departments.map((dept) => {
+                                const deptName = typeof dept === 'object' ? (dept.label || dept.value || String(dept)) : dept;
+                                return <option key={deptName} value={deptName}>{deptName}</option>;
+                            })}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                            <ChevronDown size={14} className="text-gray-400 group-hover:text-slate-600 transition-colors" />
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => navigate('/info/projects/add')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1"
+                    >
+                        <span>+</span> Add New Project
+                    </button>
+                </div>
             </div>
 
-            {/* 5 Metric Cards Layout */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* Metric Cards Grid - Responsive wrapping, no scroll */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
                 <StatCard
                     label="Total Projects"
                     value={stats.totalProjects}
-                    description="All-time tracked projects"
                     icon={Briefcase}
-                    customColors={{
-                        bg: '#EAF2FF',
-                        text: '#2563EB',
-                        cardBg: '#F8FBFF',
-                        border: '#DBEAFE',
-                        accent: '#2563EB',
-                        ring: '#BFDBFE'
-                    }}
                     active={activeFilter === null}
                     onClick={() => onFilterChange(null)}
                 />
                 <StatCard
                     label="External Projects"
-                    value={stats.clientProjects}
-                    description="Billable external work"
+                    value={stats.externalProjects || stats.clientProjects}
                     icon={Globe}
-                    customColors={{
-                        bg: '#F3ECFF',
-                        text: '#7C3AED',
-                        cardBg: '#FBF7FF',
-                        border: '#E9D5FF',
-                        accent: '#7C3AED',
-                        ring: '#DDD6FE'
-                    }}
-                    active={activeFilter === 'Client'}
-                    onClick={() => onFilterChange(activeFilter === 'Client' ? null : 'Client')}
+                    active={activeFilter === 'External'}
+                    onClick={() => onFilterChange(activeFilter === 'External' ? null : 'External')}
                 />
                 <StatCard
-                    label="Internal Projects / POCs"
+                    label="Internal / POCs"
                     value={stats.internalProjects}
-                    description="Non-billable initiatives & POCs"
                     icon={Radio}
-                    customColors={{
-                        bg: '#F3F4F6',
-                        text: '#374151',
-                        cardBg: '#F9FAFB',
-                        border: '#E5E7EB',
-                        accent: '#6B7280',
-                        ring: '#D1D5DB'
-                    }}
                     active={activeFilter === 'Internal'}
                     onClick={() => onFilterChange(activeFilter === 'Internal' ? null : 'Internal')}
                 />
-
                 <StatCard
                     label="Upcoming Projects"
                     value={stats.upcoming_projects}
-                    description="Not yet started"
                     icon={CalendarClock}
-                    customColors={{
-                        bg: '#FFF3DC',
-                        text: '#F59E0B',
-                        cardBg: '#FFFDF6',
-                        border: '#FDE68A',
-                        accent: '#F59E0B',
-                        ring: '#FDE68A'
-                    }}
                     active={activeFilter === 'Upcoming'}
                     onClick={() => onFilterChange(activeFilter === 'Upcoming' ? null : 'Upcoming')}
                 />
                 <StatCard
                     label="Completed Projects"
                     value={stats.completedProjects}
-                    description="Successfully delivered"
-                    subLabel="Last 3 Months"
                     icon={CheckCircle}
-                    customColors={{
-                        bg: '#EAFBF1',
-                        text: '#10B981',
-                        cardBg: '#F7FCF9',
-                        border: '#BBF7D0',
-                        accent: '#10B981',
-                        ring: '#BBF7D0'
-                    }}
                     active={activeFilter === 'Completed'}
                     onClick={() => onFilterChange(activeFilter === 'Completed' ? null : 'Completed')}
                 />
             </div>
-
         </div>
     );
 };

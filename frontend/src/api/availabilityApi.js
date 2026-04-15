@@ -2,7 +2,11 @@ import api from "./axios"
 
 export const getAvailabilityData = async (filters = {}) => {
   try {
-    const response = await api.get("/availability/all", { params: filters })
+    const params = { ...filters };
+    if (Array.isArray(params.department)) {
+      params.department = params.department.length > 0 ? params.department.join(',') : null;
+    }
+    const response = await api.get("/availability/all", { params })
     return response.data
   } catch (error) {
     console.error("Error fetching availability data:", error)

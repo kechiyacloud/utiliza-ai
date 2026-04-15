@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { X, Calendar, Users, Target, Activity, Briefcase, Clock, Zap, Loader2, Save, Plus, Trash2, Edit2 } from 'lucide-react';
 import axios from '../../api/axios';
 
@@ -24,6 +24,7 @@ function normalizeAllocationRow(row = {}) {
 // ─── Resource Allocation Component ───────────────────────────────────────────
 const AllocationTable = ({ projectId }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -268,7 +269,7 @@ const AllocationTable = ({ projectId }) => {
                                                 </select>
                                             ) : (
                                                 row.employee_id ? (
-                                                    <Link to={`/info/employee/${row.employee_id}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors decoration-blue-300 underline-offset-2">
+                                                    <Link to={`/info/employee/${row.employee_id}`} state={{ from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state || null } }} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors decoration-blue-300 underline-offset-2">
                                                         {row.name}
                                                     </Link>
                                                 ) : (

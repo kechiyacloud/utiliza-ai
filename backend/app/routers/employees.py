@@ -6,10 +6,49 @@ from datetime import date
 import uuid
 
 
+def _table_has_column(cur, table_name: str, column_name: str) -> bool:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND column_name = %s
+        )
+        """,
+        (table_name, column_name),
+    )
+    return bool(cur.fetchone()[0])
+
+
 def _sync_employee_allocations(cur, employee_ids):
-    """Re-compute employee_allocations in employee_master_pro from live projects_allocation rows."""
+    """Re-compute employee_allocations in employee_master_pro from live projects_allocation rows.
+    Also auto-transitions notice period employees to Resigned when their notice_end_date has passed."""
     if not employee_ids:
         return
+
+    # Auto-transition: notice period ended → set status to Resigned and write date_of_resign
+    cur.execute("""
+        UPDATE employee_master_pro
+        SET employee_status = 'Resigned'
+        WHERE employee_id = ANY(%s)
+          AND employee_status ILIKE '%%notice%%'
+          AND notice_end_date IS NOT NULL
+          AND notice_end_date < CURRENT_DATE
+    """, (list(employee_ids),))
+
+    cur.execute("""
+        UPDATE employee_master m
+        SET date_of_resign = p.notice_end_date
+        FROM employee_master_pro p
+        WHERE m.employee_id = p.employee_id
+          AND m.employee_id = ANY(%s)
+          AND p.employee_status = 'Resigned'
+          AND p.notice_end_date IS NOT NULL
+          AND m.date_of_resign IS NULL
+    """, (list(employee_ids),))
+
     cur.execute("""
         UPDATE employee_master_pro p
         SET employee_allocations = COALESCE((
@@ -20,6 +59,8 @@ def _sync_employee_allocations(cur, employee_ids):
         ), 0),
         employee_status = CASE
             WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+            WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
+            WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
             WHEN COALESCE((
                 SELECT SUM(pa2.allocation_percentage)
                 FROM projects_allocation pa2
@@ -71,6 +112,10 @@ class EmployeeCreateUpdate(BaseModel):
     employee_status: str
     employee_allocations: int
     reporting_manager_id: Optional[str] = None
+    date_of_resign: Optional[date] = None
+    pip_start_date: Optional[date] = None
+    notice_start_date: Optional[date] = None
+    notice_end_date: Optional[date] = None
     skills: List[str] = []
     projects: List[ProjectAllocationInput] = []
     certificates: List[CertificateInput] = []
@@ -109,6 +154,8 @@ def get_bench_employee_count():
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE m.date_of_resign IS NULL
               AND (p.employee_status NOT ILIKE '%%notice%%' OR p.employee_status IS NULL)
+              AND (p.employee_status NOT ILIKE '%%pip%%' OR p.employee_status IS NULL)
+              AND (p.employee_status NOT ILIKE '%%resign%%' OR p.employee_status IS NULL)
               AND COALESCE((
                   SELECT SUM(pa.allocation_percentage)
                   FROM projects_allocation pa
@@ -156,11 +203,28 @@ def get_employee_roles():
         release_db_connection(conn)
 
 @router.get("/employees/list")
-def get_all_employees():
+def get_all_employees(include_resigned: bool = False):
     conn = get_db_connection()
     cur = conn.cursor()
     
     try:
+        has_employee_type = _table_has_column(cur, "employee_master", "employee_type")
+        has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
+        has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
+        has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
+
+        employee_type_expr = "COALESCE(MAX(m.employee_type), 'Full Time')" if has_employee_type else "'Full Time'"
+        pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
+        notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
+        notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
+
+        notice_status_expr = (
+            "WHEN p.employee_status ILIKE '%%notice%%' AND MAX(p.notice_end_date) IS NOT NULL AND MAX(p.notice_end_date) < CURRENT_DATE THEN 'Resigned'\n"
+            "                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+            if has_notice_end_date
+            else "WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+        )
+
         query = """
             WITH AllocationPriority AS (
                 SELECT 
@@ -188,22 +252,29 @@ def get_all_employees():
                 m.department, 
                 m.location, 
                 m.photo_url,
-                COALESCE(m.employee_type, 'Full Time') as employee_type,
-                CASE 
-                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                m.date_of_joining,
+                {employee_type_expr} as employee_type,
+                CASE
+                    {notice_status_expr}
+                    WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
+                    WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
                     WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
                     WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
                     WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
                     WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
-                    ELSE p.employee_status 
-                END as employee_status, 
-                CASE 
+                    ELSE p.employee_status
+                END as employee_status,
+                CASE
                     WHEN ap.priority_rank = 3 THEN 'billable'
                     WHEN ap.priority_rank = 2 THEN 'non-billable'
                     WHEN ap.priority_rank = 1 THEN 'billable'
-                    ELSE 'non-billable' 
+                    ELSE 'non-billable'
                 END as billable,
                 COALESCE(da.total_alloc, 0) as employee_allocations,
+                m.date_of_resign,
+                MAX({pip_start_expr}) as pip_start_date,
+                MAX({notice_start_expr}) as notice_start_date,
+                MAX({notice_end_expr}) as notice_end_date,
                 ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
@@ -211,34 +282,33 @@ def get_all_employees():
             LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
-            WHERE m.date_of_resign IS NULL
-            GROUP BY 
-                m.employee_id, 
-                m.employee_name, 
-                m.role_designation, 
-                m.department, 
-                m.location, 
-                m.photo_url, 
-                m.employee_type,
-                p.employee_status, 
+            WHERE (m.date_of_resign IS NULL OR %s = TRUE)
+            GROUP BY
+                m.employee_id,
+                m.employee_name,
+                m.role_designation,
+                m.department,
+                m.location,
+                m.photo_url,
+                m.date_of_joining,
+                p.employee_status,
                 ap.priority_rank,
-                da.total_alloc
+                da.total_alloc,
+                m.date_of_resign
         """
-        cur.execute(query)
-        columns = [column[0] for column in cur.description]
+        cur.execute(
+            query.format(
+                employee_type_expr=employee_type_expr,
+                notice_status_expr=notice_status_expr,
+                pip_start_expr=pip_start_expr,
+                notice_start_expr=notice_start_expr,
+                notice_end_expr=notice_end_expr,
+            ),
+            (include_resigned,),
+        )
+        columns = [desc[0] for desc in cur.description]
         results = [dict(zip(columns, row)) for row in cur.fetchall()]
-        
-        # Ensure 'skills' is an empty list if it's None for frontend that expects an array
-        for row in results:
-             if row.get('skills') is None:
-                  row['skills'] = []
-                  
         return results
-
-    except Exception as e:
-        print(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-        
     finally:
         cur.close()
         release_db_connection(conn)
@@ -443,7 +513,7 @@ def get_employee_filter_options():
 
         # Ensure known statuses like 'Allocated' exist if empty
         if not status_tags:
-            status_tags = ['Allocated', 'Bench', 'Partially allocated', 'Notice period', 'Partially bench']
+            status_tags = ['Allocated', 'Bench', 'Partially allocated', 'Notice period', 'Partially bench', 'PIP', 'Resigned']
 
         return {
             "departments": sorted(departments),
@@ -508,8 +578,22 @@ def get_employee_by_id(employee_id: str):
     cur = conn.cursor()
 
     try:
+        has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
+        has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
+        has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
+
+        pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
+        notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
+        notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
+
+        notice_status_expr = (
+            "WHEN p.employee_status ILIKE '%%notice%%' AND p.notice_end_date IS NOT NULL AND p.notice_end_date < CURRENT_DATE THEN 'Resigned'\n                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+            if has_notice_end_date
+            else "WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+        )
+        
         # 1️⃣ Fetch Main Employee Details
-        employee_query = """
+        employee_query = f"""
         WITH AllocationPriority AS (
             SELECT 
                 employee_id,
@@ -543,21 +627,27 @@ def get_employee_by_id(employee_id: str):
             m.experience_in_cd,
             m.shift,
             m.mode_of_work,
-            CASE 
-                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+            CASE
+                {notice_status_expr}
+                WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
                 WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
                 WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
                 WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
                 WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
-                ELSE p.employee_status 
+                ELSE p.employee_status
             END as employee_status,
-            CASE 
+            CASE
                 WHEN ap.priority_rank = 3 THEN 'billable'
                 WHEN ap.priority_rank = 2 THEN 'non-billable'
                 WHEN ap.priority_rank = 1 THEN 'billable'
-                ELSE 'non-billable' 
+                ELSE 'non-billable'
             END as billable,
             COALESCE(da.total_alloc, 0) as employee_allocations,
+            m.date_of_resign,
+            {pip_start_expr} as pip_start_date,
+            {notice_start_expr} as notice_start_date,
+            {notice_end_expr} as notice_end_date,
             p.reporting_manager_id,
             mgr.employee_name as reporting_manager_name
         FROM employee_master m
@@ -681,6 +771,10 @@ def get_employee_by_id(employee_id: str):
             "employee_status": employee.get("employee_status"),
             "billable": employee.get("billable"),
             "employee_allocations": employee.get("employee_allocations"),
+            "date_of_resign": str(employee.get("date_of_resign")) if employee.get("date_of_resign") else None,
+            "pip_start_date": str(employee.get("pip_start_date")) if employee.get("pip_start_date") else None,
+            "notice_start_date": str(employee.get("notice_start_date")) if employee.get("notice_start_date") else None,
+            "notice_end_date": str(employee.get("notice_end_date")) if employee.get("notice_end_date") else None,
             "skills": skills,
             "certificates": certificates,
             "projects": projects
@@ -714,19 +808,19 @@ def create_employee(emp: EmployeeCreateUpdate):
             INSERT INTO employee_master (
                 employee_id, employee_name, email_id, phone_number, location,
                 mode_of_work, date_of_joining, role_designation, department,
-                employee_type, photo_url
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                employee_type, photo_url, date_of_resign
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             emp.employee_id, emp.employee_name, emp.email, phone_numeric, emp.location,
             emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
-            emp.employment_type, emp.photo_url
+            emp.employment_type, emp.photo_url, emp.date_of_resign
         ))
 
         # 2. Insert into employee_master_pro
         cur.execute("""
-            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id)
-            VALUES (%s, %s, %s, %s)
-        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id))
+            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, notice_start_date, notice_end_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date))
 
         # 3. Handle skills
         for skill_name in emp.skills:
@@ -804,12 +898,12 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
             UPDATE employee_master SET
                 employee_name = %s, email_id = %s, phone_number = %s, location = %s,
                 mode_of_work = %s, date_of_joining = %s, role_designation = %s, department = %s,
-                employee_type = %s, {photo_update_sql} employee_id = %s
+                employee_type = %s, date_of_resign = %s, {photo_update_sql} employee_id = %s
             WHERE employee_id = %s
         """, [
             emp.employee_name, emp.email, phone_numeric, emp.location,
             emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
-            emp.employment_type
+            emp.employment_type, emp.date_of_resign
         ] + photo_param + [emp.employee_id, employee_id])
 
         # 2. Update employee_master_pro
@@ -818,14 +912,15 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
         if cur.fetchone():
             cur.execute("""
                 UPDATE employee_master_pro SET
-                    employee_status = %s, employee_allocations = %s, reporting_manager_id = %s, employee_id = %s
+                    employee_status = %s, employee_allocations = %s, reporting_manager_id = %s,
+                    pip_start_date = %s, notice_start_date = %s, notice_end_date = %s, employee_id = %s
                 WHERE employee_id = %s
-            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.employee_id, employee_id))
+            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date, emp.employee_id, employee_id))
         else:
             cur.execute("""
-                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id)
-                VALUES (%s, %s, %s, %s)
-            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id))
+                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, notice_start_date, notice_end_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date))
 
         # 3. Update skills (delete old, insert new)
         cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))

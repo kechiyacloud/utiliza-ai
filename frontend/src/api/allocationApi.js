@@ -67,7 +67,9 @@ export const fetchAllocationData = async (filters = {}) => {
     try {
         // Map frontend filter keys to backend parameter names if necessary
         const params = {
-            department: filters.department === 'All Departments' ? null : filters.department,
+            department: Array.isArray(filters.department) 
+                ? (filters.department.length > 0 ? filters.department.join(',') : null)
+                : (filters.department === 'All Departments' ? null : filters.department),
             resource_type: filters.resourceType === 'All Resources' ? null : filters.resourceType,
             location: filters.location === 'All Locations' ? null : filters.location
         };
@@ -82,8 +84,7 @@ export const fetchAllocationData = async (filters = {}) => {
             data: {
                 metrics,
                 projects,
-                orgUtilization,
-                ...allocationStaticData
+                orgUtilization
             }
         };
     } catch (error) {
@@ -99,7 +100,7 @@ export const fetchAllocationData = async (filters = {}) => {
                     overallocated: { value: 0, label: "Overallocated", isAlert: false }
                 },
                 projects: [],
-                ...allocationStaticData
+                orgUtilization: { used: 0, available: 100, breakdown: [] }
             }
         };
     }
@@ -118,7 +119,13 @@ export const fetchDepartmentBreakdown = async (params = {}) => {
 export const fetchForecastBench = async (department = null, location = null) => {
     try {
         const params = {};
-        if (department && department !== 'All Departments') params.department = department;
+        if (department) {
+            if (Array.isArray(department)) {
+                if (department.length > 0) params.department = department.join(',');
+            } else if (department !== 'All Departments') {
+                params.department = department;
+            }
+        }
         if (location && location !== 'All Locations') params.location = location;
         
         const res = await api.get('/allocations/forecast-bench', { params });

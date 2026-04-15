@@ -2,6 +2,7 @@ import React from 'react';
 import { EmployeeProvider, useEmployees as useEmployeesHook } from './EmployeeContext';
 import { ClientProvider, useClients as useClientsHook } from './ClientContext';
 import { ProjectProvider, useProjects as useProjectsHook } from './ProjectContext';
+import { DataRefreshProvider, useDataRefresh as useDataRefreshHook } from './DataRefreshContext';
 
 /**
  * Composite provider that wraps all data contexts
@@ -9,13 +10,15 @@ import { ProjectProvider, useProjects as useProjectsHook } from './ProjectContex
  */
 export const AppDataProvider = ({ children }) => {
     return (
-        <EmployeeProvider>
-            <ClientProvider>
-                <ProjectProvider>
-                    {children}
-                </ProjectProvider>
-            </ClientProvider>
-        </EmployeeProvider>
+        <DataRefreshProvider>
+            <EmployeeProvider>
+                <ClientProvider>
+                    <ProjectProvider>
+                        {children}
+                    </ProjectProvider>
+                </ClientProvider>
+            </EmployeeProvider>
+        </DataRefreshProvider>
     );
 };
 
@@ -23,12 +26,14 @@ export const AppDataProvider = ({ children }) => {
 export { useEmployees } from './EmployeeContext';
 export { useClients } from './ClientContext';
 export { useProjects } from './ProjectContext';
+export { useDataRefresh } from './DataRefreshContext';
 
 // Composite hook that provides access to all contexts at once  
 export const useAppData = () => {
     return {
         employees: useEmployeesHook(),
         clients: useClientsHook(),
-        projects: useProjectsHook()
+        projects: useProjectsHook(),
+        dataRefresh: useDataRefreshHook()
     };
 };

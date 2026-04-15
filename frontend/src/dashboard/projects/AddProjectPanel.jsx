@@ -17,9 +17,9 @@ import {
 } from '../../api/entitiesApi';
 import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
-/* ──────────────────────────────────────────────────────────
-   HELPERS — for Last 4 Weeks visualization
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   HELPERS ΓÇö for Last 4 Weeks visualization
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 function normalizeDateString(dateStr) {
     if (!dateStr) return '';
     const trimmed = (dateStr || '').trim();
@@ -70,6 +70,12 @@ const toIdOrNull = (val) => {
     if (['undefined', 'null', 'nan'].includes(text.toLowerCase())) return null;
     return text;
 };
+
+const normalizeSkillValue = (skill) => String(skill || '').trim().replace(/\s+/g, ' ');
+const normalizeSkillToken = (skill) => normalizeSkillValue(skill).toLowerCase();
+const DEFAULT_SOW_STATUS = 'SOW_NOT_SIGNED';
+const MAX_WEEKLY_HOURS_PER_RESOURCE = 40;
+const PROJECT_WEEKLY_HOURS_ERROR = 'Max 40 hrs/week allowed per project';
 
 const sanitizeWeeklyHours = (wh = {}) => {
     const cleaned = {};
@@ -133,7 +139,7 @@ function getLast4Weeks() {
         const wk = getISOWeekNumber(monday);
         weeks.push({
             label: i === 0 ? `This Week` : `Week -${i}`,
-            dateRange: `${fmtDate(monday)} – ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(monday)} ΓÇô ${fmtDate(sunday)}`,
             weekNum: wk,
             year: monday.getFullYear()
         });
@@ -165,7 +171,7 @@ function getProjectWeeks(startDateStr, endDateStr) {
             weekNum: getISOWeekNumber(cursor),
             year: cursor.getFullYear(),
             label: `W${wIdx}`,
-            dateRange: `${fmtDate(cursor)} – ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(cursor)} ΓÇô ${fmtDate(sunday)}`,
         });
         cursor.setDate(cursor.getDate() + 7);
         wIdx++;
@@ -174,9 +180,9 @@ function getProjectWeeks(startDateStr, endDateStr) {
 }
 
 
-/* ──────────────────────────────────────────────────────────
-   INLINE MODAL — Add / Edit / Delete confirmation
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   INLINE MODAL ΓÇö Add / Edit / Delete confirmation
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCancel, error }) => {
     const [name, setName] = useState(initialName || '');
     const inputRef = useRef(null);
@@ -403,9 +409,9 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
 };
 
 
-/* ──────────────────────────────────────────────────────────
-   SEARCHABLE DROPDOWN  —  scrollable + filterable
-   ────────────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   SEARCHABLE DROPDOWN  ΓÇö  scrollable + filterable
+   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 const SearchableDropdown = ({
     items,
     selectedId,
@@ -615,9 +621,9 @@ const SearchableDropdown = ({
 };
 
 
-/* ══════════════════════════════════════════════════════════
-   MAIN COMPONENT — AddProjectPanel
-   ══════════════════════════════════════════════════════════ */
+/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+   MAIN COMPONENT ΓÇö AddProjectPanel
+   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
 const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const DIRECT_CLIENT_TYPE = 'Direct Client';
     const PARTNER_CLIENT_TYPE = 'Partner Client';
@@ -638,6 +644,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         sowStatus: '',
         startDate: '',
         endDate: '',
+        skills: [],
         teamMembers: []
     });
 
@@ -645,6 +652,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [partnerClients, setPartnerClients] = useState([]);
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
+    const [availableSkills, setAvailableSkills] = useState([]);
+    const [skillInput, setSkillInput] = useState('');
+    const [skillError, setSkillError] = useState('');
+    const [isAddingSkill, setIsAddingSkill] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState('');
     const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
@@ -653,6 +664,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [teamHoursError, setTeamHoursError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
 
@@ -684,11 +696,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         setEntityError('');
         setIsDirectoryLoading(true);
         try {
-            const [clientResult, partnerResult, employeesResult, rolesResult] = await Promise.allSettled([
+            const [clientResult, partnerResult, employeesResult, rolesResult, filterResult] = await Promise.allSettled([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
                 axios.get('/employees/list'),
                 axios.get('/employees/departments/roles-mapping'),
+                axios.get('/employees/filter-options'),
             ]);
 
             if (clientResult.status === 'fulfilled') {
@@ -728,6 +741,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 console.error('[AddProjectPanel] Failed to load roles mapping', rolesResult.reason);
             }
 
+            if (filterResult.status === 'fulfilled') {
+                setAvailableSkills(filterResult.value?.data?.skills || []);
+            }
+
         } catch (error) {
             console.error('[AddProjectPanel] Failed to load dropdown entities', error);
             setEntityError('Failed to load clients/partner clients.');
@@ -741,7 +758,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     useEffect(() => {
         if (isOpen) {
             setSubmitError('');
+            setTeamHoursError('');
             setEntityError('');
+            setSkillInput('');
+            setSkillError('');
+            setIsAddingSkill(false);
             setFormData({
                 name: '',
                 type: 'Client',
@@ -753,9 +774,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 department: '',
                 billable: 'Billable',
                 status: 'Not Started',
-                sowStatus: '',
+                sowStatus: DEFAULT_SOW_STATUS,
                 startDate: '',
                 endDate: '',
+                skills: [],
                 teamMembers: []
             });
             loadEntities();
@@ -789,6 +811,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
                 department: value === 'Internal' ? prev.department : '',
                 billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
+                sowStatus: isClientType ? (prev.sowStatus || DEFAULT_SOW_STATUS) : '',
             }));
             return;
         }
@@ -796,7 +819,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setFormData(prev => ({
                 ...prev,
                 status: value,
-                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
             }));
             return;
         }
@@ -827,6 +849,75 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             clientName: '',
         }));
         loadClientsForPartner(item.id);
+    };
+
+    const skillExistsInList = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).some((skill) => normalizeSkillToken(skill) === targetToken);
+    };
+
+    const findMatchingSkill = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).find((skill) => normalizeSkillToken(skill) === targetToken) || null;
+    };
+
+    const addSkillToForm = async (rawSkillValue) => {
+        const normalizedSkill = normalizeSkillValue(rawSkillValue);
+        if (!normalizedSkill) {
+            setSkillError('Skill cannot be empty.');
+            return;
+        }
+
+        if (skillExistsInList(formData.skills, normalizedSkill)) {
+            setSkillError(`"${normalizedSkill}" is already added.`);
+            setSkillInput('');
+            return;
+        }
+
+        let skillToAdd = findMatchingSkill(availableSkills, normalizedSkill) || normalizedSkill;
+        const skillMissingInDirectory = !findMatchingSkill(availableSkills, normalizedSkill);
+
+        if (skillMissingInDirectory) {
+            setIsAddingSkill(true);
+            try {
+                const response = await axios.post('/projects/skills/ensure', { skill_name: normalizedSkill });
+                const persistedSkill = normalizeSkillValue(response?.data?.skill_name) || normalizedSkill;
+                skillToAdd = persistedSkill;
+                setAvailableSkills((prev) => {
+                    if (skillExistsInList(prev, persistedSkill)) return prev;
+                    return [...prev, persistedSkill].sort((left, right) => left.localeCompare(right));
+                });
+            } catch (error) {
+                const message =
+                    error?.response?.data?.detail ||
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    'Failed to add skill.';
+                setSkillError(toMessage(message, 'Failed to add skill.'));
+                setIsAddingSkill(false);
+                return;
+            }
+            setIsAddingSkill(false);
+        }
+
+        setFormData((prev) => {
+            if (skillExistsInList(prev.skills, skillToAdd)) return prev;
+            return { ...prev, skills: [...prev.skills, skillToAdd] };
+        });
+        setSkillInput('');
+        setSkillError('');
+    };
+
+    const handleAddSkillClick = async () => {
+        await addSkillToForm(skillInput);
+    };
+
+    const handleSkillRemove = (skillToRemove) => {
+        setFormData((prev) => ({
+            ...prev,
+            skills: prev.skills.filter((skill) => normalizeSkillToken(skill) !== normalizeSkillToken(skillToRemove)),
+        }));
+        setSkillError('');
     };
 
     const hasPartnerMappedClients = useMemo(
@@ -1031,6 +1122,47 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
     };
 
+    const getMemberIdentity = (member = {}) => {
+        const employeeId = String(member.employee_id || '').trim();
+        if (employeeId) return { key: `emp:${employeeId.toLowerCase()}`, label: member.name || employeeId };
+        const memberName = String(member.name || '').trim();
+        if (memberName) return { key: `name:${memberName.toLowerCase()}`, label: memberName };
+        return null;
+    };
+
+    const validateProjectWeeklyHours = (teamMembers = []) => {
+        const totalsByResource = new Map();
+
+        for (const member of teamMembers || []) {
+            const identity = getMemberIdentity(member);
+            if (!identity) continue;
+
+            const resource = totalsByResource.get(identity.key) || { label: identity.label, weeks: new Map() };
+            const weeklyHours = member.weekly_hours || {};
+
+            Object.entries(weeklyHours).forEach(([weekKey, rawHours]) => {
+                const hours = Number(rawHours);
+                if (!Number.isFinite(hours) || hours <= 0) return;
+
+                const current = resource.weeks.get(weekKey) || 0;
+                const next = current + hours;
+                resource.weeks.set(weekKey, next);
+            });
+
+            totalsByResource.set(identity.key, resource);
+        }
+
+        for (const resource of totalsByResource.values()) {
+            for (const totalHours of resource.weeks.values()) {
+                if (totalHours > MAX_WEEKLY_HOURS_PER_RESOURCE + 1e-6) {
+                    return PROJECT_WEEKLY_HOURS_ERROR;
+                }
+            }
+        }
+
+        return '';
+    };
+
     const handleAddTeamMember = () => {
         setFormData(prev => ({
             ...prev,
@@ -1049,6 +1181,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 }
             ]
         }));
+        setTeamHoursError('');
     };
 
     const handleEmployeeSelect = (index, emp) => {
@@ -1068,6 +1201,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             location: newTeam[index].location !== 'Remote' ? newTeam[index].location : (emp.location || emp.mode_of_work || 'Remote'),
         };
         setFormData({ ...formData, teamMembers: newTeam });
+        setTeamHoursError(validateProjectWeeklyHours(newTeam));
     };
 
     const handleRoleSelect = (index, role) => {
@@ -1077,10 +1211,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleRemoveTeamMember = (index) => {
-        setFormData(prev => ({
-            ...prev,
-            teamMembers: prev.teamMembers.filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const newTeam = prev.teamMembers.filter((_, i) => i !== index);
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
+            return {
+                ...prev,
+                teamMembers: newTeam
+            };
+        });
     };
 
     const handleInsertMemberAt = (index) => {
@@ -1097,6 +1235,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 billable_shadow: 'Billable',
                 weekly_hours: {},
             });
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
             return { ...prev, teamMembers: newTeam };
         });
     };
@@ -1124,40 +1263,66 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleTeamMemberChange = (index, field, value) => {
-        const newTeam = [...formData.teamMembers];
-        let updated = { ...newTeam[index], [field]: value };
+        setFormData(prev => {
+            const newTeam = [...prev.teamMembers];
+            const updated = { ...newTeam[index], [field]: value };
 
-        if (field === 'allocation_pct') {
-            const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
-            updated.allocation_pct = pct;
-            
-            // Dynamic Proportional Allocation (100% = 40h)
-            if (pct !== '') {
-                const hours = Math.round((pct / 100) * 40);
-                const projectWeeks = getProjectWeeks(formData.startDate, formData.endDate);
+            if (field === 'allocation_pct') {
+                const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
+                updated.allocation_pct = pct;
                 
-                let targetWeeks = projectWeeks;
-                if (updated.allocation_start_date || updated.allocation_end_date) {
-                    targetWeeks = getProjectWeeks(
-                        updated.allocation_start_date || formData.startDate,
-                        updated.allocation_end_date || formData.endDate
-                    );
+                // Dynamic Proportional Allocation (100% = 40h)
+                if (pct !== '') {
+                    const hours = Math.round((pct / 100) * 40);
+                    const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
+                    
+                    let targetWeeks = projectWeeks;
+                    if (updated.allocation_start_date || updated.allocation_end_date) {
+                        targetWeeks = getProjectWeeks(
+                            updated.allocation_start_date || prev.startDate,
+                            updated.allocation_end_date || prev.endDate
+                        );
+                    }
+
+                    const newWeeklyHours = { ...(updated.weekly_hours || {}) };
+                    targetWeeks.forEach(w => {
+                        newWeeklyHours[w.weekNum] = hours;
+                    });
+                    updated.weekly_hours = newWeeklyHours;
                 }
-
-                const newWeeklyHours = { ...(updated.weekly_hours || {}) };
-                targetWeeks.forEach(w => {
-                    newWeeklyHours[w.weekNum] = hours;
-                });
-                updated.weekly_hours = newWeeklyHours;
             }
-        }
 
-        newTeam[index] = updated;
-        setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+            // Re-calculate if dates change
+            if (field === 'allocation_start_date' || field === 'allocation_end_date') {
+                const pct = parseInt(updated.allocation_pct) || 0;
+                if (pct > 0) {
+                    const hours = Math.round((pct / 100) * 40);
+                    const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
+                    let targetWeeks = projectWeeks;
+                    if (updated.allocation_start_date || updated.allocation_end_date) {
+                        targetWeeks = getProjectWeeks(
+                            updated.allocation_start_date || prev.startDate,
+                            updated.allocation_end_date || prev.endDate
+                        );
+                    }
+                    const newWeeklyHours = { ...(updated.weekly_hours || {}) };
+                    targetWeeks.forEach(w => {
+                        newWeeklyHours[w.weekNum] = hours;
+                    });
+                    updated.weekly_hours = newWeeklyHours;
+                }
+            }
+
+            newTeam[index] = updated;
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
+            return { ...prev, teamMembers: newTeam };
+        });
 
         // Auto-fill weeks when dates change (keep logic for date shifts)
         if (['allocation_start_date', 'allocation_end_date'].includes(field)) {
-            setTimeout(() => autoFillWeeks(index, updated), 0);
+            // Since we moved state update inside, we can just let it handle it above, 
+            // but keeping autoFillWeeks call if it does extra work.
+            // Actually, the logic above covers it.
         }
     };
 
@@ -1169,12 +1334,22 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             weekly_hours: { ...newTeam[index].weekly_hours, [weekNum]: hours }
         };
         setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+        setTeamHoursError(validateProjectWeeklyHours(newTeam));
     };
 
     // --- Form Submission ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
+        const isClientProject = formData.type === 'Client';
+        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const projectHoursValidationError = validateProjectWeeklyHours(formData.teamMembers);
+        if (projectHoursValidationError) {
+            setTeamHoursError(projectHoursValidationError);
+            setSubmitError(projectHoursValidationError);
+            return;
+        }
+        setTeamHoursError('');
 
         if (!(formData.name || '').trim()) {
             setSubmitError('Project name is required.');
@@ -1214,14 +1389,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-        if (formData.status === 'In Progress' && !formData.sowStatus) {
-            setSubmitError('SOW Status is required when Project Status is In Progress.');
+        if (isClientProject && !formData.sowStatus) {
+            setSubmitError('SOW Status is required for External projects.');
             return;
         }
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
-        const isClientProject = formData.type === 'Client';
-        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
         const effectiveType = formData.type;
         const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
         const normalizedPartnerId = isPartnerClientProject ? toIdOrNull(formData.partnerId) : null;
@@ -1236,16 +1409,25 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
 
         setIsSubmitting(true);
+        const normalizedSelectedSkills = Array.from(
+            new Map(
+                (formData.skills || [])
+                    .map((skill) => normalizeSkillValue(skill))
+                    .filter(Boolean)
+                    .map((skill) => [normalizeSkillToken(skill), skill])
+            ).values()
+        );
 
         const payload = {
             project_id: projectId,
             project_name: (formData.name || '').trim(),
             project_status: formData.status,
-            sub_status: formData.status === 'In Progress' ? formData.sowStatus : null,
+            sub_status: isClientProject ? (formData.sowStatus || null) : null,
             type: effectiveType,
             billable: formData.billable,
             start_date: normalizedStart,
             end_date: normalizedEnd || null,
+            skills: normalizedSelectedSkills,
             team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
@@ -1294,10 +1476,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             )}
 
             {/* Panel / Page */}
-            <div className={pageMode
+            <div className={(pageMode
                 ? "w-full h-full bg-white flex flex-col"
                 : "fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col"
-            }>
+            ) + " add-project"}>
 
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
@@ -1335,6 +1517,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 <div className="flex flex-col gap-1.5 col-span-2">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Project Name</label>
                                     <input type="text" name="name" placeholder="e.g. Enterprise Migration" required
+                                        maxLength={100}
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
                                         value={formData.name} onChange={handleChange} />
                                 </div>
@@ -1433,7 +1616,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </div>
                                 )}
 
-                                {/* INTERNAL — Department dropdown */}
+                                {/* INTERNAL ΓÇö Department dropdown */}
                                 {formData.type === 'Internal' && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600 uppercase">Department (Optional)</label>
@@ -1457,7 +1640,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </select>
                                 </div>
 
-                                {formData.status === 'In Progress' && (
+                                {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600 uppercase">SOW Status</label>
                                         <select
@@ -1465,8 +1648,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                             value={formData.sowStatus}
                                             onChange={handleChange}
+                                            required
                                         >
-                                            <option value="">Select SOW Status</option>
                                             {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                                             ))}
@@ -1500,6 +1683,91 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         value={formData.endDate} onChange={handleChange} />
                                 </div>
+
+                                {/* SKILLS MULTI-SELECT */}
+                                <div className="flex flex-col gap-1.5 col-span-2">
+                                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Required Skills</label>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex gap-2">
+                                            <SearchableDropdown
+                                                items={availableSkills.map(s => ({ id: s, name: s }))}
+                                                selectedId={null} // Multi-select doesn't have a single selected ID
+                                                onSelect={(item) => {
+                                                    const selectedSkill = item?.isCreateOption ? item.skillName : item.name;
+                                                    void addSkillToForm(selectedSkill);
+                                                }}
+                                                placeholder="Search or add skills..."
+                                                label="skills"
+                                                noResultsText="Skill not found. Select Add or use + Add Skill."
+                                                loadOptions={async (query) => {
+                                                    const normalizedQuery = normalizeSkillValue(query);
+                                                    const filtered = availableSkills.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+                                                    if (normalizedQuery && !filtered.some(s => normalizeSkillToken(s) === normalizeSkillToken(normalizedQuery))) {
+                                                        return [
+                                                            {
+                                                                id: `create-skill:${normalizedQuery}`,
+                                                                name: `Add '${normalizedQuery}'`,
+                                                                skillName: normalizedQuery,
+                                                                isCreateOption: true,
+                                                            },
+                                                            ...filtered.map(s => ({ id: s, name: s }))
+                                                        ];
+                                                    }
+                                                    return filtered.map(s => ({ id: s, name: s }));
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <input
+                                                type="text"
+                                                value={skillInput}
+                                                onChange={(e) => {
+                                                    setSkillInput(e.target.value);
+                                                    if (skillError) setSkillError('');
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        void handleAddSkillClick();
+                                                    }
+                                                }}
+                                                placeholder="Type a new skill..."
+                                                className="flex-1 h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => { void handleAddSkillClick(); }}
+                                                disabled={isAddingSkill}
+                                                className={`h-10 px-4 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${
+                                                    isAddingSkill
+                                                        ? 'bg-emerald-50 text-emerald-400 border-emerald-100 cursor-not-allowed'
+                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                                                }`}
+                                            >
+                                                {isAddingSkill ? 'Adding...' : '+ Add Skill'}
+                                            </button>
+                                        </div>
+                                        {skillError && (
+                                            <p className="text-xs text-red-600 font-medium">{skillError}</p>
+                                        )}
+                                        {formData.skills.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {formData.skills.map((skill) => (
+                                                    <div key={skill} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100 shadow-sm animate-in fade-in zoom-in duration-200">
+                                                        {skill}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSkillRemove(skill)}
+                                                            className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1507,11 +1775,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                         {/* --- BOTTOM SECTION: Team Members --- */}
                         <div className="flex flex-col gap-4 mb-10">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Users size={18} className="text-emerald-500" />
-                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Team Members</h3>
-                                </div>
+                            <div className="flex items-center">
                                 <button type="button" onClick={handleAddTeamMember} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors">
                                     <Plus size={14} /> Add Team Member
                                 </button>
@@ -1523,6 +1787,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <strong>Allocation Logic:</strong> 40h/week = 100% allocation. Set allocation % and optionally a date range, then click <strong>Full</strong> or leave date range to auto-fill all project weeks. Weeks are derived from the project start/end dates. <strong>Billable</strong> = client-facing; <strong>Shadow</strong> = non-billable, works behind the scenes.
                                 </div>
                             </div>
+                            {teamHoursError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-[11px] text-red-700 font-semibold">
+                                    {teamHoursError}
+                                </div>
+                            )}
 
                             {formData.teamMembers.length === 0 ? (
                                 <div className="text-center py-8 text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
@@ -1562,7 +1831,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 onClick={() => setShowAllWeeks(v => !v)}
                                                                 className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                                                             >
-                                                                {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
+                                                                {showAllWeeks ? 'ΓåÉ Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
                                                             </button>
                                                         </th>
                                                     )}
@@ -1657,7 +1926,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <option value="Shadow">Shadow</option>
                                                             </select>
                                                         </td>
-                                                        {/* Dynamic week columns — Excel-style */}
+                                                        {/* Dynamic week columns ΓÇö Excel-style */}
                                                         {visibleWeeks.map((wk, wIdx) => {
                                                             const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                             return (
