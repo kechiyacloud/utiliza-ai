@@ -435,109 +435,65 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Actionable Todo List (Span 1) */}
-            <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col gap-3 opacity-60 grayscale pointer-events-none select-none">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <ListTodo size={16} className="text-blue-500" />
-                Actionable Todo List
-                <span className="ml-auto text-[10px] font-bold text-slate-400">{todos.filter(t => t.status === 'pending').length} pending</span>
-              </h2>
+            {/* Actionable Todo List (Span 1) — Coming Soon */}
+            <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[380px]">
 
-              <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-slate-600">
-                <span className="font-semibold">Admin controls are enabled for this board.</span>
-                <span className="font-black uppercase tracking-wider text-blue-600">{editingTodoId ? 'Editing task' : 'Live task manager'}</span>
-              </div>
-
-              {/* Add Task Input */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newTodoText}
-                  onChange={e => setNewTodoText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddTodo()}
-                  placeholder="Add a new task..."
-                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
-                />
-                <button
-                  onClick={handleAddTodo}
-                  disabled={todoLoading || !newTodoText.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50"
-                >
-                  <Send size={13} />
-                  {editingTodoId ? 'Save' : 'Add'}
-                </button>
-                {editingTodoId && (
-                  <button
-                    onClick={cancelTodoEditing}
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-50"
-                  >
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-
-              {/* Todo Items */}
-              <div className="flex flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar max-h-[280px]">
-                {todos.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No tasks yet. Add one above!</p>
-                )}
-                {todos.map((todo) => (
-                  <div
-                    key={todo.id}
-                    className={`border p-3 rounded-xl flex items-start gap-3 group transition-all ${todo.status === 'completed'
-                      ? 'bg-slate-50 border-slate-100 opacity-60'
-                      : 'bg-white border-gray-100 hover:border-blue-200 shadow-xs hover:shadow-sm'
-                      }`}
-                  >
-                    <button
-                      onClick={() => handleToggleTodo(todo.id)}
-                      className={`mt-0.5 flex-shrink-0 transition-colors ${todo.status === 'completed' ? 'text-emerald-500' : 'text-slate-300 hover:text-blue-500'
-                        }`}
-                    >
-                      <CheckCircle2 size={18} strokeWidth={2} />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium leading-snug ${todo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-                        }`}>
-                        {todo.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${todo.type === 'critical' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                          todo.type === 'warning' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                            'bg-blue-50 text-blue-600 border border-blue-100'
-                          }`}>{todo.type}</span>
-                        <span className="text-[9px] text-slate-400">{todo.time}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {todo.isSystemSuggestion && todo.actionType && todo.actionType !== 'none' && todo.status === 'pending' && (
-                        <button
-                          onClick={() => navigate(todo.actionType === 'project' ? '/info/projects' : '/info/allocation', { state: { showBack: true } })}
-                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                          title="Take Action"
-                        >
-                          <ArrowUpRight size={16} />
-                        </button>
-                      )}
-                      {!todo.isSystemSuggestion && (
-                        <button
-                          onClick={() => startEditingTodo(todo)}
-                          className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
-                          title="Edit task"
-                        >
-                          <SquarePen size={15} />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => promptDeleteTodo(todo)}
-                        className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
-                        title="Delete task"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+              {/* Blurred background preview */}
+              <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <ListTodo size={16} className="text-blue-500" />
+                  Actionable Todo List
+                  <span className="ml-auto text-[10px] font-bold text-slate-400">3 pending</span>
+                </h2>
+                <div className="flex gap-2">
+                  <div className="flex-1 h-8 bg-slate-100 rounded-lg" />
+                  <div className="w-14 h-8 bg-blue-200 rounded-lg" />
+                </div>
+                {[
+                  { w: 'w-3/4', type: 'bg-rose-100' },
+                  { w: 'w-full', type: 'bg-amber-100' },
+                  { w: 'w-2/3', type: 'bg-blue-100' },
+                ].map((item, i) => (
+                  <div key={i} className="border border-slate-100 bg-slate-50 p-3 rounded-xl flex items-start gap-3">
+                    <div className="w-4 h-4 mt-0.5 rounded-full bg-slate-200 flex-shrink-0" />
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <div className={`h-3 ${item.w} bg-slate-200 rounded`} />
+                      <div className={`h-2 w-10 ${item.type} rounded`} />
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Coming Soon Overlay */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/70 backdrop-blur-[2px]">
+                <div className="relative flex items-center justify-center">
+                  {/* Pulsing ring */}
+                  <span className="absolute inline-flex h-16 w-16 rounded-full bg-blue-400 opacity-20 animate-ping" />
+                  <div className="relative z-10 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
+                    <ListTodo size={24} className="text-white" strokeWidth={2} />
+                  </div>
+                </div>
+
+                <div className="text-center px-6">
+                  <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-600 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    Coming Soon
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1">Actionable Todo List</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-[200px] mx-auto">
+                    A smart task board to track and act on your team's priorities — launching soon.
+                  </p>
+                </div>
+
+                <div className="flex gap-1.5">
+                  {[0, 1, 2].map(i => (
+                    <span
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-blue-300"
+                      style={{ animationDelay: `${i * 0.2}s`, animation: 'pulse 1.5s ease-in-out infinite' }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>

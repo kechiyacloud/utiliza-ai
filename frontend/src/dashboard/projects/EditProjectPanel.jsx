@@ -13,6 +13,8 @@ import {
 } from '../../api/entitiesApi';
 import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
+const DEFAULT_SOW_STATUS = 'SOW_NOT_SIGNED';
+
 /* ──────────────────────────────────────────────────────────
    INLINE MODAL — Add / Edit / Delete confirmation
    ────────────────────────────────────────────────────────── */
@@ -205,7 +207,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         partnerName: 'Cloud Destination',
         departmentId: '',
         status: 'Not Started',
-        subStatus: '',
+        subStatus: DEFAULT_SOW_STATUS,
         billable: 'Billable',
         startDate: '',
         endDate: '',
@@ -235,7 +237,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     // Map raw/normalized type value → the exact string used in the <select> options
     const normalizeTypeForForm = (t) => {
-        if (!t) return 'Client';
+        if (!t) return 'External';
         const lc = t.toLowerCase();
         if (lc === 'external' || lc === 'client') return 'External';
         if (lc === 'internal') return 'Internal';
@@ -281,7 +283,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                 partnerName: project.partner_name || project.partner || 'Cloud Destination',
                 departmentId: project.department_id || '',
                 status: normalizeStatusForForm(project.status || project.project_status),
-                subStatus: project.sub_status || project.subStatus || '',
+                subStatus: (isPartner ? 'External' : projectType) === 'External'
+                    ? (project.sub_status || project.subStatus || DEFAULT_SOW_STATUS)
+                    : '',
                 billable: normalizeBillableForForm(project.billable),
                 startDate: project.start_date || project.startDate || '',
                 endDate: project.end_date || project.endDate || '',
@@ -317,6 +321,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                 partnerId: '',
                 partnerName: isClientType ? 'Cloud Destination' : '',
                 billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
+                subStatus: isClientType ? (prev.subStatus || DEFAULT_SOW_STATUS) : '',
             }));
             return;
         }
@@ -335,7 +340,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             setFormData(prev => ({
                 ...prev,
                 status: value,
-                subStatus: value === 'In Progress' ? prev.subStatus : ''
             }));
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -384,9 +388,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
         const isInternal = formData.type === 'Internal';
         
-        // SOW Validation: Only if status is In Progress AND project is NOT Internal
-        if (formData.status === 'In Progress' && !isInternal && !formData.subStatus) {
-            setSaveError('Sub Status is required when status is In Progress.');
+        // SOW Validation: required for External projects only
+        if (!isInternal && !formData.subStatus) {
+            setSaveError('SOW Status is required for External projects.');
             return;
         }
 
@@ -415,15 +419,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             payload.partner_id = isPartnerClientProject ? (formData.partnerId || null) : null;
         }
         if ('departmentId' in changedFields || 'type' in changedFields) {
-            payload.department_id = formData.type === 'Internal' ? (formData.departmentId || null) : null;
+            const deptValue = formData.type === 'Internal' ? (formData.departmentId || null) : null;
+            payload.department = deptValue;
+            payload.department_id = deptValue;
         }
         if ('billable' in changedFields) payload.billable = formData.billable;
         if ('startDate' in changedFields) payload.start_date = formData.startDate;
         if ('endDate' in changedFields) payload.end_date = formData.endDate || null;
         if ('skills' in changedFields) payload.skills = formData.skills || [];
         if ('subStatus' in changedFields || 'status' in changedFields || 'type' in changedFields) {
-            // Send sub_status if not internal, otherwise backend handles clearing it if needed
-            payload.sub_status = (!isInternal && formData.status === 'In Progress') ? (formData.subStatus || null) : null;
+            payload.sub_status = !isInternal ? (formData.subStatus || null) : null;
         }
 
         console.log('Edit Project Submission Payload:', payload);
@@ -538,7 +543,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 <input
                                     type="text"
                                     name="name"
-                                    maxLength={255}
+                                    maxLength={100}
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-800"
                                     value={formData.name}
                                     onChange={handleChange}
@@ -671,16 +676,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </select>
                             </div>
 
-                            {formData.status === 'In Progress' && formData.type !== 'Internal' && (
+                            {formData.type === 'External' && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Status (SOW)</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">SOW Status</label>
                                     <select
                                         name="subStatus"
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                         value={formData.subStatus}
                                         onChange={handleChange}
+                                        required
                                     >
-                                        <option value="">Select Sub Status</option>
                                         {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                                         ))}

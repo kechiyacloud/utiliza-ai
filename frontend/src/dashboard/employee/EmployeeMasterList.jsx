@@ -9,7 +9,6 @@ import SkillsOverview from './insights/SkillsOverview'
 import { getEmployeeList } from '../../api/employeeApi'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
-import { useDataRefresh } from '../../context'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -39,7 +38,6 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
 
 function EmployeeMasterList() {
   const navigate = useNavigate()
-  const { refreshKey } = useDataRefresh()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
@@ -102,7 +100,7 @@ function EmployeeMasterList() {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList(refreshKey > 0)
+        const data = await getEmployeeList()
         if (!mounted) return
         setAllEmployees(data)
       } catch (err) {
@@ -114,7 +112,7 @@ function EmployeeMasterList() {
 
     fetchAllData()
     return () => { mounted = false }
-  }, [refreshKey])
+  }, [])
 
   const combinedFilters = useMemo(() => ({
     ...filters,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { loadLogoAsBase64, buildPDFHeader } from '../utils/exportUtils';
+import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
 import cdBlueLogo from '../assets/CD-Blue.svg';
 import { 
   ArrowLeft, 
@@ -207,11 +207,12 @@ const FullAnalytics = () => {
         startY: y,
         theme: 'striped',
         headStyles: { fillColor: BRAND_BLUE, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        styles: { fontSize: 8, cellPadding: 3 },
+        styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [30, 41, 59] },
         alternateRowStyles: { fillColor: [240, 249, 255] },
         margin: { left: 14, right: 14, bottom: 18 },
       });
 
+      addPDFFooter(doc);
       doc.save(`workforce-pulse-analytics-${selectedDept}.pdf`);
     } catch (error) {
       console.error('Failed to export analytics PDF', error);

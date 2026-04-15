@@ -49,39 +49,43 @@ export const exportToExcel = (data, fileName = 'export') => {
 };
 
 /**
- * Exports data to PDF
+ * Exports data to PDF with consistent branded styling.
  * @param {Array} data - Array of objects
  * @param {Array} columns - Array of column definitions { header: string, dataKey: string }
  * @param {string} title - PDF Title
  * @param {string} fileName - Base filename
+ * @param {Object} options - { subtitle, logoUrl, columnStyles }
  */
-export const exportToPDF = (data, columns, title = 'Export', fileName = 'export') => {
+export const exportToPDF = async (data, columns, title = 'Export', fileName = 'export', options = {}) => {
+    const { subtitle = '', logoUrl = null, columnStyles = {} } = options;
     if (!data || !columns) return;
+
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-    // Add Title
-    doc.setFontSize(18);
-    doc.setTextColor(40);
-    doc.text(title, 14, 22);
+    let logoBase64 = null;
+    if (logoUrl) {
+        try { logoBase64 = await loadLogoAsBase64(logoUrl); } catch { /* skip */ }
+    }
 
-    // Add Date
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+    const sub = subtitle || `Generated: ${new Date().toLocaleString('en-GB')}`;
+    const startY = buildPDFHeader(doc, logoBase64, title, sub);
 
-    const tableRows = data.map(item => columns.map(col => item[col.dataKey] || ''));
+    const tableRows = data.map(item => columns.map(col => String(item[col.dataKey] ?? '')));
     const tableHeaders = [columns.map(col => col.header)];
 
     autoTable(doc, {
         head: tableHeaders,
         body: tableRows,
-        startY: 35,
+        startY,
         theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 2 },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
+        headStyles: { fillColor: [59, 169, 251], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [240, 249, 255] },
+        margin: { left: 14, right: 14, bottom: 18 },
+        columnStyles,
     });
 
+    addPDFFooter(doc);
     doc.save(`${fileName}.pdf`);
 };
 

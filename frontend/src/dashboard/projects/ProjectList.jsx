@@ -13,6 +13,7 @@ import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import cdBlueLogo from '../../assets/CD-Blue.svg';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
@@ -204,7 +205,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('grid');
+    const [activeView, setActiveView] = useState('table');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [sortBy, setSortBy] = useState('newest');
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -405,7 +406,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
-    const handleExport = (format) => {
+    const handleExport = async (format) => {
         const formatDate = (val) => {
             if (!val) return '--';
             if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
@@ -445,7 +446,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 { header: 'Start Date', dataKey: 'Start Date' },
                 { header: 'End Date', dataKey: 'End Date' }
             ];
-            exportToPDF(exportData, columns, `Project List - ${tableTitle}`, fileName);
+            const subtitle = `Filter: ${tableTitle}  |  Generated: ${new Date().toLocaleString('en-GB')}`;
+            await exportToPDF(exportData, columns, 'Project List', fileName, { subtitle, logoUrl: cdBlueLogo });
         }
     };
 

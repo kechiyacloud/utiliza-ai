@@ -5,7 +5,7 @@ import { getAvailabilityData, getAvailabilityFilters } from '../api/availability
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { loadLogoAsBase64, buildPDFHeader } from '../utils/exportUtils';
+import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
 import cdBlueLogo from '../assets/CD-Blue.svg';
 
 const MONTH_WIDTH = 180;
@@ -444,7 +444,7 @@ const Availability = () => {
             startY,
             theme: 'striped',
             headStyles: { fillColor: [59, 169, 251], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-            styles: { fontSize: 8, cellPadding: 3 },
+            styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [30, 41, 59] },
             alternateRowStyles: { fillColor: [240, 249, 255] },
             margin: { left: 14, right: 14, bottom: 18 },
             columnStyles: {
@@ -458,6 +458,7 @@ const Availability = () => {
             },
         });
 
+        addPDFFooter(doc);
         doc.save('availability-report.pdf');
     };
 

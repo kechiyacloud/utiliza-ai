@@ -385,6 +385,12 @@ def _available_capacity_pct(existing_weekly_load: dict) -> int:
 
 
 def _validate_capacity(existing_weekly_load: dict, new_weekly_load: dict):
+    """
+    Validate that the new allocation itself does not exceed 40 hrs/week per project.
+    Cross-project totals are allowed to exceed 40 hrs — an employee can work on
+    multiple projects simultaneously (e.g. 50% Project A + 50% Project B + 25% Project C).
+    The 40 hr cap here guards against a single project being allocated more than 100%.
+    """
     today = date.today()
     today_iso = today.isocalendar()
     current_week = (today_iso[0], today_iso[1])
@@ -393,11 +399,11 @@ def _validate_capacity(existing_weekly_load: dict, new_weekly_load: dict):
         # Skip past weeks — historical data cannot be changed; only future capacity matters
         if wk < current_week:
             continue
-        total = hours + existing_weekly_load.get(wk, 0)
-        if total > HOURS_PER_FTE + 1e-6:
-            over_weeks.append(f"{wk[0]}-W{wk[1]:02d} ({total}h)")
+        # Only check the new project's own allocation — NOT the cross-project sum
+        if hours > HOURS_PER_FTE + 1e-6:
+            over_weeks.append(f"{wk[0]}-W{wk[1]:02d} ({hours}h)")
     if over_weeks:
-        raise HTTPException(status_code=422, detail="Max allowed is 40 hrs/week")
+        raise HTTPException(status_code=422, detail="A single project allocation cannot exceed 40 hrs/week (100%).")
 
 
 def _capacity_snapshot(cur, employee_ids: list):
@@ -875,6 +881,7 @@ def projects_list(department: Optional[str] = None):
                     SELECT COUNT(DISTINCT pa_all.employee_id)
                     FROM projects_allocation pa_all
                     WHERE pa_all.project_id = p.project_id
+                      AND (pa_all.allocation_end_date IS NULL OR pa_all.allocation_end_date >= CURRENT_DATE)
                 ) AS resource_count,
                 (
                     SELECT JSON_AGG(json_row)
@@ -1500,11 +1507,11 @@ def create_project(project: ProjectCreate):
             project.project_id,
             project_name,
             project_status,
+            sub_status_val,
             project_type,
             "Non-Billable" if normalized_type == "internal" else _normalize_text(project.billable),
             project.start_date,
             project.end_date,
-            json.dumps(project.skills) if project.skills else '[]'
         ]
 
         if client_id_value is not None:

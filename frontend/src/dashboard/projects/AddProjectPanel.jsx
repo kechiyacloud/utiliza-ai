@@ -71,6 +71,12 @@ const toIdOrNull = (val) => {
     return text;
 };
 
+const normalizeSkillValue = (skill) => String(skill || '').trim().replace(/\s+/g, ' ');
+const normalizeSkillToken = (skill) => normalizeSkillValue(skill).toLowerCase();
+const DEFAULT_SOW_STATUS = 'SOW_NOT_SIGNED';
+const MAX_WEEKLY_HOURS_PER_RESOURCE = 40;
+const PROJECT_WEEKLY_HOURS_ERROR = 'Max 40 hrs/week allowed per project';
+
 const sanitizeWeeklyHours = (wh = {}) => {
     const cleaned = {};
     Object.entries(wh || {}).forEach(([wk, hrs]) => {
@@ -647,6 +653,9 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
     const [availableSkills, setAvailableSkills] = useState([]);
+    const [skillInput, setSkillInput] = useState('');
+    const [skillError, setSkillError] = useState('');
+    const [isAddingSkill, setIsAddingSkill] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState('');
     const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
@@ -655,6 +664,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // --- UI State ---
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [teamHoursError, setTeamHoursError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
 
@@ -748,7 +758,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     useEffect(() => {
         if (isOpen) {
             setSubmitError('');
+            setTeamHoursError('');
             setEntityError('');
+            setSkillInput('');
+            setSkillError('');
+            setIsAddingSkill(false);
             setFormData({
                 name: '',
                 type: 'Client',
@@ -760,7 +774,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 department: '',
                 billable: 'Billable',
                 status: 'Not Started',
-                sowStatus: '',
+                sowStatus: DEFAULT_SOW_STATUS,
                 startDate: '',
                 endDate: '',
                 skills: [],
@@ -797,6 +811,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
                 department: value === 'Internal' ? prev.department : '',
                 billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
+                sowStatus: isClientType ? (prev.sowStatus || DEFAULT_SOW_STATUS) : '',
             }));
             return;
         }
@@ -804,7 +819,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setFormData(prev => ({
                 ...prev,
                 status: value,
-                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
             }));
             return;
         }
@@ -835,6 +849,75 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             clientName: '',
         }));
         loadClientsForPartner(item.id);
+    };
+
+    const skillExistsInList = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).some((skill) => normalizeSkillToken(skill) === targetToken);
+    };
+
+    const findMatchingSkill = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).find((skill) => normalizeSkillToken(skill) === targetToken) || null;
+    };
+
+    const addSkillToForm = async (rawSkillValue) => {
+        const normalizedSkill = normalizeSkillValue(rawSkillValue);
+        if (!normalizedSkill) {
+            setSkillError('Skill cannot be empty.');
+            return;
+        }
+
+        if (skillExistsInList(formData.skills, normalizedSkill)) {
+            setSkillError(`"${normalizedSkill}" is already added.`);
+            setSkillInput('');
+            return;
+        }
+
+        let skillToAdd = findMatchingSkill(availableSkills, normalizedSkill) || normalizedSkill;
+        const skillMissingInDirectory = !findMatchingSkill(availableSkills, normalizedSkill);
+
+        if (skillMissingInDirectory) {
+            setIsAddingSkill(true);
+            try {
+                const response = await axios.post('/projects/skills/ensure', { skill_name: normalizedSkill });
+                const persistedSkill = normalizeSkillValue(response?.data?.skill_name) || normalizedSkill;
+                skillToAdd = persistedSkill;
+                setAvailableSkills((prev) => {
+                    if (skillExistsInList(prev, persistedSkill)) return prev;
+                    return [...prev, persistedSkill].sort((left, right) => left.localeCompare(right));
+                });
+            } catch (error) {
+                const message =
+                    error?.response?.data?.detail ||
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    'Failed to add skill.';
+                setSkillError(toMessage(message, 'Failed to add skill.'));
+                setIsAddingSkill(false);
+                return;
+            }
+            setIsAddingSkill(false);
+        }
+
+        setFormData((prev) => {
+            if (skillExistsInList(prev.skills, skillToAdd)) return prev;
+            return { ...prev, skills: [...prev.skills, skillToAdd] };
+        });
+        setSkillInput('');
+        setSkillError('');
+    };
+
+    const handleAddSkillClick = async () => {
+        await addSkillToForm(skillInput);
+    };
+
+    const handleSkillRemove = (skillToRemove) => {
+        setFormData((prev) => ({
+            ...prev,
+            skills: prev.skills.filter((skill) => normalizeSkillToken(skill) !== normalizeSkillToken(skillToRemove)),
+        }));
+        setSkillError('');
     };
 
     const hasPartnerMappedClients = useMemo(
@@ -1039,6 +1122,47 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
     };
 
+    const getMemberIdentity = (member = {}) => {
+        const employeeId = String(member.employee_id || '').trim();
+        if (employeeId) return { key: `emp:${employeeId.toLowerCase()}`, label: member.name || employeeId };
+        const memberName = String(member.name || '').trim();
+        if (memberName) return { key: `name:${memberName.toLowerCase()}`, label: memberName };
+        return null;
+    };
+
+    const validateProjectWeeklyHours = (teamMembers = []) => {
+        const totalsByResource = new Map();
+
+        for (const member of teamMembers || []) {
+            const identity = getMemberIdentity(member);
+            if (!identity) continue;
+
+            const resource = totalsByResource.get(identity.key) || { label: identity.label, weeks: new Map() };
+            const weeklyHours = member.weekly_hours || {};
+
+            Object.entries(weeklyHours).forEach(([weekKey, rawHours]) => {
+                const hours = Number(rawHours);
+                if (!Number.isFinite(hours) || hours <= 0) return;
+
+                const current = resource.weeks.get(weekKey) || 0;
+                const next = current + hours;
+                resource.weeks.set(weekKey, next);
+            });
+
+            totalsByResource.set(identity.key, resource);
+        }
+
+        for (const resource of totalsByResource.values()) {
+            for (const totalHours of resource.weeks.values()) {
+                if (totalHours > MAX_WEEKLY_HOURS_PER_RESOURCE + 1e-6) {
+                    return PROJECT_WEEKLY_HOURS_ERROR;
+                }
+            }
+        }
+
+        return '';
+    };
+
     const handleAddTeamMember = () => {
         setFormData(prev => ({
             ...prev,
@@ -1057,6 +1181,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 }
             ]
         }));
+        setTeamHoursError('');
     };
 
     const handleEmployeeSelect = (index, emp) => {
@@ -1076,6 +1201,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             location: newTeam[index].location !== 'Remote' ? newTeam[index].location : (emp.location || emp.mode_of_work || 'Remote'),
         };
         setFormData({ ...formData, teamMembers: newTeam });
+        setTeamHoursError(validateProjectWeeklyHours(newTeam));
     };
 
     const handleRoleSelect = (index, role) => {
@@ -1085,10 +1211,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleRemoveTeamMember = (index) => {
-        setFormData(prev => ({
-            ...prev,
-            teamMembers: prev.teamMembers.filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const newTeam = prev.teamMembers.filter((_, i) => i !== index);
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
+            return {
+                ...prev,
+                teamMembers: newTeam
+            };
+        });
     };
 
     const handleInsertMemberAt = (index) => {
@@ -1105,6 +1235,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 billable_shadow: 'Billable',
                 weekly_hours: {},
             });
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
             return { ...prev, teamMembers: newTeam };
         });
     };
@@ -1183,6 +1314,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             }
 
             newTeam[index] = updated;
+            setTeamHoursError(validateProjectWeeklyHours(newTeam));
             return { ...prev, teamMembers: newTeam };
         });
 
@@ -1202,12 +1334,22 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             weekly_hours: { ...newTeam[index].weekly_hours, [weekNum]: hours }
         };
         setFormData(prev => ({ ...prev, teamMembers: newTeam }));
+        setTeamHoursError(validateProjectWeeklyHours(newTeam));
     };
 
     // --- Form Submission ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
+        const isClientProject = formData.type === 'Client';
+        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const projectHoursValidationError = validateProjectWeeklyHours(formData.teamMembers);
+        if (projectHoursValidationError) {
+            setTeamHoursError(projectHoursValidationError);
+            setSubmitError(projectHoursValidationError);
+            return;
+        }
+        setTeamHoursError('');
 
         if (!(formData.name || '').trim()) {
             setSubmitError('Project name is required.');
@@ -1247,14 +1389,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-        if (formData.status === 'In Progress' && !formData.sowStatus) {
-            setSubmitError('SOW Status is required when Project Status is In Progress.');
+        if (isClientProject && !formData.sowStatus) {
+            setSubmitError('SOW Status is required for External projects.');
             return;
         }
 
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
-        const isClientProject = formData.type === 'Client';
-        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
         const effectiveType = formData.type;
         const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
         const normalizedPartnerId = isPartnerClientProject ? toIdOrNull(formData.partnerId) : null;
@@ -1269,17 +1409,25 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
 
         setIsSubmitting(true);
+        const normalizedSelectedSkills = Array.from(
+            new Map(
+                (formData.skills || [])
+                    .map((skill) => normalizeSkillValue(skill))
+                    .filter(Boolean)
+                    .map((skill) => [normalizeSkillToken(skill), skill])
+            ).values()
+        );
 
         const payload = {
             project_id: projectId,
             project_name: (formData.name || '').trim(),
             project_status: formData.status,
-            sub_status: formData.status === 'In Progress' ? formData.sowStatus : null,
+            sub_status: isClientProject ? (formData.sowStatus || null) : null,
             type: effectiveType,
             billable: formData.billable,
             start_date: normalizedStart,
             end_date: normalizedEnd || null,
-            skills: formData.skills || [],
+            skills: normalizedSelectedSkills,
             team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
@@ -1369,6 +1517,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 <div className="flex flex-col gap-1.5 col-span-2">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Project Name</label>
                                     <input type="text" name="name" placeholder="e.g. Enterprise Migration" required
+                                        maxLength={100}
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
                                         value={formData.name} onChange={handleChange} />
                                 </div>
@@ -1491,7 +1640,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </select>
                                 </div>
 
-                                {formData.status === 'In Progress' && (
+                                {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600 uppercase">SOW Status</label>
                                         <select
@@ -1499,8 +1648,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                             value={formData.sowStatus}
                                             onChange={handleChange}
+                                            required
                                         >
-                                            <option value="">Select SOW Status</option>
                                             {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                                             ))}
@@ -1544,26 +1693,63 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 items={availableSkills.map(s => ({ id: s, name: s }))}
                                                 selectedId={null} // Multi-select doesn't have a single selected ID
                                                 onSelect={(item) => {
-                                                    let skillName = item.name;
-                                                    if (skillName.startsWith('Add "') && skillName.endsWith('"')) {
-                                                        skillName = skillName.substring(5, skillName.length - 1);
-                                                    }
-                                                    if (!formData.skills.includes(skillName)) {
-                                                        setFormData(prev => ({ ...prev, skills: [...prev.skills, skillName] }));
-                                                    }
+                                                    const selectedSkill = item?.isCreateOption ? item.skillName : item.name;
+                                                    void addSkillToForm(selectedSkill);
                                                 }}
                                                 placeholder="Search or add skills..."
                                                 label="skills"
-                                                noResultsText="Skill not found. Press enter to add."
+                                                noResultsText="Skill not found. Select Add or use + Add Skill."
                                                 loadOptions={async (query) => {
+                                                    const normalizedQuery = normalizeSkillValue(query);
                                                     const filtered = availableSkills.filter(s => s.toLowerCase().includes(query.toLowerCase()));
-                                                    if (query && !filtered.some(s => s.toLowerCase() === query.toLowerCase())) {
-                                                        return [{ id: query, name: `Add "${query}"` }, ...filtered.map(s => ({ id: s, name: s }))];
+                                                    if (normalizedQuery && !filtered.some(s => normalizeSkillToken(s) === normalizeSkillToken(normalizedQuery))) {
+                                                        return [
+                                                            {
+                                                                id: `create-skill:${normalizedQuery}`,
+                                                                name: `Add '${normalizedQuery}'`,
+                                                                skillName: normalizedQuery,
+                                                                isCreateOption: true,
+                                                            },
+                                                            ...filtered.map(s => ({ id: s, name: s }))
+                                                        ];
                                                     }
                                                     return filtered.map(s => ({ id: s, name: s }));
                                                 }}
                                             />
                                         </div>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <input
+                                                type="text"
+                                                value={skillInput}
+                                                onChange={(e) => {
+                                                    setSkillInput(e.target.value);
+                                                    if (skillError) setSkillError('');
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        void handleAddSkillClick();
+                                                    }
+                                                }}
+                                                placeholder="Type a new skill..."
+                                                className="flex-1 h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => { void handleAddSkillClick(); }}
+                                                disabled={isAddingSkill}
+                                                className={`h-10 px-4 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${
+                                                    isAddingSkill
+                                                        ? 'bg-emerald-50 text-emerald-400 border-emerald-100 cursor-not-allowed'
+                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                                                }`}
+                                            >
+                                                {isAddingSkill ? 'Adding...' : '+ Add Skill'}
+                                            </button>
+                                        </div>
+                                        {skillError && (
+                                            <p className="text-xs text-red-600 font-medium">{skillError}</p>
+                                        )}
                                         {formData.skills.length > 0 && (
                                             <div className="flex flex-wrap gap-2">
                                                 {formData.skills.map((skill) => (
@@ -1571,7 +1757,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                         {skill}
                                                         <button
                                                             type="button"
-                                                            onClick={() => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))}
+                                                            onClick={() => handleSkillRemove(skill)}
                                                             className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
                                                         >
                                                             <X size={12} />
@@ -1601,6 +1787,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <strong>Allocation Logic:</strong> 40h/week = 100% allocation. Set allocation % and optionally a date range, then click <strong>Full</strong> or leave date range to auto-fill all project weeks. Weeks are derived from the project start/end dates. <strong>Billable</strong> = client-facing; <strong>Shadow</strong> = non-billable, works behind the scenes.
                                 </div>
                             </div>
+                            {teamHoursError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-[11px] text-red-700 font-semibold">
+                                    {teamHoursError}
+                                </div>
+                            )}
 
                             {formData.teamMembers.length === 0 ? (
                                 <div className="text-center py-8 text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-dashed border-slate-200">

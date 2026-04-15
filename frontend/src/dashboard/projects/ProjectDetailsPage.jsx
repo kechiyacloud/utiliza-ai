@@ -4,7 +4,8 @@ import { useDataRefresh } from '../../context';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
-import { exportToCSV, exportToExcel } from '../../utils/exportUtils';
+import { exportToCSV, exportToExcel, loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../../utils/exportUtils';
+import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import EditProjectPanel from './EditProjectPanel';
@@ -1086,7 +1087,6 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
 
 const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, employees, rolesList, globalAllocations, onUpdate, onClearAll, viewMode, setViewMode, visibleWeeks }) => {
     const navigate = useNavigate();
-    const { triggerRefresh } = useDataRefresh();
     const [isEditing, setIsEditing] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -1098,6 +1098,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     const [saveError, setSaveError] = useState('');
     const [statusMessage, setStatusMessage] = useState('');
     const [localRows, setLocalRows] = useState(rows);
+    const PROJECT_WEEKLY_HOURS_ERROR = 'Max 40 hrs/week allowed per project';
 
     useEffect(() => {
         setLocalRows((rows || []).map(normalizeAllocationRow));
@@ -1108,7 +1109,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     }, [localRows]);
 
     const handleAddRow = () => {
-        setLocalRows([...localRows, normalizeAllocationRow({ 
+        const nextRows = [...localRows, normalizeAllocationRow({ 
             name: '', 
             role: '', 
             w1: '', 
@@ -1116,7 +1117,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             w3: '', 
             w4: '',
             isNew: true // Mark as new for validation rules
-        })]);
+        })];
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const handleInsertRowAfter = (index) => {
@@ -1131,6 +1134,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             isNew: true // Mark as new for validation rules
         }));
         setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
     };
 
     const getRowTotal = (row) => {
@@ -1140,16 +1144,55 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         }, 0);
     };
 
+    const hasProjectWeeklyOverflow = (rowsToValidate = []) => {
+        const totalsByResource = new Map();
+
+        (rowsToValidate || []).forEach((row) => {
+            const employeeId = String(row?.employee_id || '').trim();
+            const name = String(row?.name || '').trim();
+            const resourceKey = employeeId ? `emp:${employeeId.toLowerCase()}` : (name ? `name:${name.toLowerCase()}` : '');
+            if (!resourceKey) return;
+
+            const weeklyTotals = totalsByResource.get(resourceKey) || new Map();
+            Object.entries(row?.weekly_hours || {}).forEach(([yearWeek, rawHours]) => {
+                const hours = Number(rawHours);
+                if (!Number.isFinite(hours) || hours <= 0) return;
+                const next = (weeklyTotals.get(yearWeek) || 0) + hours;
+                weeklyTotals.set(yearWeek, next);
+            });
+            totalsByResource.set(resourceKey, weeklyTotals);
+        });
+
+        for (const weeklyTotals of totalsByResource.values()) {
+            for (const totalHours of weeklyTotals.values()) {
+                if (totalHours > WEEK_DEFAULT_HOURS + 1e-6) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const syncProjectHoursValidation = (rowsToValidate = []) => {
+        const overflow = hasProjectWeeklyOverflow(rowsToValidate);
+        if (overflow) {
+            setSaveError(PROJECT_WEEKLY_HOURS_ERROR);
+            return true;
+        }
+        setSaveError((prev) => (prev === PROJECT_WEEKLY_HOURS_ERROR ? '' : prev));
+        return false;
+    };
+
     const handleRemoveRow = (index) => {
-        setLocalRows(localRows.filter((_, i) => i !== index));
+        const nextRows = localRows.filter((_, i) => i !== index);
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const getOtherProjectHours = (empId, yearWeek) => {
-        if (!empId || !globalAllocations) return 0;
-        const totalAllProjects = (globalAllocations[empId] || {})[yearWeek] || 0;
-        const thisProjectRow = rows.find(r => r.employee_id === empId);
-        const thisProjectDBHours = thisProjectRow ? Number((thisProjectRow.weekly_hours || {})[yearWeek] || 0) : 0;
-        return totalAllProjects - thisProjectDBHours;
+        // Validation is project-scoped only. Cross-project capacity is intentionally ignored.
+        if (!empId || !yearWeek || !globalAllocations) return 0;
+        return 0;
     };
 
     const generateWeeklyHours = (hours, row) => {
@@ -1160,37 +1203,25 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         return weekly;
     };
 
-    const handleEmployeeSelect = async (employee, rowIndex) => {
+    const handleEmployeeSelect = (employee, rowIndex) => {
         const empId = employee.employee_id || employee.id;
         const empName = employee.employee_name || employee.name;
-        try {
-            const res = await axios.get(`/allocations/${empId}`);
-            const allocations = Array.isArray(res.data?.allocations) ? res.data.allocations : [];
-            const totalPercent = allocations.reduce((sum, a) => sum + Number(a.percentage || 0), 0);
-            const remainingPercent = Math.max(10, 100 - totalPercent);
-            const hours = Math.max(4, Math.round((remainingPercent / 100) * WEEK_DEFAULT_HOURS));
+        const allocationPct = 100;
+        const hours = Math.round((allocationPct / 100) * WEEK_DEFAULT_HOURS);
 
-            const newRows = [...localRows];
-            const currentRow = { ...(newRows[rowIndex] || {}) };
-            currentRow.employee_id = empId;
-            currentRow.name = empName;
-            currentRow.allocation_pct = remainingPercent;
-            currentRow.weekly_hours = {
-                ...currentRow.weekly_hours,
-                ...generateWeeklyHours(hours, currentRow)
-            };
-            newRows[rowIndex] = currentRow;
-            setLocalRows(newRows);
-
-            if (remainingPercent <= 0) {
-                setStatusMessage(`Employee ${empName} is fully allocated (100%).`);
-            } else {
-                setStatusMessage(`Auto-filled ${remainingPercent}% (${hours}h/wk) for ${empName}.`);
-            }
-        } catch (error) {
-            console.error('Failed to load employee allocations', error);
-            setStatusMessage('Could not fetch allocation data for this employee.');
-        }
+        const newRows = [...localRows];
+        const currentRow = { ...(newRows[rowIndex] || {}) };
+        currentRow.employee_id = empId;
+        currentRow.name = empName;
+        currentRow.allocation_pct = allocationPct;
+        currentRow.weekly_hours = {
+            ...currentRow.weekly_hours,
+            ...generateWeeklyHours(hours, currentRow)
+        };
+        newRows[rowIndex] = currentRow;
+        setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
+        setStatusMessage(`Auto-filled ${allocationPct}% (${hours}h/wk) for ${empName}.`);
     };
 
     const handleRowChange = (index, field, value) => {
@@ -1284,6 +1315,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
         newRows[index] = currentRow;
         setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
     };
 
     const handleRowBlur = (index, field, value) => {
@@ -1344,6 +1376,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
         newRows[index] = currentRow;
         setLocalRows(newRows);
+        syncProjectHoursValidation(newRows);
     };
 
     const handleBulkConfirm = (selectedEmployees, bulkHours) => {
@@ -1353,7 +1386,9 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             role: emp.role_designation,
             ...normalizeAllocationRow(bulkHours)
         }));
-        setLocalRows([...localRows, ...newResources]);
+        const nextRows = [...localRows, ...newResources];
+        setLocalRows(nextRows);
+        syncProjectHoursValidation(nextRows);
     };
 
     const handleExport = async (format) => {
@@ -1382,36 +1417,29 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             exportToExcel(exportData, fileName);
         } else if (format === 'pdf') {
             try {
-                const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                 const pageWidth = doc.internal.pageSize.getWidth();
-                const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const today = new Date().toLocaleString('en-GB');
 
-                // ── Title block ──
-                doc.setFillColor(30, 64, 175);
-                doc.rect(0, 0, pageWidth, 52, 'F');
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(18);
-                doc.setTextColor(255, 255, 255);
-                doc.text('Resource Allocation', 36, 28);
-
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-                doc.setTextColor(200, 216, 255);
-                doc.text(`Project: ${projectId}`, 36, 43);
-                doc.text(`Generated: ${today}`, pageWidth - 36, 43, { align: 'right' });
+                // ── Branded header ──
+                let logoBase64 = null;
+                try { logoBase64 = await loadLogoAsBase64(cdBlueLogo); } catch { /* skip */ }
+                const subtitle = `Project: ${projectId}  |  Generated: ${today}`;
+                let y = buildPDFHeader(doc, logoBase64, 'Resource Allocation', subtitle);
 
                 // ── Summary strip ──
-                doc.setFillColor(241, 245, 249);
-                doc.rect(0, 52, pageWidth, 22, 'F');
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(8.5);
-                doc.setTextColor(100, 116, 139);
-                doc.text(`Total Resources: ${localRows.length}`, 36, 66);
                 const grandTotal = visibleWeeks.reduce((s, wk) => s + localRows.reduce((a, r) => {
                     const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                     return a + (withinRange ? Number(hours || 0) : 0);
                 }, 0), 0);
-                doc.text(`Total Hours Allocated: ${grandTotal}h`, 200, 66);
+                doc.setFillColor(241, 245, 249);
+                doc.rect(0, y, pageWidth, 9, 'F');
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.5);
+                doc.setTextColor(100, 116, 139);
+                doc.text(`Total Resources: ${localRows.length}`, 13, y + 6);
+                doc.text(`Total Hours Allocated: ${grandTotal}h`, 75, y + 6);
+                y += 11;
 
                 // ── Table ──
                 const head = [[
@@ -1427,7 +1455,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     const rowWeeks = visibleWeeks.map(wk => {
                         const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                         const safeHours = Number(hours || 0);
-                        return withinRange && safeHours > 0 ? `${safeHours}h` : 'â€”';
+                        return withinRange && safeHours > 0 ? `${safeHours}h` : '\u2013';
                     });
                     return [
                         r.name || '-',
@@ -1441,44 +1469,42 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 });
 
                 const colStyles = {
-                    0: { cellWidth: 110, halign: 'left', fontStyle: 'bold' },
-                    1: { cellWidth: 90, halign: 'left' },
-                    2: { cellWidth: 62, halign: 'center' },
-                    3: { cellWidth: 62, halign: 'center' },
-                    4: { cellWidth: 48, halign: 'center', fontStyle: 'bold' },
+                    0: { cellWidth: 39, halign: 'left', fontStyle: 'bold' },
+                    1: { cellWidth: 32, halign: 'left' },
+                    2: { cellWidth: 22, halign: 'center' },
+                    3: { cellWidth: 22, halign: 'center' },
+                    4: { cellWidth: 17, halign: 'center', fontStyle: 'bold' },
                 };
-                
-                // Dynamic columns logic
                 visibleWeeks.forEach((wk, i) => {
-                    colStyles[5 + i] = { cellWidth: 48, halign: 'center' };
+                    colStyles[5 + i] = { cellWidth: 17, halign: 'center' };
                 });
                 const totalColIdx = 5 + visibleWeeks.length;
-                colStyles[totalColIdx] = { cellWidth: 54, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] };
+                colStyles[totalColIdx] = { cellWidth: 19, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] };
 
                 autoTable(doc, {
                     head,
                     body,
-                    startY: 80,
-                    margin: { left: 36, right: 36 },
+                    startY: y,
+                    margin: { left: 13, right: 13, bottom: 18 },
                     styles: {
                         fontSize: 8.5,
-                        cellPadding: { top: 6, right: 8, bottom: 6, left: 8 },
+                        cellPadding: { top: 2, right: 3, bottom: 2, left: 3 },
                         lineColor: [226, 232, 240],
-                        lineWidth: 0.5,
+                        lineWidth: 0.3,
                         font: 'helvetica',
                         textColor: [30, 41, 59],
                         overflow: 'linebreak',
                     },
                     headStyles: {
-                        fillColor: [30, 64, 175],
+                        fillColor: [59, 169, 251],
                         textColor: [255, 255, 255],
                         fontStyle: 'bold',
-                        fontSize: 8.5,
+                        fontSize: 9,
                         halign: 'center',
-                        cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
+                        cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
                     },
                     columnStyles: colStyles,
-                    alternateRowStyles: { fillColor: [248, 250, 252] },
+                    alternateRowStyles: { fillColor: [240, 249, 255] },
                     rowStyles: { fillColor: [255, 255, 255] },
                     foot: [[
                         'TOTAL', '', '', '', '',
@@ -1494,7 +1520,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         fontStyle: 'bold',
                         fontSize: 8.5,
                         halign: 'center',
-                        cellPadding: { top: 7, right: 8, bottom: 7, left: 8 },
+                        cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 },
                     },
                     didParseCell(data) {
                         if (data.section === 'foot' && data.column.index === 0) {
@@ -1504,21 +1530,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     showFoot: 'lastPage',
                 });
 
-                // ── Page numbers ──
-                const totalPages = doc.internal.getNumberOfPages();
-                for (let i = 1; i <= totalPages; i++) {
-                    doc.setPage(i);
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(8);
-                    doc.setTextColor(148, 163, 184);
-                    doc.text(
-                        `Page ${i} of ${totalPages}`,
-                        pageWidth / 2,
-                        doc.internal.pageSize.getHeight() - 14,
-                        { align: 'center' }
-                    );
-                }
-
+                addPDFFooter(doc);
                 doc.save(`${fileName}.pdf`);
             } catch (error) {
                 console.error('PDF export failed:', error);
@@ -1530,6 +1542,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     const handleSave = async () => {
         setIsSaving(true);
         setSaveError('');
+
+        if (hasProjectWeeklyOverflow(localRows)) {
+            setSaveError(PROJECT_WEEKLY_HOURS_ERROR);
+            setIsSaving(false);
+            return;
+        }
 
         // Pre-save validation for allocation percentage
         const hasInvalidAllocation = localRows.some(row => {
@@ -1555,7 +1573,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
             await axios.put(`/projects/${projectId}/resources`, payload);
             if (onUpdate) await onUpdate();
-            triggerRefresh();
             setStatusMessage('Changes saved successfully!');
             setIsEditing(false);
         } catch (error) {
@@ -1578,7 +1595,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             await axios.put(`/projects/${projectId}/resources`, { resources: [] });
             setLocalRows([]);
             if (onUpdate) await onUpdate();
-            triggerRefresh();
             setIsDeleteAllModalOpen(false);
             setIsEditing(true);
             setStatusMessage('All resources deleted successfully');
@@ -1599,6 +1615,11 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         const timer = setTimeout(() => setStatusMessage(''), 2500);
         return () => clearTimeout(timer);
     }, [statusMessage]);
+
+    useEffect(() => {
+        setSaveError('');
+        setStatusMessage('');
+    }, [projectId]);
 
     const columnTotals = useMemo(() =>
         visibleWeeks.map(wk =>
