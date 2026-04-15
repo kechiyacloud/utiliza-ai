@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -43,6 +43,21 @@ const ProjectsOverview = ({
 }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const [isGlowing, setIsGlowing] = useState(false);
+
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        if (queryParams.get('highlight') === 'add-project') {
+            setIsGlowing(true);
+            setTimeout(() => {
+                setIsGlowing(false);
+            }, 5000);
+            
+            // Clean up URL without reload
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+        }
+    }, [location.search]);
 
     if (!stats) return null;
 
@@ -91,7 +106,7 @@ const ProjectsOverview = ({
 
                     <button
                         onClick={() => navigate('/info/projects/add')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1"
+                        className={`bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1 ${isGlowing ? 'glow-active' : ''}`}
                     >
                         <span>+</span> Add New Project
                     </button>

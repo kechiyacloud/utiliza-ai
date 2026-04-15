@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign,
@@ -65,6 +65,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [forcedTab] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Interaction States
   const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
@@ -361,25 +362,11 @@ function Dashboard() {
               icon={Building2}
             />
             <button
-              onClick={() => navigate('/info/employee/add')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200"
+              onClick={() => navigate('/info/projects?highlight=add-project')}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]"
             >
-              <UserCog size={18} />
-              Add Employee
-            </button>
-            <button
-              onClick={() => setIsProjectPanelOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200"
-            >
-              <Plus size={18} />
+              <Plus size={20} strokeWidth={3} />
               Add Project
-            </button>
-            <button
-              onClick={() => setIsClientModalOpen(true)}
-              className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-            >
-              <UserPlus size={18} className="text-slate-500" />
-              Add Client
             </button>
           </div>
         </div>
