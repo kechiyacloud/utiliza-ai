@@ -9,14 +9,8 @@ export const fetchProjectsData = async (filters = {}) => {
         const params = { ...filters };
 
         const [overviewRes, listRes] = await Promise.all([
-            api.get('/projects/overview', { params }).catch((err) => {
-                console.error("Overview Fetch Error:", err);
-                return { data: {} };
-            }),
-            api.get('/projects/list', { params }).catch((err) => {
-                console.error("List Fetch Error:", err);
-                return { data: [] };
-            })
+            api.get('/projects/overview', { params }),
+            api.get('/projects/list', { params })
         ]);
 
         const o = overviewRes?.data || {};

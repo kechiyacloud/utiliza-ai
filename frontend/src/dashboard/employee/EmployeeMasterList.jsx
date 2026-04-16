@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive } from 'lucide-react'
 import BulkImportModal from './BulkImportModal'
 import EmployeeTable from './EmployeeTable'
 import NewJoinerCard from './NewJoinerCard'
 import FilterOverlay from './FilterOverlay'
 import SkillsOverview from './insights/SkillsOverview'
+import UtilizationTrend from './insights/UtilizationTrend'
 import { getEmployeeList } from '../../api/employeeApi'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
@@ -27,7 +28,6 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
             <span>{value ?? '—'}</span>
           )}
         </h3>
-        {Icon && <Icon className={`w-5 h-5 ${colorClass?.replace('bg-', 'text-').replace('10', '500') || 'text-gray-400'} opacity-20`} />}
       </div>
     </div>
     <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
@@ -59,6 +59,7 @@ function EmployeeMasterList() {
   const location = useLocation();
   const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
   const [activeDrawer, setActiveDrawer] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   // Department chip selector
   const [selectedDepts, setSelectedDepts] = useState(() => {
@@ -87,32 +88,40 @@ function EmployeeMasterList() {
     if (!selectedSkills.length) return true;
 
     const normalizedEmployeeSkills = new Set(
-      (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+      (employeeSkills || []).map((skill) => {
+        const normalized = normalizeSkillName(skill);
+        return normalized ? normalized.toLowerCase() : null;
+      }).filter(Boolean)
     );
 
     return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
   };
 
   useEffect(() => {
-    let mounted = true
+    const controller = new AbortController();
 
     const fetchAllData = async () => {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList()
-        if (!mounted) return
+        // When showing archived, we want both resigned and deleted
+        const data = await getEmployeeList(false, showArchived, showArchived)
+        if (controller.signal.aborted) return;
         setAllEmployees(data)
       } catch (err) {
-        if (mounted) setError(err?.message || 'Failed to load')
+        if (!controller.signal.aborted) {
+          setError(err?.message || 'Failed to load')
+        }
       } finally {
-        if (mounted) setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchAllData()
-    return () => { mounted = false }
-  }, [])
+    return () => controller.abort();
+  }, [showArchived])
 
   const combinedFilters = useMemo(() => ({
     ...filters,
@@ -136,7 +145,7 @@ function EmployeeMasterList() {
           emp.role_designation?.toLowerCase().includes(sv) ||
           emp.location?.toLowerCase().includes(sv) ||
           emp.department?.toLowerCase().includes(sv) ||
-          (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
+          (emp.skills && emp.skills.some(skill => skill && typeof skill === 'string' && skill.toLowerCase().includes(sv)))
       );
 
       return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
@@ -164,10 +173,10 @@ function EmployeeMasterList() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
             title="Go Back"
           >
-            <ArrowLeft size={24} className="text-slate-600" />
+            <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Organization Management</h1>
@@ -176,6 +185,14 @@ function EmployeeMasterList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Utilization Trend Icon Button */}
+          <button
+            onClick={() => setActiveDrawer('trend')}
+            className="flex items-center justify-center p-2.5 bg-white border border-gray-100 text-teal-600 rounded-xl hover:bg-teal-50 hover:border-teal-200 transition-all shadow-sm"
+            title="Utilization Trend"
+          >
+            <TrendingUp size={18} />
+          </button>
 
           {/* Add Employee Button */}
           <button
@@ -184,6 +201,17 @@ function EmployeeMasterList() {
             title="Add Single Employee"
           >
             <UserPlus size={18} />
+          </button>
+
+          {/* Toggle Archived */}
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className={`flex items-center justify-center p-2.5 border rounded-xl transition-all shadow-sm ${showArchived 
+              ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' 
+              : 'bg-white border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'}`}
+            title={showArchived ? "Hide Archived/Deleted" : "Show Archived/Deleted"}
+          >
+            <Archive size={18} />
           </button>
 
           {/* Department Selector */}
@@ -253,7 +281,7 @@ function EmployeeMasterList() {
         <StatCard
           label="TOTAL BENCH"
           value={benchEmployeesCount}
-          icon={BriefcaseBusiness}
+          icon={UserMinus}
           colorClass="bg-orange-500"
           loading={loading}
           error={error}
@@ -282,8 +310,32 @@ function EmployeeMasterList() {
         />
       </div>
 
+      {error && !allEmployees.length && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-red-100 shadow-sm gap-6">
+          <div className="flex flex-col items-center text-center gap-3">
+             <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500">
+               <Users size={32} />
+             </div>
+             <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
+             <p className="text-gray-500 max-w-sm text-sm">
+               We couldn't reach the organization records. Please ensure the backend server and its matching containers are running.
+             </p>
+          </div>
+          <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
+            {error}
+          </div>
+          <button 
+             onClick={() => getEmployeeList(false, showArchived, showArchived).then(setAllEmployees).catch(err => setError(err.message))} 
+             className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
+
       {/* Employee Table */}
-      <div className='flex-1 w-full mt-4'>
+      {(!error || allEmployees.length > 0) && (
+        <div className='flex-1 w-full mt-4'>
         <EmployeeTable
           contextLabel={contextLabel}
           employees={allEmployees}
@@ -291,7 +343,20 @@ function EmployeeMasterList() {
           onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
           onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
           onEmployeeDelete={(deletedId) => {
-            setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
+            // If we are in "Archived" mode, we don't necessarily want to remove it from UI immediately
+            // because it just becomes a soft-deleted record which IS archived.
+            // But for responsiveness, if we AREN'T showing archived, remove it.
+            if (!showArchived) {
+              setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
+            } else {
+              // Refresh data to show it as archived
+              getEmployeeList(true, true, true).then(setAllEmployees);
+            }
+          }}
+          showArchived={showArchived}
+          onRestore={() => {
+            // Re-fetch everything after a restore
+            getEmployeeList(true, showArchived, showArchived).then(setAllEmployees);
           }}
           filters={combinedFilters}
           searchValue={searchQuery}
@@ -299,6 +364,7 @@ function EmployeeMasterList() {
           onFilterClick={() => setIsFilterOpen(true)}
         />
       </div>
+      )}
 
       {/* Sliding Drawer for Insights */}
       <div
@@ -306,7 +372,7 @@ function EmployeeMasterList() {
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
           <h2 className="text-xl font-bold text-gray-800">
-            Skills Overview
+            {activeDrawer === 'skills' ? 'Skills Overview' : 'Utilization Trend'}
           </h2>
           <button
             onClick={() => setActiveDrawer(null)}
@@ -317,6 +383,7 @@ function EmployeeMasterList() {
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
           {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
+          {activeDrawer === 'trend' && <UtilizationTrend employees={baseGroup} />}
         </div>
       </div>
 

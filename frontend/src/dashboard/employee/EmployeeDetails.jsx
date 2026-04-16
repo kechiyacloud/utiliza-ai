@@ -261,17 +261,14 @@ const EmployeeDetails = () => {
         let durationWeeks = TOTAL_WEEKS; // default: show full window if no dates given
         let isVisibleInTimeline = true;
 
-        const rawStartDate = p.start_date || p.allocation_start_date || p.project_start_date;
-        const rawEndDate = p.end_date || p.allocation_end_date || p.project_end_date;
+        const rawStartDate = p?.start_date || p?.allocation_start_date || p?.project_start_date;
+        const rawEndDate = p?.end_date || p?.allocation_end_date || p?.project_end_date;
 
         if (rawStartDate || rawEndDate) {
             const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-            // If no start date assume project began today (week 0)
-            const pStart = rawStartDate ? new Date(rawStartDate) : new Date(TODAY);
-
-            // If no end date assume project extends 1 year from today (well outside window)
-            const pEnd = rawEndDate
+            const pStart = rawStartDate && !isNaN(new Date(rawStartDate).getTime()) ? new Date(rawStartDate) : new Date(TODAY);
+            const pEnd = rawEndDate && !isNaN(new Date(rawEndDate).getTime())
                 ? new Date(rawEndDate)
                 : new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
 
@@ -340,10 +337,10 @@ const EmployeeDetails = () => {
             <div>
                 <button
                     onClick={handleGoBack}
-                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm"
+                    className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                    title="Go Back"
                 >
-                    <ArrowLeft size={16} />
-                    {backLabel}
+                    <ArrowLeft size={20} className="text-gray-600" />
                 </button>
             </div>
 
@@ -362,7 +359,7 @@ const EmployeeDetails = () => {
                             <img src={userData.profilePic} alt={userData.name} className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-blue-50 text-blue-600 text-3xl font-bold uppercase select-none">
-                                {(userData.name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                {(userData?.name || 'User').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('')}
                             </div>
                         )}
                         <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
@@ -455,14 +452,15 @@ const EmployeeDetails = () => {
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">CD Exp</p>
                                 <p className="font-semibold text-slate-700">
-                                    {userData.joiningDate
+                                    {userData.joiningDate && !isNaN(new Date(userData.joiningDate).getTime())
                                         ? (() => {
                                             const joined = new Date(userData.joiningDate);
                                             const now = new Date();
-                                            const years = (now - joined) / (1000 * 60 * 60 * 24 * 365.25);
+                                            const ageInMs = now.getTime() - joined.getTime();
+                                            const years = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
                                             return years >= 1
                                                 ? `${Math.floor(years)} Yr${Math.floor(years) !== 1 ? 's' : ''}`
-                                                : `${Math.round(years * 12)} Mo`;
+                                                : `${Math.max(0, Math.round(years * 12))} Mo`;
                                         })()
                                         : `${userData.cdExperience ?? '—'} Yrs`}
                                 </p>

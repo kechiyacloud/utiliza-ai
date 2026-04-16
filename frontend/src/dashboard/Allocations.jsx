@@ -43,6 +43,7 @@ function Allocations() {
 
   // Fetch Logic
   useEffect(() => {
+    const controller = new AbortController();
     const loadData = async () => {
       setLoading(true);
       try {
@@ -50,15 +51,19 @@ function Allocations() {
           fetchAllocationData(filters),
           fetchForecastBench(filters.department, filters.location)
         ]);
+        if (controller.signal.aborted) return;
         setData(res.data);
         setForecastBench(benchRes);
-      } catch (error) {
-        console.error("Failed to load allocation data", error);
-      } finally {
         setLoading(false);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error("Failed to load allocation data", error);
+          setLoading(false);
+        }
       }
     };
     loadData();
+    return () => controller.abort();
   }, [filters, refreshKey]); // Re-fetch when filters or global refresh key changes
 
   // Handle URL Hash Scrolling
@@ -96,7 +101,7 @@ function Allocations() {
   const showUtilizationOnly = location.state?.showUtilizationOnly;
 
   if (loading) {
-    return <div className="p-8 flex items-center justify-center text-gray-400 font-medium">Loading Resource Data...</div>;
+    return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-full">Loading Resource Data...</div>;
   }
 
   if (showForecastOnly) {
@@ -186,7 +191,7 @@ function Allocations() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
             title="Go Back"
           >
             <ArrowLeft size={20} className="text-gray-600" />
@@ -255,7 +260,7 @@ function Allocations() {
         />
       )}
     </div>
-  )
+  );
 }
 
-export default Allocations
+export default Allocations;

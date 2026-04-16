@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
-  AlertCircle, ChevronRight, BarChart2, DollarSign,
+  AlertCircle, ChevronRight, BarChart2, DollarSign, Clock, UserCheck, UserMinus,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
   CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft
 } from 'lucide-react';
@@ -63,6 +63,7 @@ function Dashboard() {
   const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [forcedTab] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,14 +103,18 @@ function Dashboard() {
   const [editingTodoId, setEditingTodoId] = useState(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadData = async () => {
       const forceRefresh = refreshKey > 0 && lastHandledRefreshKeyRef.current !== refreshKey;
       if (forceRefresh) {
         lastHandledRefreshKeyRef.current = refreshKey;
       }
+      
       try {
-        // Parallel fetch for all initial dashboard requirements
+        setLoading(true);
         const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
+        
+        // Pass signal to fetchDashboardData if possible, or handle post-fetch cancellation
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
           fetchDashboardData(forceRefresh, deptParam),
           getEmployeeList(forceRefresh),
@@ -117,10 +122,10 @@ function Dashboard() {
           fetchDepartments()
         ]);
 
+        if (controller.signal.aborted) return;
+
         if (dashRes.status === 'fulfilled') {
           setData(dashRes.value.data);
-          // The todos from dashRes are dynamic suggestions, we combine them with manual todos
-          // if (dashRes.value.todos) setTodos(prev => [...dashRes.value.todos, ...prev.filter(t => !t.isSystemSuggestion)]);
         }
 
         if (empListRes.status === 'fulfilled') {
@@ -134,13 +139,22 @@ function Dashboard() {
         if (deptsRes.status === 'fulfilled') {
           setDepartmentOptions(deptsRes.value);
         }
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
+        if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && todosRes.status === 'rejected') {
+          setError("Connection failed. Please ensure the backend is running.");
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error("Failed to load dashboard data", err);
+          setError("Failed to load some dashboard components.");
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
     loadData();
+    return () => controller.abort();
   }, [selectedDepartments, refreshKey]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
@@ -276,9 +290,9 @@ function Dashboard() {
 
   const dynamicKpiData = [
     { title: `${String(contextLabel)} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
-    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${String(_metrics?.total_employees || 0)} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
+    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${String(_metrics?.total_employees || 0)} total`, icon: UserCheck, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: UserMinus, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
+    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Clock, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -309,6 +323,31 @@ function Dashboard() {
         skills: emp.skills.join(', ')
       }));
   }, [filteredDashboardEmployees]);
+
+  if (error && !data) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center gap-6 min-h-[400px] w-full bg-slate-50">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-2">
+            <ShieldAlert size={32} />
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
+          <p className="text-gray-500 max-w-sm text-sm">
+            We couldn't reach the dashboard analytics engine. Please ensure the backend server and its matching containers are running.
+          </p>
+        </div>
+        <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
+          {error}
+        </div>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -421,17 +460,23 @@ function Dashboard() {
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
-                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-                  <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {dynamicDemandCapacityData.length > 0 ? (
+                  <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                    <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
+                      <RechartsTooltip content={<CustomTooltip />} />
+                      <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
+                      <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm italic">
+                    Forecast data unavailable
+                  </div>
+                )}
               </div>
             </div>
 
@@ -510,25 +555,31 @@ function Dashboard() {
                 {contextLabel} Allocation
               </h2>
               <div className="h-[200px] w-full relative">
-                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-                  <PieChart>
-                    <Pie
-                      data={dynamicAllocationData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {dynamicAllocationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {dynamicAllocationData.length > 0 ? (
+                  <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                    <PieChart>
+                      <Pie
+                        data={dynamicAllocationData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {dynamicAllocationData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-[10px] italic">
+                    No allocation data
+                  </div>
+                )}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-2xl font-bold text-slate-800">{totalAllocationCount}</span>
                   <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Total</span>
@@ -661,8 +712,12 @@ function Dashboard() {
         <NominationModal
           onClose={() => setIsNominationModalOpen(false)}
           onSuccess={() => {
-            // Simplified refresh: reload the page to see new data
-            window.location.reload();
+            // Manual refresh of dashboard data without reloading page
+            const deptParam = (selectedDepartments && selectedDepartments.length > 0) ? selectedDepartments.join(',') : 'Overall';
+            fetchDashboardData(true, deptParam).then(res => {
+              if (res.data) setData(res.data);
+              if (res.todos) setTodos(res.todos);
+            }).catch(console.error);
           }}
         />
       )}

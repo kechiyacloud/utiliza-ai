@@ -140,59 +140,80 @@ def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None)
         cur.execute(f"SELECT client_id, client_name, website_url, industry, status, budget FROM clients {where_sql} ORDER BY client_name", tuple(params))
         rows = cur.fetchall()
 
-        # Fetch projects and stakeholders for each client
         client_list = []
+        if not rows:
+            return client_list
+            
+        client_ids = [r[0] for r in rows]
+        
+        # 1. Fetch all projects for all matched clients in one go
+        placeholders = ",".join(["%s"] * len(client_ids))
+        cur.execute(f"""
+            SELECT p.client_id, p.project_id, p.project_name, p.project_status, p.start_date, p.end_date, pc.budget
+            FROM projects p
+            LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
+            WHERE p.client_id IN ({placeholders})
+        """, tuple(client_ids))
+        proj_rows = cur.fetchall()
+        
+        projects_by_client = {}
+        project_ids = []
+        for p in proj_rows:
+            c_id = p[0]
+            if c_id not in projects_by_client:
+                projects_by_client[c_id] = []
+            projects_by_client[c_id].append({
+                "id": p[1],
+                "name": p[2],
+                "status": p[3],
+                "start_date": p[4],
+                "end_date": p[5],
+                "budget": str(p[6]) if p[6] else "0"
+            })
+            project_ids.append(p[1])
+            
+        # 2. Fetch all stakeholders for all matched projects in one go
+        stakeholders_by_client = {}
+        if project_ids:
+            p_placeholders = ",".join(["%s"] * len(project_ids))
+            cur.execute(f"""
+                SELECT p.client_id, em.employee_name, pa.role_in_project, em.employee_id
+                FROM projects_allocation pa
+                JOIN employee_master em ON pa.employee_id = em.employee_id
+                JOIN projects p ON pa.project_id = p.project_id
+                WHERE pa.project_id IN ({p_placeholders})
+            """, tuple(project_ids))
+            
+            sh_rows = cur.fetchall()
+            seen_stakeholders_by_client = {}
+            for s in sh_rows:
+                c_id = s[0]
+                emp_id = s[3]
+                
+                if c_id not in stakeholders_by_client:
+                    stakeholders_by_client[c_id] = []
+                    seen_stakeholders_by_client[c_id] = set()
+                    
+                if emp_id not in seen_stakeholders_by_client[c_id]:
+                    stakeholders_by_client[c_id].append({
+                        "name": s[1],
+                        "role": s[2],
+                        "id": emp_id
+                    })
+                    seen_stakeholders_by_client[c_id].add(emp_id)
+
+        # 3. Assemble final list
         for r in rows:
-            client_id = r[0]
-            # Fetch projects
-            cur.execute("""
-                SELECT p.project_id, p.project_name, p.project_status, p.start_date, p.end_date, pc.budget
-                FROM projects p
-                LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
-                WHERE p.client_id = %s
-            """, (client_id,))
-            proj_rows = cur.fetchall()
-
-            projects = []
-            stakeholders = []
-            seen_stakeholders = set()
-
-            for p in proj_rows:
-                project_id = p[0]
-                projects.append({
-                    "id": project_id,
-                    "name": p[1],
-                    "status": p[2],
-                    "start_date": p[3],
-                    "end_date": p[4],
-                    "budget": str(p[5]) if p[5] else "0"
-                })
-
-                # Fetch allocations for this project as stakeholders
-                cur.execute("""
-                    SELECT em.employee_name, pa.role_in_project, em.employee_id
-                    FROM projects_allocation pa
-                    JOIN employee_master em ON pa.employee_id = em.employee_id
-                    WHERE pa.project_id = %s
-                """, (project_id,))
-                for s in cur.fetchall():
-                    if s[2] not in seen_stakeholders:
-                        stakeholders.append({
-                            "name": s[0],
-                            "role": s[1],
-                            "id": s[2]
-                        })
-                        seen_stakeholders.add(s[2])
-
+            c_id = r[0]
             client_list.append({
-                "id": client_id,
+                "id": c_id,
                 "name": r[1],
                 "url": r[2],
                 "industry": r[3],
                 "status": r[4],
                 "budget": float(r[5]) if r[5] else 0.0,
-                "projects": projects,
-                "stakeholders": stakeholders
+                "projects": projects_by_client.get(c_id, []),
+                "stakeholders": stakeholders_by_client.get(c_id, [])
             })
 
         return client_list

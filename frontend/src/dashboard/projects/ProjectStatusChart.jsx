@@ -52,7 +52,6 @@ const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
 };
 
 const ProjectStatusChart = ({ projects }) => {
-    const navigate = useNavigate();
     const today = new Date();
     const threeMonthsLater = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
 

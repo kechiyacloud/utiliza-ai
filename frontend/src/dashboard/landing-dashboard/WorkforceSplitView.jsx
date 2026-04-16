@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Users, Briefcase, Building2, User } from 'lucide-react';
+import { X, Users, Briefcase, Building2, User, AlertCircle } from 'lucide-react';
 
 const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organization' }) => {
   if (!isOpen) return null;
@@ -11,6 +11,7 @@ const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organi
     (e.employee_status || '').toLowerCase() !== 'bench' &&
     !(e.employee_status || '').toLowerCase().includes('notice')
   );
+  const noticePeriod = employees.filter(e => (e.employee_status || '').toLowerCase().includes('notice'));
 
   const EmployeeList = ({ title, list, icon: Icon, colorClass, bgClass }) => (
     <div className="flex-1 min-w-[300px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -97,6 +98,13 @@ const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organi
               icon={Building2} 
               colorClass="bg-emerald-500 text-emerald-500" 
               bgClass="bg-emerald-50/50"
+            />
+            <EmployeeList 
+              title="Notice Period" 
+              list={noticePeriod} 
+              icon={AlertCircle} 
+              colorClass="bg-rose-500 text-rose-500" 
+              bgClass="bg-rose-50/50"
             />
           </div>
         </div>

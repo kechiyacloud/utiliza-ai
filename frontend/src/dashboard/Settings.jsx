@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { submitFeedback } from '../api/feedbackApi';
 import { Soon_GIF } from '../Assets';
 import EmployeeStatusTag from '../components/EmployeeStatusTag';
 import {
-    User, Mail, Phone, MapPin, Briefcase, Calendar, Clock,
+    ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Clock,
     Building2, Laptop, Award, Send, MessageSquare,
     AlertCircle, CheckCircle2, Loader2,
     BarChart2, FileText, Settings as SettingsIcon
@@ -329,7 +330,8 @@ const TABS = [
     { id: 'reports', label: 'Auto Reports', icon: BarChart2 },
 ];
 
-function Settings() {
+const Settings = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('profile');
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
@@ -362,12 +364,21 @@ function Settings() {
     return (
         <div className="p-6 min-h-full">
             {/* Header */}
-            <div className="mb-6">
-                <div className="flex items-center gap-2 mb-1">
-                    <SettingsIcon size={20} className="text-mainTheme" />
-                    <h1 className="text-xl font-bold text-mainTheme">Settings</h1>
+            <div className="mb-6 flex items-center gap-4">
+                <button
+                    onClick={() => navigate(-1)}
+                    className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                    title="Go Back"
+                >
+                    <ArrowLeft size={20} className="text-gray-600" />
+                </button>
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <SettingsIcon size={20} className="text-mainTheme" />
+                        <h1 className="text-xl font-bold text-mainTheme">Settings</h1>
+                    </div>
+                    <p className="text-sm text-gray-500">Manage your profile, integrations, and preferences</p>
                 </div>
-                <p className="text-sm text-gray-500">Manage your profile, integrations, and preferences</p>
             </div>
 
             {/* Tab bar */}

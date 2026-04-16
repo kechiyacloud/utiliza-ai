@@ -1,15 +1,17 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api";
 
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
-  timeout: 30000,
+  timeout: 5000,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+const MAX_RETRIES = 2;
 
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("token");
@@ -17,17 +19,37 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// If the backend rejects the token (401), clear it and force a redirect to login
-// so the user is never silently stuck with a rejected/expired session.
+// Global response handler with resilient automatic retry logic
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config || {};
+    
+    // Explicitly reject and logout on 401s
     if (error.response?.status === 401) {
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("userEmail");
-      // Use window.location so React Router state is fully reset
       window.location.replace("/");
+      return Promise.reject(error);
     }
+
+    // Track the number of retries implemented for this request
+    config.retryCount = config.retryCount || 0;
+    
+    const isNetworkError = !error.response;
+    const isTransientError = error.response?.status >= 500 && error.response?.status <= 599;
+    
+    // Silently retry failed requests 
+    if ((isNetworkError || isTransientError) && config.retryCount < MAX_RETRIES) {
+      config.retryCount += 1;
+      
+      // Delay before retrying using exponential backoff (1s, 2s)
+      const backoffDelay = config.retryCount * 1000;
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
+      
+      return api(config);
+    }
+    
     return Promise.reject(error);
   }
 );

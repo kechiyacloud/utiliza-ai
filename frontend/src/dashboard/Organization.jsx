@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Mail, Phone, MapPin, Briefcase, Calendar, X, BarChart2, Network } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Search, Mail, Phone, MapPin, Briefcase, Calendar, X, BarChart2, Network } from 'lucide-react';
 import { getEmployeeList } from '../api/employeeApi';
 import { fetchDashboardData } from '../api/dashboardApi';
 import OrganizationInsights from './OrganizationInsights';
 import { useDataRefresh } from '../context';
 
 const Organization = () => {
+    const navigate = useNavigate();
     const [departments, setDepartments] = useState([]);
     const [activeDeptId, setActiveDeptId] = useState(null);
     const [activeEmployeeId, setActiveEmployeeId] = useState(null);
@@ -19,10 +21,15 @@ const Organization = () => {
     const { refreshKey } = useDataRefresh();
 
     // Fetch Data
+    // Fetch Data
     useEffect(() => {
+        const controller = new AbortController();
         const fetchData = async () => {
+            setLoading(true);
+            setError(null);
             try {
                 const employees = await getEmployeeList(refreshKey > 0);
+                if (controller.signal.aborted) return;
 
                 // Group employees by department
                 const deptMap = {};
@@ -57,12 +64,15 @@ const Organization = () => {
 
                 setLoading(false);
             } catch (err) {
-                console.error("Failed to load organization data:", err);
-                setError("Failed to load data");
-                setLoading(false);
+                if (!controller.signal.aborted) {
+                    console.error("Failed to load organization data:", err);
+                    setError("Failed to load data");
+                    setLoading(false);
+                }
             }
         };
         fetchData();
+        return () => controller.abort();
     }, [refreshKey]);
 
     useEffect(() => {
@@ -102,20 +112,67 @@ const Organization = () => {
         dept.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    if (loading) return <div className="h-full flex items-center justify-center text-slate-400">Loading Tree...</div>;
-    if (error) return <div className="h-full flex items-center justify-center text-red-500">{error}</div>;
+    if (loading) return (
+        <div className="h-full flex items-center justify-center bg-slate-50">
+            <div className="flex flex-col items-center gap-3 text-center animate-in fade-in duration-500">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500/20 border-t-teal-500 shadow-sm"></div>
+                <div className="space-y-1">
+                    <p className="text-sm font-bold text-slate-700 uppercase tracking-widest">Mapping Organization</p>
+                    <p className="text-xs text-slate-400">Fetching department hierarchies and team members...</p>
+                </div>
+            </div>
+        </div>
+    );
+    
+    if (error) return (
+        <div className="h-full flex items-center justify-center bg-slate-50 text-center p-6 animate-in zoom-in duration-300">
+            <div className="max-w-md bg-white p-8 rounded-2xl shadow-xl border border-red-50/50">
+                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <X className="text-red-500" size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">Sync Interrupted</h3>
+                <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                    {error} <br/> 
+                    Please check your connection or try again.
+                </p>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => navigate(-1)}
+                        className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-all"
+                    >
+                        Go Back
+                    </button>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="flex-1 px-4 py-3 bg-teal-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-200 hover:bg-teal-700 transition-all"
+                    >
+                        Retry Loading
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="h-full flex flex-col bg-slate-50 overflow-hidden font-sans">
             {/* Header */}
             <div className="p-4 bg-white border-b border-slate-200 shadow-sm z-20 flex justify-between items-center shrink-0">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">
-                        {activeDeptId ? 'Team Map' : 'Organization Map'}
-                    </h1>
-                    <p className="text-slate-500 text-xs">
-                        {activeDeptId ? 'Focused view of your team hierarchy.' : 'Navigate through the department hierarchy.'}
-                    </p>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                        title="Go Back"
+                    >
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
+                    <div>
+                        <h1 className="text-xl font-bold text-slate-800">
+                            {activeDeptId ? 'Team Map' : 'Organization Map'}
+                        </h1>
+                        <p className="text-slate-500 text-xs">
+                            {activeDeptId ? 'Focused view of your team hierarchy.' : 'Navigate through the department hierarchy.'}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2">
@@ -312,7 +369,10 @@ const Organization = () => {
                                             </div>
                                         </div>
 
-                                        <button className="w-full py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200 mt-1">
+                                        <button 
+                                            onClick={() => navigate('/info/employee/' + activeEmployee.id)}
+                                            className="w-full py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200 mt-1"
+                                        >
                                             View Full Profile
                                         </button>
                                     </div>

@@ -38,10 +38,9 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     proxy: {
-      '^/(api/)?(login|register|employees?|dashboard|projects|allocations|clients|partner-clients|partners|availability|departments|feedback)': {
+      '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        secure: false,
       }
     }
   }

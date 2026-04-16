@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataRefresh } from '../../context';
 import {
@@ -239,91 +239,93 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
     if (!projects || !Array.isArray(projects)) return null;
 
-    const filteredProjects = projects.filter(project => {
-        if (!project || !project.name) return false;
+    const filteredProjects = useMemo(() => {
+        return projects.filter(project => {
+            if (!project || !project.name) return false;
 
-        const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
-        const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
+            const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
+            const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
 
-        const isAllStatus = !filters.status || filters.status === 'All Status';
-        const statusValue = (project.status || '').trim();
-        const statusMatches = isAllStatus || statusValue === filters.status;
-        const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
-        const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
-        const matchesStatus = statusMatches && subStatusMatches;
+            const isAllStatus = !filters.status || filters.status === 'All Status';
+            const statusValue = (project.status || '').trim();
+            const statusMatches = isAllStatus || statusValue === filters.status;
+            const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
+            const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
+            const matchesStatus = statusMatches && subStatusMatches;
 
-        const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
+            const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
 
-        const projectStart = new Date(project.startDate || project.start_date);
-        const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
-        const hasProjectDates = !Number.isNaN(projectStart.getTime());
-        const filterStart = filters.startDate ? new Date(filters.startDate) : null;
-        const filterEnd = filters.endDate ? new Date(filters.endDate) : null;
-        const matchesDate = (() => {
-            if (!filterStart && !filterEnd) return true;
-            if (!hasProjectDates) return false;
-            if (filterStart && projectEnd < filterStart) return false;
-            if (filterEnd && projectStart > filterStart) return false;
-            return true;
-        })();
+            const projectStart = new Date(project.startDate || project.start_date);
+            const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
+            const hasProjectDates = !Number.isNaN(projectStart.getTime());
+            const filterStart = filters.startDate ? new Date(filters.startDate) : null;
+            const filterEnd = filters.endDate ? new Date(filters.endDate) : null;
+            const matchesDate = (() => {
+                if (!filterStart && !filterEnd) return true;
+                if (!hasProjectDates) return false;
+                if (filterStart && projectEnd < filterStart) return false;
+                if (filterEnd && projectStart > filterStart) return false;
+                return true;
+            })();
 
-        let matchesCardFilter = true;
-        if (activeCardFilter === 'Internal') {
-            matchesCardFilter = ['Internal', 'POC'].includes(project.type);
-        } else if (activeCardFilter === 'External') {
-            matchesCardFilter = ['External', 'Client'].includes(project.type);
-        } else if (activeCardFilter === 'Ongoing') {
-            matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
-        } else if (activeCardFilter === 'Partner') {
-            matchesCardFilter = project.type === 'Partner';
-        } else if (activeCardFilter === 'Upcoming') {
-            const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
-            matchesCardFilter = (project.status || '').toLowerCase() === 'not started' || isFutureDate;
-        } else if (activeCardFilter === 'Completed') {
-            matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
-        }
+            let matchesCardFilter = true;
+            if (activeCardFilter === 'Internal') {
+                matchesCardFilter = ['Internal', 'POC'].includes(project.type);
+            } else if (activeCardFilter === 'External') {
+                matchesCardFilter = ['External', 'Client'].includes(project.type);
+            } else if (activeCardFilter === 'Ongoing') {
+                matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
+            } else if (activeCardFilter === 'Partner') {
+                matchesCardFilter = project.type === 'Partner';
+            } else if (activeCardFilter === 'Upcoming') {
+                const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
+                matchesCardFilter = (project.status || '').toLowerCase() === 'not started' || isFutureDate;
+            } else if (activeCardFilter === 'Completed') {
+                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
+            }
 
-        return matchesSearchTerm && matchesName && matchesResource && matchesStatus &&
-            matchesResourceType && matchesDate && matchesCardFilter;
-    }).sort((a, b) => {
-        if (sortBy === 'newest') {
-            const dateA = new Date(a.startDate || a.start_date || 0);
-            const dateB = new Date(b.startDate || b.start_date || 0);
-            return dateB - dateA;
-        }
-        if (sortBy === 'alphabetical') {
-            return (a.name || '').localeCompare(b.name || '');
-        }
-        if (sortBy === 'finishing-soon') {
-            const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
-            const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
-            return dateA - dateB;
-        }
-        if (sortBy === 'finishing-last') {
-            const dateA = new Date(a.endDate || a.end_date || 0).getTime();
-            const dateB = new Date(b.endDate || b.end_date || 0).getTime();
-            return dateB - dateA;
-        }
-        if (sortBy === 'billable') {
-            const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
-            const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
-            return aVal - bVal;
-        }
-        if (sortBy === 'non-billable') {
-            const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
-            const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
-            return aVal - bVal;
-        }
-        if (sortBy === 'internal') {
-            const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
-            const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
-            return aVal - bVal;
-        }
-        return 0;
-    });
+            return matchesSearchTerm && matchesName && matchesResource && matchesStatus &&
+                matchesResourceType && matchesDate && matchesCardFilter;
+        }).sort((a, b) => {
+            if (sortBy === 'newest') {
+                const dateA = new Date(a.startDate || a.start_date || 0);
+                const dateB = new Date(b.startDate || b.start_date || 0);
+                return dateB - dateA;
+            }
+            if (sortBy === 'alphabetical') {
+                return (a.name || '').localeCompare(b.name || '');
+            }
+            if (sortBy === 'finishing-soon') {
+                const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
+                const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
+                return dateA - dateB;
+            }
+            if (sortBy === 'finishing-last') {
+                const dateA = new Date(a.endDate || a.end_date || 0).getTime();
+                const dateB = new Date(b.endDate || b.end_date || 0).getTime();
+                return dateB - dateA;
+            }
+            if (sortBy === 'billable') {
+                const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
+                const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
+                return aVal - bVal;
+            }
+            if (sortBy === 'non-billable') {
+                const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
+                const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
+                return aVal - bVal;
+            }
+            if (sortBy === 'internal') {
+                const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
+                const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
+                return aVal - bVal;
+            }
+            return 0;
+        });
+    }, [projects, searchTerm, filters, activeCardFilter, sortBy]);
 
     const tableTitle = (() => {
         if (!activeCardFilter) return 'All Projects';

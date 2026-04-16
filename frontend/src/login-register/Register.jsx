@@ -72,9 +72,13 @@ function Register() {
       navigate("/", { state: { message: "Registration successful! You can now sign in." } })
 
     } catch (err) {
-      setError(err.response?.data?.detail || "Registration failed")
+      console.error("Registration failed:", err);
+      const errorMessage = err.code === 'ECONNABORTED'
+        ? "Connection timeout. The server might be offline."
+        : (err.response?.data?.detail || "Registration failed");
+      setError(errorMessage);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 

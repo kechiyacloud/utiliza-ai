@@ -99,8 +99,10 @@ const AddEmployee = () => {
             setFormData({
                 employee_id: source.id || source.employee_id || '',
                 employee_name: source.name || source.employee_name || '',
-                email: source.email || '',
-                phone: source.phone === null || source.phone === undefined ? '' : String(source.phone),
+                email: source.email || source.email_id || '',
+                phone: source.phone === null || source.phone === undefined 
+                    ? (source.phone_number === null || source.phone_number === undefined ? '' : String(source.phone_number))
+                    : String(source.phone),
                 date_of_birth: normalizeDate(source.date_of_birth),
                 address: source.address || '',
                 photo_url: source.photo_url || source.profilePic || '',
@@ -426,6 +428,12 @@ const AddEmployee = () => {
     }, [formData.projects]);
 
     const handleSubmit = async () => {
+        // Final sanity check for critical fields
+        if (!formData.email?.trim() || !formData.employee_name?.trim() || !formData.employee_id?.trim()) {
+            alert('Employee ID, Name, and Email are all required properties.');
+            return;
+        }
+
         setLoading(true);
         try {
             const payload = {
@@ -1226,7 +1234,8 @@ const AddEmployee = () => {
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                        className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                        title="Go Back"
                     >
                         <ArrowLeft size={20} className="text-gray-600" />
                     </button>

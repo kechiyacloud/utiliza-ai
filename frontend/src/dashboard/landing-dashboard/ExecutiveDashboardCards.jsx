@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Briefcase, FolderOpen } from 'lucide-react';
+import { Users, Briefcase, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Card = ({ icon: Icon, value, label, subtext, alertCount, onClick, colorTheme = 'blue' }) => {
@@ -65,7 +65,7 @@ const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
                 }}
             />
             <Card
-                icon={Briefcase}
+                icon={Building2}
                 value={data.activeClients?.value}
                 label={data.activeClients?.label}
                 subtext={data.activeClients?.change}
@@ -82,7 +82,7 @@ const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
                 }}
             />
             <Card
-                icon={FolderOpen}
+                icon={Briefcase}
                 value={data.runningProjects?.value}
                 label={data.runningProjects?.label}
                 subtext={data.runningProjects?.change}

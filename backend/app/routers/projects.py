@@ -783,65 +783,41 @@ def projects_overview(department: Optional[str] = None):
             where_clause = "AND em.department = %s"
             params = [department]
 
-        # 1. Total Projects
-        cur.execute(f"SELECT COUNT(DISTINCT p.project_id) FROM projects p {join_clause} WHERE 1=1 {where_clause}", tuple(params))
-        total = cur.fetchone()[0]
-
-        # 2. Ongoing (Exclude Not Started/Upcoming and projects that have ended)
         cur.execute(f"""
-            SELECT COUNT(DISTINCT p.project_id) FROM projects p
+            SELECT 
+                COUNT(DISTINCT p.project_id) as total,
+                COUNT(DISTINCT p.project_id) FILTER (
+                    WHERE (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
+                      AND LOWER(p.project_status) NOT IN ('not started', 'planned', 'upcoming')
+                      AND (p.start_date IS NULL OR p.start_date <= CURRENT_DATE)
+                ) as ongoing,
+                COUNT(DISTINCT p.project_id) FILTER (
+                    WHERE p.end_date < CURRENT_DATE
+                ) as completed,
+                COUNT(DISTINCT p.project_id) FILTER (
+                    WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
+                      AND (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
+                ) as upcoming,
+                COUNT(DISTINCT p.project_id) FILTER (
+                    WHERE LOWER(p.project_type) IN ('internal', 'poc')
+                ) as internal,
+                COUNT(DISTINCT p.project_id) FILTER (
+                    WHERE LOWER(p.project_type) IN ('external', 'client')
+                ) as external
+            FROM projects p
             {join_clause}
-            WHERE (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
-              AND LOWER(p.project_status) NOT IN ('not started', 'planned', 'upcoming')
-              AND (p.start_date IS NULL OR p.start_date <= CURRENT_DATE)
-            {where_clause}
+            WHERE 1=1 {where_clause}
         """, tuple(params))
-        ongoing = cur.fetchone()[0]
-
-        # 3. Completed (Only if end_date has passed)
-        cur.execute(f"""
-            SELECT COUNT(DISTINCT p.project_id) FROM projects p
-            {join_clause}
-            WHERE p.end_date < CURRENT_DATE
-            {where_clause}
-        """, tuple(params))
-        completed = cur.fetchone()[0]
-
-        # 4. Upcoming (Status based OR start date in future)
-        cur.execute(f"""
-            SELECT COUNT(DISTINCT p.project_id) FROM projects p
-            {join_clause}
-            WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
-              AND (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
-            {where_clause}
-        """, tuple(params))
-        upcoming = cur.fetchone()[0]
-
-        # 5. Internal
-        cur.execute(f"""
-            SELECT COUNT(DISTINCT p.project_id) FROM projects p
-            {join_clause}
-            WHERE LOWER(p.project_type) IN ('internal', 'poc')
-            {where_clause}
-        """, tuple(params))
-        internal = cur.fetchone()[0]
-
-        # 6. Client
-        cur.execute(f"""
-            SELECT COUNT(DISTINCT p.project_id) FROM projects p
-            {join_clause}
-            WHERE LOWER(p.project_type) IN ('external', 'client')
-            {where_clause}
-        """, tuple(params))
-        external = cur.fetchone()[0]
+        
+        row = cur.fetchone()
 
         return {
-            "total_projects": total,
-            "internal_projects": internal,
-            "external_projects": external,
-            "ongoing_projects": ongoing,
-            "upcoming_projects": upcoming,
-            "completed_projects": completed,
+            "total_projects": row[0] or 0,
+            "internal_projects": row[4] or 0,
+            "external_projects": row[5] or 0,
+            "ongoing_projects": row[1] or 0,
+            "upcoming_projects": row[3] or 0,
+            "completed_projects": row[2] or 0,
         }
     except Exception as e:
         print("PROJECTS OVERVIEW ERROR:", e)

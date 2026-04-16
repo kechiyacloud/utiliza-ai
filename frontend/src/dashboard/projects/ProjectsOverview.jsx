@@ -2,7 +2,7 @@ import React from 'react';
 import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
+const StatCard = ({ label, value, icon: IconComponent, onClick, active }) => {
     return (
         <div
             onClick={onClick}
@@ -13,7 +13,7 @@ const StatCard = ({ label, value, icon: Icon, onClick, active }) => {
         >
             <div className="flex justify-between items-start flex-row-reverse w-full">
                 <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
-                    <Icon size={16} />
+                    <IconComponent size={16} />
                 </div>
                 {active && (
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse absolute top-4 left-4"></div>
@@ -36,7 +36,6 @@ const ProjectsOverview = ({
     stats,
     activeFilter,
     onFilterChange,
-    onProjectAdded,
     selectedDepartment = '',
     onDepartmentChange = () => { },
     departments = []
@@ -53,10 +52,10 @@ const ProjectsOverview = ({
                     {location.state?.showBack && (
                         <button
                             onClick={() => navigate(-1)}
-                            className="p-2.5 hover:bg-white hover:shadow-md rounded-xl transition-all flex-shrink-0 text-slate-500 hover:text-blue-600 border border-transparent hover:border-blue-100"
+                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                             title="Go Back"
                         >
-                            <ArrowLeft size={20} />
+                            <ArrowLeft size={20} className="text-gray-600" />
                         </button>
                     )}
                     <div>

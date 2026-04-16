@@ -25,6 +25,8 @@ const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
 const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
 
+import ErrorBoundary from './components/ErrorBoundary'
+
 function RouteLoader({ label = 'Loading page...' }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-500">
@@ -47,8 +49,9 @@ function withSuspense(element, label) {
 function App() {
   return (
     <AppDataProvider>
-      <BrowserRouter>
-        <Routes>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
 
           {/* AUTH LAYOUT ROUTE */}
           <Route path='/' element={withSuspense(<LoginRegister />, 'Loading sign in...')}>
@@ -87,6 +90,7 @@ function App() {
 
         </Routes>
       </BrowserRouter>
+      </ErrorBoundary>
     </AppDataProvider>
   )
 }

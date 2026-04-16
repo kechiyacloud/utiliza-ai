@@ -34,6 +34,7 @@ const FullAnalytics = () => {
   const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedDept, setSelectedDept] = useState(location.state?.departmentFilter || 'Overall');
   
   // Project Matching State
@@ -45,6 +46,7 @@ const FullAnalytics = () => {
   const [departmentOptions, setDepartmentOptions] = useState(['Overall']);
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadData = async () => {
       const forceRefresh = refreshKey > 0 && lastHandledRefreshKeyRef.current !== refreshKey;
       if (forceRefresh) {
@@ -53,14 +55,21 @@ const FullAnalytics = () => {
       setLoading(true);
       try {
         const res = await fetchDashboardData(forceRefresh, selectedDept);
+        if (controller.signal.aborted) return;
         setData(res?.data);
       } catch (error) {
-        console.error("Failed to load analytics data", error);
+        if (error.name !== 'AbortError') {
+          console.error("Failed to load analytics data", error);
+          setError(error?.message || "Failed to sync workforce signals");
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
     loadData();
+    return () => controller.abort();
   }, [selectedDept, refreshKey]);
 
   useEffect(() => {
@@ -76,21 +85,36 @@ const FullAnalytics = () => {
     loadDepartments();
   }, [refreshKey]);
 
+  const projectFetchControllerRef = useRef(null);
+
   const handleEmployeeClick = async (employee) => {
+    // Abort previous project fetch if still in progress
+    if (projectFetchControllerRef.current) {
+        projectFetchControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    projectFetchControllerRef.current = controller;
+
     setSelectedEmpForProjects(employee);
     setLoadingProjects(true);
     try {
-      // Map analytics structure to what possible projects expects
       const empData = {
           employee_id: employee.id || employee.employee_id,
           employee_name: employee.name || employee.employee_name
       };
       const projects = await fetchPossibleProjects(empData.employee_id);
-      setPossibleProjects(projects);
+      
+      if (!controller.signal.aborted) {
+        setPossibleProjects(projects);
+        setLoadingProjects(false);
+      }
     } catch (error) {
-      console.error("Failed to load possible projects", error);
-    } finally {
-      setLoadingProjects(false);
+      if (error.name !== 'AbortError') {
+        console.error("Failed to load possible projects", error);
+        if (!controller.signal.aborted) {
+          setLoadingProjects(false);
+        }
+      }
     }
   };
 
@@ -105,6 +129,37 @@ const FullAnalytics = () => {
     );
   }
 
+  if (error && !data) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.08),_transparent_28%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] gap-8">
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="w-24 h-24 bg-white/80 backdrop-blur rounded-[2.5rem] flex items-center justify-center text-rose-500 shadow-2xl border border-white">
+            <TrendingUp size={48} className="opacity-20 absolute" />
+            <X size={40} className="relative" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Intelligence Sync Failed</h2>
+            <p className="text-slate-500 max-w-md text-sm font-medium leading-relaxed">
+              We were unable to aggregate workforce data for <span className="text-blue-600 font-bold">{selectedDept}</span>. Please verify that the backend server is active.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+          <div className="text-rose-600 text-[10px] font-black uppercase tracking-[0.2em] bg-rose-50/50 px-6 py-3 rounded-2xl border border-rose-100/50 w-full text-center">
+            {error}
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="w-full py-4 bg-blue-600 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 active:scale-95 flex items-center justify-center gap-3"
+          >
+            <RotateCcw size={16} />
+            Re-sync Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const executiveMetrics = data?.executiveMetrics || {};
   const benchAging = executiveMetrics?.bench_aging || [];
   const trends = executiveMetrics?.utilization_trends || [];
@@ -113,7 +168,8 @@ const FullAnalytics = () => {
   const skillsGap = data?.skillsGap || [];
   const transitions = data?.recentTransitions || [];
 
-  const groupedSkills = Object.values(skillsGap.reduce((acc, item) => {
+  const groupedSkills = Object.values((skillsGap || []).reduce((acc, item) => {
+    if (!item || !item.skill) return acc;
     const topic = getSkillTopic(item.skill);
     if (!acc[topic]) {
       acc[topic] = {
@@ -135,9 +191,9 @@ const FullAnalytics = () => {
   });
 
   // Risk Categories for Table
-  const criticalBench = benchAging.filter(h => h.days > 30);
-  const moderateBench = benchAging.filter(h => h.days > 15 && h.days <= 30);
-  const stableBench = benchAging.filter(h => h.days <= 15);
+  const criticalBench = (benchAging || []).filter(h => h && h.days > 30);
+  const moderateBench = (benchAging || []).filter(h => h && h.days > 15 && h.days <= 30);
+  const stableBench = (benchAging || []).filter(h => h && h.days <= 15);
 
   const benchRiskData = [
     { name: 'Critical (>30d)', value: criticalBench.length, color: '#ef4444' },
@@ -228,10 +284,10 @@ const FullAnalytics = () => {
           <div className="flex items-start gap-5">
             <button 
               onClick={() => navigate(-1)}
-              className="mt-1 p-3 hover:bg-white hover:shadow-lg rounded-2xl transition-all bg-sky-50 text-sky-700 border border-sky-100"
+              className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
               title="Go Back"
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={20} className="text-gray-600" />
             </button>
             <div>
               <p className="mb-3 inline-flex rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-sky-700">
@@ -550,7 +606,7 @@ const FullAnalytics = () => {
                                 <td className="py-6 px-6">
                                     <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-500 text-sm border border-slate-200 group-hover:bg-white group-hover:shadow-md transition-all">
-                                        {row.name.split(' ').map(n => n[0]).join('')}
+                                        {(row?.name || 'User').split(' ').filter(Boolean).map(n => n[0]).join('') || 'U'}
                                     </div>
                                     <span className="font-bold text-slate-800 tracking-tight text-base">{row.name}</span>
                                     </div>
@@ -647,7 +703,7 @@ const FullAnalytics = () => {
                     <span className="rounded-xl bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">{transition.toProject}</span>
                   </td>
                   <td className="py-4 pl-4 text-right text-slate-400">
-                    {transition.date ? new Date(transition.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
+                    {transition.date && !isNaN(new Date(transition.date).getTime()) ? new Date(transition.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'}
                   </td>
                 </tr>
               )) : (

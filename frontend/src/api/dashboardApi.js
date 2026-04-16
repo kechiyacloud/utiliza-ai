@@ -17,7 +17,7 @@ export const fetchDepartments = async () => {
         return response.data;
     } catch (error) {
         console.error("Fetch Departments Error:", error);
-        return [];
+        throw error;
     }
 };
 
@@ -110,41 +110,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
 
     } catch (error) {
         console.error("Dashboard API Error:", error);
-        return {
-            data: {
-                executiveCards: {
-                    totalEmployees: { value: 0, change: "", label: "Total Employees" },
-                    activeClients: { value: 0, change: "", label: "Active Clients" },
-                    runningProjects: { value: 0, change: "", label: "Running Projects", alertCount: 0 },
-                    benchStrength: { value: 0, change: "", label: "Bench Strength" }
-                },
-                resourceForecast: [],
-                highAllocationProjects: [],
-                topPerformers: [],
-                resourceAvailability: [],
-                skillsGap: [],
-                recentTransitions: [],
-                certificationExpiry: [],
-                executiveMetrics: {
-                    company_utilization: 0,
-                    billable_headcount: 0,
-                    bench_headcount: 0,
-                    notice_period: 0,
-                    internal_headcount: 0,
-                    total_employees: 0,
-                    bench_skills: [],
-                    upcoming_bench: 0,
-                    forecast: [],
-                    projects_at_risk: [],
-                    alerts: [],
-                    bench_aging: [],
-                    utilization_prediction: { tip: "", target: 85, gap: 0 },
-                    utilization_trends: []
-                },
-                riskInsights: []
-            },
-            todos: []
-        };
+        throw error;
     }
 };
 
