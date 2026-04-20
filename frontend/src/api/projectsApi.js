@@ -9,8 +9,8 @@ export const fetchProjectsData = async (filters = {}) => {
         const params = { ...filters };
 
         const [overviewRes, listRes] = await Promise.all([
-            api.get('/projects/overview', { params }),
-            api.get('/projects/list', { params })
+            api.get('/projects/overview', { params: { ...filters, start_date: filters.startDate, end_date: filters.endDate } }),
+            api.get('/projects/list', { params: { ...filters, start_date: filters.startDate, end_date: filters.endDate } })
         ]);
 
         const o = overviewRes?.data || {};
@@ -19,13 +19,14 @@ export const fetchProjectsData = async (filters = {}) => {
         // Map Backend structure to Frontend Expected Structure
         const REAL_PROJECTS_DATA = {
             stats: {
-                totalProjects: o.total_projects || 0,
-                internalProjects: o.internal_projects || 0,
-                clientProjects: o.client_projects || o.external_projects || 0,
-                externalProjects: o.client_projects || o.external_projects || 0,
-                ongoing: o.ongoing_projects || 0,
-                completedProjects: o.completed_projects || 0,
-                upcoming_projects: o.upcoming_projects || 0,
+                totalProjects: o.totalProjects ?? o.total_projects ?? 0,
+                internalProjects: o.internalProjects ?? o.internal_projects ?? 0,
+                externalProjects: o.externalProjects ?? o.external_projects ?? o.clientProjects ?? o.client_projects ?? 0,
+                ongoingProjects: o.ongoingProjects ?? o.ongoing_projects ?? 0,
+                overdueProjects: o.overdueProjects ?? 0,
+                endingSoonProjects: o.endingSoonProjects ?? 0,
+                completedProjects: o.completedProjects ?? o.completed_projects ?? 0,
+                upcomingProjects: o.upcomingProjects ?? o.upcoming_projects ?? 0,
             },
             projects: l.map((p) => {
                 // Determine display status pill color based on mapped status string from DB

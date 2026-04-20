@@ -1,18 +1,20 @@
 import React from 'react';
-import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers } from 'lucide-react';
+import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers, AlertTriangle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const StatCard = ({ label, value, icon: IconComponent, onClick, active }) => {
+const StatCard = ({ label, value, icon: IconComponent, onClick, active, indicators = [] }) => {
     return (
         <div
             onClick={onClick}
-            className={`rounded-xl p-3.5 border transition-all duration-500 cursor-pointer flex flex-col justify-between h-24 shadow-sm relative group ${active
+            className={`rounded-xl p-3.5 border transition-all duration-500 flex flex-col justify-between min-h-[96px] shadow-sm relative group ${
+                onClick ? 'cursor-pointer hover:border-blue-200 hover:shadow-md' : 'cursor-default'
+            } ${active
                     ? 'bg-blue-50/30 border-blue-500 ring-2 ring-blue-100 ring-offset-0'
-                    : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-md'
+                    : 'bg-white border-slate-100'
                 }`}
         >
             <div className="flex justify-between items-start flex-row-reverse w-full">
-                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
+                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-opacity'}`}>
                     <IconComponent size={16} />
                 </div>
                 {active && (
@@ -21,9 +23,29 @@ const StatCard = ({ label, value, icon: IconComponent, onClick, active }) => {
             </div>
 
             <div className="flex flex-col mt-auto">
-                <p className={`text-xl font-semibold transition-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
-                    {value}
-                </p>
+                <div className="flex items-baseline gap-2">
+                    <p className={`text-xl font-semibold transition-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
+                        {value}
+                    </p>
+                    {indicators.length > 0 && (
+                        <div className="flex items-center gap-1.5 ml-1">
+                            {indicators.map((ind, i) => (
+                                <button
+                                    key={i}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        ind.onClick();
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tighter transition-all hover:scale-105 ${ind.className}`}
+                                    title={ind.title}
+                                >
+                                    {ind.icon && <ind.icon size={8} />}
+                                    {ind.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <p className="text-sm font-medium text-slate-500">
                     {label}
                 </p>
@@ -44,6 +66,7 @@ const ProjectsOverview = ({
     const location = useLocation();
 
     if (!stats) return null;
+
 
     return (
         <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -103,12 +126,10 @@ const ProjectsOverview = ({
                     label="Total Projects"
                     value={stats.totalProjects}
                     icon={Briefcase}
-                    active={activeFilter === null}
-                    onClick={() => onFilterChange(null)}
                 />
                 <StatCard
                     label="External Projects"
-                    value={stats.externalProjects || stats.clientProjects}
+                    value={stats.externalProjects}
                     icon={Globe}
                     active={activeFilter === 'External'}
                     onClick={() => onFilterChange(activeFilter === 'External' ? null : 'External')}
@@ -122,7 +143,7 @@ const ProjectsOverview = ({
                 />
                 <StatCard
                     label="Upcoming Projects"
-                    value={stats.upcoming_projects}
+                    value={stats.upcomingProjects}
                     icon={CalendarClock}
                     active={activeFilter === 'Upcoming'}
                     onClick={() => onFilterChange(activeFilter === 'Upcoming' ? null : 'Upcoming')}

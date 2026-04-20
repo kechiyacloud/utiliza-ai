@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Filter, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Filter, RotateCcw, Search } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const FilterPanel = ({
@@ -18,6 +18,7 @@ const FilterPanel = ({
         startDate: '',
         endDate: ''
     });
+    const [focusedField, setFocusedField] = useState(null);
 
     useEffect(() => {
         if (isOpen && currentFilters) {
@@ -33,19 +34,50 @@ const FilterPanel = ({
         }
     }, [isOpen, currentFilters]);
 
+    // Get unique resource names for suggestions
+    const resourceSuggestions = React.useMemo(() => {
+        const query = (filters.resourceName || '').toLowerCase();
+        const names = Array.from(new Set(
+            currentFilters?.allResourceNames?.split(',').map(s => s.trim()) || []
+        )).filter(Boolean);
+
+        return names
+            .filter(name => name.toLowerCase().includes(query))
+            .sort((a, b) => {
+                const aLower = a.toLowerCase();
+                const bLower = b.toLowerCase();
+                const aStarts = aLower.startsWith(query);
+                const bStarts = bLower.startsWith(query);
+                
+                if (aStarts && !bStarts) return -1;
+                if (!aStarts && bStarts) return 1;
+                return aLower.localeCompare(bLower);
+            });
+    }, [currentFilters?.allResourceNames, filters.resourceName]);
+
     if (!isOpen) return null;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        let newFilters;
         if (name === 'status') {
-            setFilters(prev => ({
-                ...prev,
+            newFilters = {
+                ...filters,
                 status: value,
-                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
-            }));
-            return;
+                sowStatus: value === 'In Progress' ? filters.sowStatus : '',
+            };
+        } else {
+            newFilters = { ...filters, [name]: value };
         }
-        setFilters(prev => ({ ...prev, [name]: value }));
+        
+        setFilters(newFilters);
+        
+        // Trigger immediate filtering for a snappier experience as requested
+        const finalFiltersForApply = {
+            ...newFilters,
+            sowStatus: newFilters.status === 'In Progress' ? newFilters.sowStatus : '',
+        };
+        onApplyFilters(finalFiltersForApply);
     };
 
     const handleApply = () => {
@@ -102,16 +134,40 @@ const FilterPanel = ({
                             </div>
 
                             {/* Resource Name */}
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5 relative">
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Resource Name</label>
-                                <input
-                                    type="text"
-                                    name="resourceName"
-                                    placeholder="Search by team member..."
-                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
-                                    value={filters.resourceName}
-                                    onChange={handleChange}
-                                />
+                                <div className="relative group">
+                                    <input
+                                        type="text"
+                                        name="resourceName"
+                                        placeholder="Search by team member..."
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
+                                        value={filters.resourceName}
+                                        onChange={handleChange}
+                                        onFocus={() => setFocusedField('resourceName')}
+                                        onBlur={() => setTimeout(() => setFocusedField(null), 200)}
+                                        autoComplete="off"
+                                    />
+                                    {focusedField === 'resourceName' && filters.resourceName && resourceSuggestions.length > 0 && (
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl z-[60] py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100 max-h-60 overflow-y-auto">
+                                            {resourceSuggestions.map(name => (
+                                                <button
+                                                    key={name}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const e = { target: { name: 'resourceName', value: name } };
+                                                        handleChange(e);
+                                                        setFocusedField(null);
+                                                    }}
+                                                    className="w-full px-4 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                                >
+                                                    <Search size={14} className="text-slate-300" />
+                                                    {name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Status */}

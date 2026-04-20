@@ -1392,10 +1392,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Please select a client.');
             return;
         }
-        if (isClientProject && !formData.sowStatus) {
-            setSubmitError('SOW Status is required for External projects.');
-            return;
-        }
+        // SOW Status validation removed - it is now optional
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
         const effectiveType = formData.type;
         const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
@@ -1636,13 +1633,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">SOW Status</label>
                                         <select
                                             name="sowStatus"
                                             className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                             value={formData.sowStatus}
                                             onChange={handleChange}
-                                            required
                                         >
                                             {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                                 <option key={opt.value} value={opt.value}>{opt.label}</option>

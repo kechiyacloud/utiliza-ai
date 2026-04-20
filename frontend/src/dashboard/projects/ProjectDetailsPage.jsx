@@ -2138,7 +2138,12 @@ const calculateProjectProgress = (project, resources = []) => {
     return Math.min(Math.max(pct, 0), 100);
 };
 
-const getStatusBadgeClasses = (pct) => {
+const getStatusBadgeClasses = (status, pct) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('overdue')) return 'bg-rose-50 text-rose-700 border-rose-100';
+    if (s.includes('ending soon')) return 'bg-amber-50 text-amber-700 border-amber-100';
+    if (s === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    
     if (pct <= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
     if (pct <= 60) return 'bg-amber-50 text-amber-700 border-amber-100';
     return 'bg-rose-50 text-rose-700 border-rose-100';
@@ -2149,12 +2154,12 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeRaw = project?.type || project?.project_type || '';
     const projectTypeLabel = projectTypeRaw.toLowerCase() === 'internal' ? 'Internal' : 'External';
-    const projectStatus = project?.status || project?.project_status || 'Not Set';
+    const projectStatus = project?.display_status || project?.status || project?.project_status || 'Not Set';
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     
-    const progressPct = calculateProjectProgress(project, resources);
-    const statusClasses = getStatusBadgeClasses(progressPct);
+    const progressPct = calculateProjectProgress(project);
+    const statusClasses = getStatusBadgeClasses(projectStatus, progressPct);
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card">

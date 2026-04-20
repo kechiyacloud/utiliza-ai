@@ -90,7 +90,12 @@ const getProgressColorClasses = (pct) => {
     return 'bg-red-500';
 };
 
-const getStatusBadgeStyle = (pct) => {
+const getStatusBadgeStyle = (status, pct) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('overdue')) return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
+    if (s.includes('ending soon')) return { backgroundColor: '#FFF7ED', color: '#C2410C' }; // Orange
+    if (s === 'completed') return { backgroundColor: '#F0FDF4', color: '#166534' }; // Green
+    
     if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' };
     if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' };
     return { backgroundColor: '#FEF2F2', color: '#991B1B' };
@@ -130,7 +135,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                     <span className="text-sm font-normal text-slate-500">Status</span>
                     <span
                         className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider whitespace-nowrap"
-                        style={getStatusBadgeStyle(progress.pct)}
+                        style={getStatusBadgeStyle(project.status, progress.pct)}
                     >
                         {formatStatus(project)}
                     </span>
@@ -198,7 +203,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     );
 };
 
-const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
+const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, filters, onFilterChange }) => {
     const { triggerRefresh } = useDataRefresh();
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
@@ -225,18 +230,25 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     }, [location.state, projects, navigate]);
 
-    // Filter States
-    const initialFilters = {
-        projectName: '',
-        status: 'All Status',
-        sowStatus: '',
-        startDate: '',
-        endDate: '',
-        resourceName: '',
-        resourceType: ''
+    // Handle filter application by passing to parent
+    const handleApplyFilters = (newFilters) => {
+        onFilterChange(newFilters);
     };
 
-    const [filters, setFilters] = useState(initialFilters);
+    const handleClearFilters = () => {
+        const cleared = {
+            projectName: '',
+            status: 'All Status',
+            sowStatus: '',
+            startDate: '',
+            endDate: '',
+            resourceName: '',
+            resourceType: ''
+        };
+        onFilterChange(cleared);
+    };
+
+    const hasActiveFilters = Object.values(filters || {}).some(v => v !== '' && v !== 'All Status');
 
     if (!projects || !Array.isArray(projects)) return null;
 
@@ -247,79 +259,65 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
             const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
-            const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
-
-            const isAllStatus = !filters.status || filters.status === 'All Status';
-            const statusValue = (project.status || '').trim();
-            const statusMatches = isAllStatus || statusValue === filters.status;
-            const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
-            const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
-            const matchesStatus = statusMatches && subStatusMatches;
-
-            const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
-
-            const projectStart = new Date(project.startDate || project.start_date);
-            const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
-            const hasProjectDates = !Number.isNaN(projectStart.getTime());
-            const filterStart = filters.startDate ? new Date(filters.startDate) : null;
-            const filterEnd = filters.endDate ? new Date(filters.endDate) : null;
-            const matchesDate = (() => {
-                if (!filterStart && !filterEnd) return true;
-                if (!hasProjectDates) return false;
-                if (filterStart && projectEnd < filterStart) return false;
-                if (filterEnd && projectStart > filterStart) return false;
-                return true;
-            })();
-
             let matchesCardFilter = true;
+            const projectStatus = (project.status || '').toLowerCase();
             if (activeCardFilter === 'Internal') {
-                matchesCardFilter = ['Internal', 'POC'].includes(project.type);
+                matchesCardFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
             } else if (activeCardFilter === 'External') {
-                matchesCardFilter = ['External', 'Client'].includes(project.type);
-            } else if (activeCardFilter === 'Ongoing') {
-                matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
+                matchesCardFilter = ['external', 'client'].includes((project.type || '').toLowerCase());
+            } else if (activeCardFilter === 'Active' || activeCardFilter === 'Ongoing') {
+                matchesCardFilter = ['live', 'in progress', 'in progress - overdue', 'in progress - ending soon', 'running', 'active', 'ongoing'].includes(projectStatus);
+            } else if (activeCardFilter === 'Overdue') {
+                matchesCardFilter = projectStatus.includes('overdue');
+            } else if (activeCardFilter === 'Ending Soon') {
+                matchesCardFilter = projectStatus.includes('ending soon') && projectStatus !== 'completed';
             } else if (activeCardFilter === 'Partner') {
-                matchesCardFilter = project.type === 'Partner';
+                matchesCardFilter = (project.type || '').toLowerCase() === 'partner';
             } else if (activeCardFilter === 'Upcoming') {
                 const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
-                matchesCardFilter = (project.status || '').toLowerCase() === 'not started' || isFutureDate;
+                matchesCardFilter = projectStatus === 'not started' || isFutureDate;
             } else if (activeCardFilter === 'Completed') {
-                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
+                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes(projectStatus);
             }
 
-            return matchesSearchTerm && matchesName && matchesResource && matchesStatus &&
-                matchesResourceType && matchesDate && matchesCardFilter;
+            const isFinishingSoonSort = sortBy === 'finishing-soon';
+            const hideCompleted = isFinishingSoonSort || activeCardFilter === 'Ending Soon';
+            if (hideCompleted && projectStatus === 'completed') return false;
+
+            return matchesSearchTerm && matchesCardFilter;
         }).sort((a, b) => {
-            if (sortBy === 'newest') {
+            // Force finishing-soon sort if Ending Soon filter is applied
+            const effectiveSort = activeCardFilter === 'Ending Soon' ? 'finishing-soon' : sortBy;
+
+            if (effectiveSort === 'newest') {
                 const dateA = new Date(a.startDate || a.start_date || 0);
                 const dateB = new Date(b.startDate || b.start_date || 0);
                 return dateB - dateA;
             }
-            if (sortBy === 'alphabetical') {
+            if (effectiveSort === 'alphabetical') {
                 return (a.name || '').localeCompare(b.name || '');
             }
-            if (sortBy === 'finishing-soon') {
+            if (effectiveSort === 'finishing-soon') {
                 const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
                 const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
                 return dateA - dateB;
             }
-            if (sortBy === 'finishing-last') {
+            if (effectiveSort === 'finishing-last') {
                 const dateA = new Date(a.endDate || a.end_date || 0).getTime();
                 const dateB = new Date(b.endDate || b.end_date || 0).getTime();
                 return dateB - dateA;
             }
-            if (sortBy === 'billable') {
+            if (effectiveSort === 'billable') {
                 const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
                 const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
                 return aVal - bVal;
             }
-            if (sortBy === 'non-billable') {
+            if (effectiveSort === 'non-billable') {
                 const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
                 const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
                 return aVal - bVal;
             }
-            if (sortBy === 'internal') {
+            if (effectiveSort === 'internal') {
                 const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
                 const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
                 return aVal - bVal;
@@ -357,13 +355,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
-    const handleApplyFilters = (newFilters) => {
-        setFilters(newFilters);
-    };
-
-    const handleClearFilters = () => {
-        setFilters(initialFilters);
-    };
 
     const SUB_STATUS_LABELS = PROJECT_SUB_STATUS_OPTIONS.reduce((acc, cur) => {
         acc[cur.value] = cur.label;
@@ -380,15 +371,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         return base;
     };
 
-    const isFilterActive = Boolean(
-        filters.projectName ||
-        (filters.status && filters.status !== 'All Status') ||
-        filters.sowStatus ||
-        filters.startDate ||
-        filters.endDate ||
-        filters.resourceName ||
-        filters.resourceType
-    );
 
     const handleViewClick = (project) => {
         navigate(`/info/projects/${project.id}`, { state: { project } });
@@ -535,10 +517,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         {/* Filter */}
                         <button
                             onClick={() => setIsFilterPanelOpen(true)}
-                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || hasActiveFilters ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
                         >
                             <Filter size={18} />
-                            {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
+                            {hasActiveFilters && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
                         </button>
 
                         {/* Sort */}
@@ -578,7 +560,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         </div>
 
                         {/* Reset */}
-                        {isFilterActive && (
+                        {hasActiveFilters && (
                             <button
                                 onClick={handleClearFilters}
                                 className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
@@ -629,7 +611,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                         <td className="py-5 text-center">
                                             <span
                                                 className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
-                                                style={getStatusBadgeStyle(calculateProjectProgress(project).pct)}
+                                                style={getStatusBadgeStyle(project.status, calculateProjectProgress(project).pct)}
                                             >
                                                 {formatStatus(project)}
                                             </span>
@@ -755,7 +737,12 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
                 onClearFilters={handleClearFilters}
-                currentFilters={filters}
+                currentFilters={{
+                    ...filters,
+                    allResourceNames: allEmployeeNames && allEmployeeNames.length > 0 
+                        ? allEmployeeNames.join(', ') 
+                        : Array.from(new Set(projects.map(p => p.resource_names).filter(Boolean))).join(', ')
+                }}
             />
 
             {/* Delete Confirmation Modal */}

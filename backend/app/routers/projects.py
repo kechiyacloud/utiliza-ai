@@ -144,14 +144,14 @@ PROJECT_STATUS_ALIASES = {
     "on hold": "On Hold",
     "delayed": "On Hold",
     "blocked": "On Hold",
-    "closed": "COMPLETED",
-    "completed": "COMPLETED",
-    "done": "COMPLETED",
-    "ended": "COMPLETED",
-    "end": "COMPLETED",
-    "finished": "COMPLETED",
+    "closed": "Completed",
+    "completed": "Completed",
+    "done": "Completed",
+    "ended": "Completed",
+    "end": "Completed",
+    "finished": "Completed",
 }
-VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "COMPLETED"}
+VALID_PROJECT_STATUSES = {"Not Started", "In Progress", "On Hold", "Completed"}
 VALID_SUB_STATUSES = {"SOW_SIGNED": "SOW Signed", "SOW_NOT_SIGNED": "SOW Not Signed"}
 PROJECT_TYPE_ALIASES = {
     "client": "Client",
@@ -178,10 +178,6 @@ def _normalize_fk_id(value: Optional[str]) -> Optional[str]:
 def _normalize_project_status(value: Optional[str], end_date: Optional[date] = None, strict: bool = True) -> Optional[str]:
     from datetime import date as dt_date
     
-    # 1. Date-based completion check (yesterday/past date logic)
-    if end_date and end_date < dt_date.today():
-        return "COMPLETED"
-
     normalized = _normalize_text(value)
     if not normalized:
         if strict:
@@ -193,10 +189,31 @@ def _normalize_project_status(value: Optional[str], end_date: Optional[date] = N
     
     res = canonical if canonical else (normalized if not strict else "In Progress")
     
-    # 2. Date-based status override
-    # If project end_date is today or in future, it CANNOT be COMPLETED
-    if end_date and end_date >= dt_date.today() and res == "COMPLETED":
-        return "In Progress"
+    # 1. Output-only derived markers (not for saving to DB)
+    if not strict:
+        # If explicitly Completed by user, respect it even if end_date is far in future
+        if res == "Completed":
+            return "Completed"
+        
+        # indicator logic: Past Due / Ending Soon
+        if res == "In Progress":
+            if not end_date:
+                return "In Progress"
+            
+            today = dt_date.today()
+            if end_date < today:
+                return "In Progress - Overdue"
+            if today >= (end_date - timedelta(days=7)):
+                return "In Progress - Ending Soon"
+            
+            return "In Progress"
+        
+        if end_date and res in ("Not Started", "On Hold"):
+            today = dt_date.today()
+            if end_date < today:
+                return "In Progress - Overdue"
+            if today >= (end_date - timedelta(days=7)):
+                return "In Progress - Ending Soon"
         
     return res
 
@@ -238,10 +255,8 @@ def _validate_project_dates(start_date_value, end_date_value):
 def _validate_status_and_substatus(status: Optional[str], sub_status: Optional[str]):
     normalized_status = _normalize_project_status(status)
     normalized_sub = _normalize_sub_status(sub_status)
-    if normalized_status == "In Progress":
-        if not normalized_sub:
-            raise HTTPException(status_code=422, detail="sub_status is required when status is In Progress.")
-    else:
+    # sub_status is now purely optional; we no longer raise 422 if it is missing for In Progress
+    if normalized_status != "In Progress":
         normalized_sub = None
     return normalized_status, normalized_sub
 
@@ -313,7 +328,11 @@ def _build_simple_pdf(lines: List[str]) -> bytes:
 
 
 @router.get("/overview")
-def projects_overview(department: Optional[str] = None):
+def projects_overview(
+    department: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -326,45 +345,71 @@ def projects_overview(department: Optional[str] = None):
                 JOIN projects_allocation pa ON p.project_id = pa.project_id
                 JOIN employee_master em ON pa.employee_id = em.employee_id
             """
-            where_clause = "AND em.department = %s"
-            params = [department]
+            where_clause += " AND em.department = %s "
+            params.append(department)
 
+        # Date Range Filter (Overlap Logic)
+        if start_date:
+            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
+            params.append(start_date)
+        
+        if end_date:
+            where_clause += " AND (p.start_date <= %s) "
+            params.append(end_date)
+
+        # Fetch projects to count them in Python using the centralized normalization logic
+        # This ensures dashboard metrics ALWAYS match the list view.
         cur.execute(f"""
             SELECT 
-                COUNT(DISTINCT p.project_id) as total,
-                COUNT(DISTINCT p.project_id) FILTER (
-                    WHERE (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
-                      AND LOWER(p.project_status) NOT IN ('not started', 'planned', 'upcoming')
-                      AND (p.start_date IS NULL OR p.start_date <= CURRENT_DATE)
-                ) as ongoing,
-                COUNT(DISTINCT p.project_id) FILTER (
-                    WHERE p.end_date < CURRENT_DATE
-                ) as completed,
-                COUNT(DISTINCT p.project_id) FILTER (
-                    WHERE (LOWER(p.project_status) IN ('not started', 'planned', 'upcoming') OR p.start_date > CURRENT_DATE)
-                      AND (p.end_date IS NULL OR p.end_date >= CURRENT_DATE)
-                ) as upcoming,
-                COUNT(DISTINCT p.project_id) FILTER (
-                    WHERE LOWER(p.project_type) IN ('internal', 'poc')
-                ) as internal,
-                COUNT(DISTINCT p.project_id) FILTER (
-                    WHERE LOWER(p.project_type) IN ('external', 'client')
-                ) as external
+                p.project_id,
+                p.project_status,
+                p.project_type,
+                p.start_date,
+                p.end_date
             FROM projects p
             {join_clause}
             WHERE 1=1 {where_clause}
+            GROUP BY p.project_id, p.project_status, p.project_type, p.start_date, p.end_date
         """, tuple(params))
         
-        row = cur.fetchone()
-
-        return {
-            "total_projects": row[0] or 0,
-            "internal_projects": row[4] or 0,
-            "external_projects": row[5] or 0,
-            "ongoing_projects": row[1] or 0,
-            "upcoming_projects": row[3] or 0,
-            "completed_projects": row[2] or 0,
+        projects = cur.fetchall()
+        
+        stats = {
+            "totalProjects": len(projects),
+            "internalProjects": 0,
+            "externalProjects": 0,
+            "ongoingProjects": 0,
+            "overdueProjects": 0,
+            "endingSoonProjects": 0,
+            "upcomingProjects": 0,
+            "completedProjects": 0,
         }
+
+        for p_id, p_status, p_type, p_start, p_end in projects:
+            # 1. Normalize Type
+            norm_type = _normalize_project_type(p_type, strict=False).lower()
+            if norm_type in ('internal', 'poc'):
+                stats["internalProjects"] += 1
+            else:
+                stats["externalProjects"] += 1
+
+            # 2. Derive Status (using Output mode, strict=False)
+            # This logic must match frontend's indicator logic
+            derived = _normalize_project_status(p_status, end_date=p_end, strict=False)
+            
+            if derived == "Completed":
+                stats["completedProjects"] += 1
+            elif "Overdue" in derived:
+                stats["overdueProjects"] += 1
+            elif "Ending Soon" in derived:
+                stats["endingSoonProjects"] += 1
+            elif derived in ("In Progress", "Not Started", "On Hold"):
+                stats["ongoingProjects"] += 1
+            
+            if derived == "Not Started":
+                stats["upcomingProjects"] += 1
+
+        return stats
     except Exception as e:
         print("PROJECTS OVERVIEW ERROR:", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -374,14 +419,21 @@ def projects_overview(department: Optional[str] = None):
 
 
 @router.get("/list")
-def projects_list(department: Optional[str] = None):
+def projects_list(
+    department: Optional[str] = None, 
+    resource_name: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        where_clause = ""
+        where_clause = " WHERE 1=1 "
         params = []
+        
+        # Department Filter
         if department and department.lower() != 'all':
-            where_clause = """
+            where_clause += """
                 AND EXISTS (
                     SELECT 1 FROM projects_allocation pa_dept
                     JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
@@ -389,7 +441,28 @@ def projects_list(department: Optional[str] = None):
                       AND em_dept.department = %s
                 )
             """
-            params = [department]
+            params.append(department)
+
+        # Resource Name Filter
+        if resource_name:
+            where_clause += """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_res
+                    JOIN employee_master em_res ON pa_res.employee_id = em_res.employee_id
+                    WHERE pa_res.project_id = p.project_id
+                      AND em_res.employee_name ILIKE %s
+                )
+            """
+            params.append(f"%{resource_name}%")
+
+        # Date Range Filter (Overlap Logic)
+        if start_date:
+            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
+            params.append(start_date)
+        
+        if end_date:
+            where_clause += " AND (p.start_date <= %s) "
+            params.append(end_date)
 
         cur.execute(f"""
             SELECT
@@ -403,7 +476,6 @@ def projects_list(department: Optional[str] = None):
                     SELECT COUNT(DISTINCT pa_all.employee_id)
                     FROM projects_allocation pa_all
                     WHERE pa_all.project_id = p.project_id
-                      AND (pa_all.allocation_end_date IS NULL OR pa_all.allocation_end_date >= CURRENT_DATE)
                 ) AS resource_count,
                 (
                     SELECT JSON_AGG(json_row)
@@ -412,11 +484,16 @@ def projects_list(department: Optional[str] = None):
                         FROM projects_allocation pa2
                         JOIN employee_master em2 ON pa2.employee_id = em2.employee_id
                         WHERE pa2.project_id = p.project_id
-                          AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
                         ORDER BY pa2.allocation_percentage DESC
                         LIMIT 6
                     ) AS limited_members
                 ) AS team_members,
+                (
+                    SELECT STRING_AGG(em3.employee_name, ', ')
+                    FROM projects_allocation pa3
+                    JOIN employee_master em3 ON pa3.employee_id = em3.employee_id
+                    WHERE pa3.project_id = p.project_id
+                ) AS resource_names,
                 c.client_name,
                 pr.partner_name,
                 p.billable,
@@ -442,11 +519,12 @@ def projects_list(department: Optional[str] = None):
                 "end_date": r[5],
                 "resource_count": r[6],
                 "team_members": r[7] if r[7] else [],
-                "client_name": r[8],
-                "partner_name": r[9],
-                "billable": r[10] if r[10] else "Unknown",
-                "client_id": r[11],
-                "partner_id": r[12],
+                "resource_names": r[8] or "None",
+                "client_name": r[9],
+                "partner_name": r[10],
+                "billable": r[11] if r[11] else "Unknown",
+                "client_id": r[12],
+                "partner_id": r[13],
             }
             for r in results
         ]
@@ -953,7 +1031,10 @@ def update_project(project_id: str, updates: ProjectUpdate):
             updates_map["project_name"] = project_name
 
         if "project_status" in payload:
-            updates_map["project_status"] = normalized_status or _normalize_project_status(payload["project_status"])
+            new_val = normalized_status or _normalize_project_status(payload["project_status"])
+            if current_status != new_val:
+                print(f"STATUS TRANSITION for project {project_id}: '{current_status}' -> '{new_val}'")
+            updates_map["project_status"] = new_val
 
         if "billable" in payload:
             billable = _normalize_text(payload["billable"])
@@ -1046,6 +1127,7 @@ def create_project(project: ProjectCreate):
         if normalized_type == "partner" and not partner_id_value:
             raise HTTPException(status_code=422, detail="Partner projects must include a partner_id.")
         project_status, sub_status_val = _validate_status_and_substatus(project.project_status, project.sub_status)
+        print(f"CREATING PROJECT '{project_name}' with status: '{project_status}'")
         insert_fields = ["project_id", "project_name", "project_status", "project_type", "billable", "start_date", "end_date"]
         insert_values = [
             project.project_id,

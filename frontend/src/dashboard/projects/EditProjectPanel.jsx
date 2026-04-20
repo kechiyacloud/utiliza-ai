@@ -388,11 +388,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
         const isInternal = formData.type === 'Internal';
         
-        // SOW Validation: required for External projects ONLY if status is 'In Progress'
-        if (!isInternal && formData.status === 'In Progress' && !formData.subStatus) {
-            setSaveError('SOW Status is required for In-Progress External projects.');
-            return;
-        }
+        // SOW Validation removed as requested - subStatus is now optional
 
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
         const isDirectClientProject = formData.type === 'External' && formData.clientType === 'Direct Client';
@@ -684,7 +680,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                         value={formData.subStatus}
                                         onChange={handleChange}
-                                        required
                                     >
                                         {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>

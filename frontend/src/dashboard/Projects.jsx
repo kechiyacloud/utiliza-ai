@@ -13,13 +13,26 @@ function Projects() {
   const [error, setError] = useState(null);
   const [activeCardFilter, setActiveCardFilter] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [filters, setFilters] = useState({
+      projectName: '',
+      status: 'All Status',
+      sowStatus: '',
+      startDate: '',
+      endDate: '',
+      resourceName: '',
+      resourceType: ''
+  });
   const [departments, setDepartments] = useState([]);
+  const [allEmployeeNames, setAllEmployeeNames] = useState([]);
 
-  const loadData = useCallback(async (dept = selectedDepartment) => {
+  const loadData = useCallback(async (dept = selectedDepartment, currentFilters = filters) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchProjectsData(dept);
+      const res = await fetchProjectsData({ 
+          department: dept, 
+          ...currentFilters 
+      });
       setData(res.data);
     } catch (err) {
       console.error("Failed to load projects data", err);
@@ -27,21 +40,26 @@ function Projects() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDepartment]);
+  }, [selectedDepartment, filters]);
 
   useEffect(() => {
-    const fetchDepartments = async () => {
+    const fetchOptions = async () => {
       try {
         const res = await axios.get('/employees/filter-options');
-        if (res.data && res.data.departments) {
-          const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
-          setDepartments(filtered);
+        if (res.data) {
+          if (res.data.departments) {
+            const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
+            setDepartments(filtered);
+          }
+          if (res.data.employee_names) {
+            setAllEmployeeNames(res.data.employee_names);
+          }
         }
       } catch (err) {
-        console.error("Failed to fetch departments", err);
+        console.error("Failed to fetch filter options", err);
       }
     };
-    fetchDepartments();
+    fetchOptions();
   }, []);
 
   useEffect(() => {
@@ -122,7 +140,13 @@ function Projects() {
         <ProjectList
           projects={data?.projects || []}
           activeCardFilter={activeCardFilter}
-          onRefresh={() => loadData()}
+          onRefresh={() => loadData(selectedDepartment, filters)}
+          allEmployeeNames={allEmployeeNames}
+          filters={filters}
+          onFilterChange={(newFilters) => {
+              setFilters(newFilters);
+              loadData(selectedDepartment, newFilters);
+          }}
         />
       </div>
     </>

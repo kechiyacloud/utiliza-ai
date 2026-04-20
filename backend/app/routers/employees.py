@@ -497,6 +497,9 @@ def get_employee_filter_options():
         cur.execute("SELECT DISTINCT employee_status FROM employee_master_pro WHERE employee_status IS NOT NULL AND employee_status != ''")
         status_tags = [row[0] for row in cur.fetchall()]
 
+        cur.execute("SELECT DISTINCT employee_name FROM employee_master WHERE date_of_resign IS NULL ORDER BY employee_name")
+        employee_names = [row[0] for row in cur.fetchall()]
+
         # Ensure known statuses like 'Allocated' exist if empty
         if not status_tags:
             status_tags = ['Allocated', 'Bench', 'Partially allocated', 'Notice period', 'Partially bench', 'PIP', 'Resigned']
@@ -506,7 +509,8 @@ def get_employee_filter_options():
             "locations": sorted(locations),
             "employee_types": sorted(employee_types),
             "skills": sorted(skills),
-            "status_tags": sorted(status_tags)
+            "status_tags": sorted(status_tags),
+            "employee_names": employee_names
         }
     except Exception as e:
         print(f"Error fetching filter options: {e}")
