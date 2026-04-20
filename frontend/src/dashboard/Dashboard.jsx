@@ -289,10 +289,94 @@ function Dashboard() {
   const contextLabel = Array.isArray(selectedDepartments) && selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
   const dynamicKpiData = [
-    { title: `${String(contextLabel)} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
-    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${String(_metrics?.total_employees || 0)} total`, icon: UserCheck, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: UserMinus, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Clock, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
+    { 
+      title: "Total Employee", 
+      value: _metrics?.total_employees || 0, 
+      subtext: "Across all departments", 
+      icon: UsersIcon, 
+      color: "text-slate-500", 
+      bg: "bg-slate-50", 
+      border: "border-slate-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'total', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Billable Headcount", 
+      value: _metrics?.billable_headcount || 0, 
+      subtext: `out of ${String(_metrics?.total_employees || 0)} total`, 
+      icon: UserCheck, 
+      color: "text-blue-500", 
+      bg: "bg-blue-50", 
+      border: "border-blue-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Non-Billable Headcount", 
+      value: _metrics?.internal_headcount || 0, 
+      subtext: "Internal & Shared services", 
+      icon: Activity, 
+      color: "text-emerald-500", 
+      bg: "bg-emerald-50", 
+      border: "border-emerald-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Bench Headcount", 
+      value: _metrics?.bench_headcount || 0, 
+      subtext: "resources currently idle", 
+      icon: UserMinus, 
+      color: "text-rose-500", 
+      bg: "bg-rose-50", 
+      border: "border-rose-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: `${String(contextLabel)} Utilization`, 
+      value: `${_metrics?.company_utilization || 0}%`, 
+      subtext: "Target 85%", 
+      icon: TrendingUp, 
+      color: "text-emerald-500", 
+      bg: "bg-emerald-50", 
+      border: "border-emerald-100", 
+      route: "/info/allocation", 
+      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Active Clients", 
+      value: data?.executiveCards?.activeClients?.value || 0, 
+      subtext: data?.executiveCards?.activeClients?.change || "Current month", 
+      icon: Building2, 
+      color: "text-blue-600", 
+      bg: "bg-blue-50", 
+      border: "border-blue-100", 
+      route: "/info/client", 
+      state: { showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Running Projects", 
+      value: data?.executiveCards?.runningProjects?.value || 0, 
+      subtext: data?.executiveCards?.runningProjects?.change || "Active delivery", 
+      icon: Briefcase, 
+      color: "text-amber-500", 
+      bg: "bg-amber-50", 
+      border: "border-amber-100", 
+      route: "/info/projects", 
+      state: { showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Upcoming Bench (30days)", 
+      value: _metrics?.upcoming_bench || 0, 
+      subtext: "Resources roll-off", 
+      icon: Clock, 
+      color: "text-amber-500", 
+      bg: "bg-amber-50", 
+      border: "border-amber-100", 
+      route: "/info/allocation", 
+      state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } 
+    }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -401,7 +485,7 @@ function Dashboard() {
               icon={Building2}
             />
             <button
-              onClick={() => navigate('/info/projects?highlight=add-project')}
+              onClick={() => navigate('/info/projects/add')}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus size={20} strokeWidth={3} />
@@ -413,8 +497,7 @@ function Dashboard() {
         {/* --- EXECUTIVE SECTION --- */}
         <div className="flex flex-col w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-          {/* Executive KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="dashboard-cards">
             {dynamicKpiData.map((kpi, idx) => (
               <div
                 key={idx}
@@ -438,10 +521,6 @@ function Dashboard() {
                 </div>
               </div>
             ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="dashboard-cards">
-            <ExecutiveDashboardCards data={data?.executiveCards} selectedDepartments={selectedDepartments} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">

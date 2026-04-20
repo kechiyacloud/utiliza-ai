@@ -32,6 +32,9 @@ export const EmployeeProvider = ({ children }) => {
         return employees.filter(emp => emp.employee_status === status);
     }, [employees]);
 
+    const [showArchived, setShowArchived] = useState(false);
+    const [showDeleted, setShowDeleted] = useState(false);
+
     const value = useMemo(() => ({
         employees,
         setEmployees,
@@ -40,8 +43,12 @@ export const EmployeeProvider = ({ children }) => {
         deleteEmployee,
         getEmployeeById,
         getEmployeesByDepartment,
-        getEmployeesByStatus
-    }), [employees, addEmployee, updateEmployee, deleteEmployee, getEmployeeById, getEmployeesByDepartment, getEmployeesByStatus]);
+        getEmployeesByStatus,
+        showArchived,
+        setShowArchived,
+        showDeleted,
+        setShowDeleted
+    }), [employees, addEmployee, updateEmployee, deleteEmployee, getEmployeeById, getEmployeesByDepartment, getEmployeesByStatus, showArchived, showDeleted]);
 
     return (
         <EmployeeContext.Provider value={value}>

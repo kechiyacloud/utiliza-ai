@@ -277,25 +277,9 @@ def get_dashboard_all(department: Optional[str] = None):
             internal_hc = max(0, total_emp - billable_hc - bench_hc - notice_p)
             active_hc = max(1, total_emp - notice_p)
 
-            # Utilization (Billable Only)
-            cur.execute("""
-                WITH EmployeeAlloc AS (
-                    SELECT m.employee_id,
-                        LEAST(100, COALESCE(SUM(pa.allocation_percentage) FILTER (WHERE LOWER(pa.project_tags) = 'billable'), 0)) as capped_alloc
-                    FROM employee_master m
-                    LEFT JOIN projects_allocation pa ON m.employee_id=pa.employee_id
-                        AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date>=CURRENT_DATE)
-                    LEFT JOIN employee_master_pro p ON m.employee_id=p.employee_id
-                    WHERE m.date_of_resign IS NULL
-                      AND (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status IS NULL)
-                    """ + dept_m_filter + """
-                    GROUP BY m.employee_id
-                )
-                SELECT ROUND(AVG(capped_alloc)), SUM(capped_alloc) FROM EmployeeAlloc
-            """, dept_params)
-            util_row = cur.fetchone()
-            utilization = int(util_row[0]) if util_row and util_row[0] else 0
-            total_alloc = float(util_row[1]) if util_row and util_row[1] else 0
+            # Utilization (Headcount Ratio: Billable / Total)
+            utilization = int((billable_hc * 100) / max(1, total_emp))
+            total_alloc = float(billable_hc * 100) # Mock total_alloc for tip logic consistency
 
             # Bench skills
             cur.execute("""

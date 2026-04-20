@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive } from 'lucide-react'
 import BulkImportModal from './BulkImportModal'
 import EmployeeTable from './EmployeeTable'
 import NewJoinerCard from './NewJoinerCard'
 import FilterOverlay from './FilterOverlay'
 import SkillsOverview from './insights/SkillsOverview'
-import UtilizationTrend from './insights/UtilizationTrend'
 import { getEmployeeList } from '../../api/employeeApi'
+import { useEmployees } from '../../context/EmployeeContext'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
@@ -41,9 +41,7 @@ function EmployeeMasterList() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
-  const [showBulkDropdown, setShowBulkDropdown] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const bulkDropdownRef = useRef(null);
 
   // Filter States
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -59,7 +57,9 @@ function EmployeeMasterList() {
   const location = useLocation();
   const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
   const [activeDrawer, setActiveDrawer] = useState(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const { showArchived, showDeleted } = useEmployees();
+  const [showArchivedLocal, setShowArchivedLocal] = useState(false); // We still need this for internal table filtering if we don't want to re-fetch? 
+  // Wait, let's use the context ones for the fetch.
 
   // Department chip selector
   const [selectedDepts, setSelectedDepts] = useState(() => {
@@ -105,7 +105,7 @@ function EmployeeMasterList() {
       setError(null)
       try {
         // When showing archived, we want both resigned and deleted
-        const data = await getEmployeeList(false, showArchived, showArchived)
+        const data = await getEmployeeList(false, showArchived, showDeleted)
         if (controller.signal.aborted) return;
         setAllEmployees(data)
       } catch (err) {
@@ -185,15 +185,6 @@ function EmployeeMasterList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Utilization Trend Icon Button */}
-          <button
-            onClick={() => setActiveDrawer('trend')}
-            className="flex items-center justify-center p-2.5 bg-white border border-gray-100 text-teal-600 rounded-xl hover:bg-teal-50 hover:border-teal-200 transition-all shadow-sm"
-            title="Utilization Trend"
-          >
-            <TrendingUp size={18} />
-          </button>
-
           {/* Add Employee Button */}
           <button
             onClick={() => navigate('/info/employee/add')}
@@ -201,17 +192,6 @@ function EmployeeMasterList() {
             title="Add Single Employee"
           >
             <UserPlus size={18} />
-          </button>
-
-          {/* Toggle Archived */}
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className={`flex items-center justify-center p-2.5 border rounded-xl transition-all shadow-sm ${showArchived 
-              ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' 
-              : 'bg-white border-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'}`}
-            title={showArchived ? "Hide Archived/Deleted" : "Show Archived/Deleted"}
-          >
-            <Archive size={18} />
           </button>
 
           {/* Department Selector */}
@@ -222,46 +202,6 @@ function EmployeeMasterList() {
             placeholder="Select Departments"
             icon={Building2}
           />
-
-          {/* Bulk Actions Button */}
-          <div className="relative" ref={bulkDropdownRef}>
-            <button
-              onClick={() => setShowBulkDropdown(prev => !prev)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
-            >
-              <Upload size={16} />
-              Bulk Actions
-              <ChevronDown size={14} className={`transition-transform ${showBulkDropdown ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showBulkDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-30 overflow-hidden">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-poppins">Bulk Employee Actions</p>
-                </div>
-                <button
-                  onClick={() => { setShowBulkDropdown(false); setShowBulkModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left font-poppins"
-                >
-                  <Upload size={16} className="text-blue-500" />
-                  <div>
-                    <p className="font-bold">Import Employees</p>
-                    <p className="text-xs text-gray-400 font-medium">CSV, Excel, JSON, PDF</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => { setShowBulkDropdown(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-left font-poppins"
-                >
-                  <Download size={16} className="text-emerald-500" />
-                  <div>
-                    <p className="font-bold">Export to CSV</p>
-                    <p className="text-xs text-gray-400 font-medium">Download current list</p>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -372,7 +312,6 @@ function EmployeeMasterList() {
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
           <h2 className="text-xl font-bold text-gray-800">
-            {activeDrawer === 'skills' ? 'Skills Overview' : 'Utilization Trend'}
           </h2>
           <button
             onClick={() => setActiveDrawer(null)}
@@ -383,7 +322,6 @@ function EmployeeMasterList() {
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
           {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
-          {activeDrawer === 'trend' && <UtilizationTrend employees={baseGroup} />}
         </div>
       </div>
 
@@ -393,11 +331,6 @@ function EmployeeMasterList() {
           className="fixed inset-0 bg-black/20 z-40"
           onClick={() => setActiveDrawer(null)}
         />
-      )}
-
-      {/* Click-outside to close dropdown */}
-      {showBulkDropdown && (
-        <div className="fixed inset-0 z-20" onClick={() => setShowBulkDropdown(false)} />
       )}
 
       {/* Bulk Import Modal */}

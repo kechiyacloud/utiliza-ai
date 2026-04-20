@@ -99,83 +99,118 @@ export default function BulkImportModal({ onClose }) {
     setUploadStatus('parsing');
     setParseResult(null);
 
-    const isExcelOrCSV = file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const fileName = file.name.toLowerCase();
+    const isExcelOrCSV = fileName.endsWith('.csv') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isJSON = fileName.endsWith('.json');
+    const isText = fileName.endsWith('.txt') || fileName.endsWith('.tsv');
 
-    if (isExcelOrCSV) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        let jsonData = [];
+
+        if (isExcelOrCSV) {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-          let validCount = 0;
-          let errorsCount = 0;
-          let errorDetails = [];
-          const parsedEmployees = [];
-
-          jsonData.forEach((row, index) => {
-            const rowNum = index + 2; // +1 for 0-index, +1 for header
-            // Normalize keys to lowercase just in case
-            const normalizedRow = {};
-            Object.keys(row).forEach(k => {
-              normalizedRow[k.trim().toLowerCase()] = row[k];
+          jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        } 
+        else if (isJSON) {
+          const text = new TextDecoder().decode(e.target.result);
+          const parsed = JSON.parse(text);
+          jsonData = Array.isArray(parsed) ? parsed : [parsed];
+        } 
+        else if (isText) {
+          const text = new TextDecoder().decode(e.target.result);
+          const rows = text.split(/\r?\n/).filter(row => row.trim());
+          if (rows.length > 0) {
+            const delimiter = fileName.endsWith('.tsv') || rows[0].includes('\t') ? '\t' : ',';
+            const headers = rows[0].split(delimiter).map(h => h.trim().toLowerCase());
+            jsonData = rows.slice(1).map(row => {
+              const values = row.split(delimiter);
+              const obj = {};
+              headers.forEach((h, i) => {
+                obj[h] = values[i] ? values[i].trim() : "";
+              });
+              return obj;
             });
-
-            if (!normalizedRow.employee_id || !normalizedRow.employee_name || !normalizedRow.email || !normalizedRow.date_of_joining) {
-              errorsCount++;
-              if (errorDetails.length < 5) errorDetails.push(`Row ${rowNum}: Missing ID, Name, Email, or DOJ`);
-              return;
-            }
-            validCount++;
-            
-            // Format dates from excel (often serial numbers) or strings
-            let doj = String(normalizedRow.date_of_joining);
-            if (!isNaN(doj) && Number(doj) > 20000) { // likely excel serial date
-               const offset = window.Date.parse("1899-12-30");
-               const d = new window.Date(offset + Number(doj) * 86400000);
-               doj = d.toISOString().split('T')[0];
-            }
-
-            parsedEmployees.push({
-               employee_id: String(normalizedRow.employee_id),
-               employee_name: String(normalizedRow.employee_name),
-               email: String(normalizedRow.email),
-               phone: normalizedRow.phone ? String(normalizedRow.phone) : "",
-               date_of_joining: doj,
-               role_designation: normalizedRow.role_designation ? String(normalizedRow.role_designation) : "Employee",
-               department: normalizedRow.department ? String(normalizedRow.department) : "General",
-               location: normalizedRow.location ? String(normalizedRow.location) : "Office",
-               work_mode: normalizedRow.work_mode ? String(normalizedRow.work_mode) : "Hybrid",
-               employment_type: normalizedRow.employment_type ? String(normalizedRow.employment_type) : "Full Time",
-               skills: normalizedRow.skills ? String(normalizedRow.skills).split(',').map(s=>s.trim()).filter(Boolean) : [],
-               employee_status: "Bench",
-               employee_allocations: 0,
-               projects: [],
-               certificates: []
-            });
-          });
-
-          setUploadStatus('success');
-          setParseResult({
-            total: jsonData.length,
-            valid: validCount,
-            errors: errorsCount,
-            errorDetails: errorDetails,
-            data: parsedEmployees
-          });
-        } catch (err) {
-          console.error(err);
-          setUploadStatus('error');
-          setParseResult({ total: 0, valid: 0, errors: 1, errorDetails: ['Failed to parse file: ' + err.message] });
+          }
         }
-      };
+
+        let validCount = 0;
+        let errorsCount = 0;
+        let errorDetails = [];
+        const parsedEmployees = [];
+
+        jsonData.forEach((row, index) => {
+          const rowNum = index + 2;
+          const normalizedRow = {};
+          Object.keys(row).forEach(k => {
+            normalizedRow[k.trim().toLowerCase()] = row[k];
+          });
+
+          // Validation logic (consistent across all formats)
+          const empId = normalizedRow.employee_id || normalizedRow.id;
+          const empName = normalizedRow.employee_name || normalizedRow.name || normalizedRow.full_name;
+          const email = normalizedRow.email || normalizedRow.email_id;
+          const dojRaw = normalizedRow.date_of_joining || normalizedRow.doj || normalizedRow.joining_date;
+
+          if (!empId || !empName || !email || !dojRaw) {
+            errorsCount++;
+            if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: Missing ID, Name, Email, or DOJ`);
+            return;
+          }
+
+          validCount++;
+          
+          let doj = String(dojRaw);
+          if (isExcelOrCSV && !isNaN(doj) && Number(doj) > 20000) {
+             const offset = window.Date.parse("1899-12-30");
+             const d = new window.Date(offset + Number(doj) * 86400000);
+             doj = d.toISOString().split('T')[0];
+          }
+
+          parsedEmployees.push({
+             employee_id: String(empId),
+             employee_name: String(empName),
+             email: String(email),
+             phone: normalizedRow.phone || normalizedRow.phone_number ? String(normalizedRow.phone || normalizedRow.phone_number) : "",
+             date_of_joining: doj,
+             role_designation: normalizedRow.role_designation || normalizedRow.designation || normalizedRow.role || "Employee",
+             department: normalizedRow.department || "General",
+             location: normalizedRow.location || "Office",
+             work_mode: normalizedRow.work_mode || normalizedRow.mode || "Hybrid",
+             employment_type: normalizedRow.employment_type || normalizedRow.employee_type || "Full Time",
+             skills: normalizedRow.skills ? String(normalizedRow.skills).split(',').map(s=>s.trim()).filter(Boolean) : [],
+             employee_status: "Bench",
+             employee_allocations: 0,
+             projects: [],
+             certificates: []
+          });
+        });
+
+        setUploadStatus('success');
+        setParseResult({
+          total: jsonData.length,
+          valid: validCount,
+          errors: errorsCount,
+          errorDetails: errorDetails,
+          data: parsedEmployees
+        });
+      } catch (err) {
+        console.error("Parsing error:", err);
+        setUploadStatus('error');
+        setParseResult({ total: 0, valid: 0, errors: 1, errorDetails: ['Failed to parse file: ' + err.message] });
+      }
+    };
+
+    if (isExcelOrCSV || isJSON || isText) {
       reader.readAsArrayBuffer(file);
     } else {
-        setUploadStatus('success');
-        setParseResult({ total: 1, valid: 0, errors: 1, errorDetails: ['Only CSV/Excel parsing is fully supported right now.'], note: 'Auto-extract not implemented.' });
+      setUploadStatus('error');
+      setParseResult({ total: 0, valid: 0, errors: 1, errorDetails: ['Unsupported file format. Please use CSV, Excel, JSON, or TXT.'] });
     }
   };
 

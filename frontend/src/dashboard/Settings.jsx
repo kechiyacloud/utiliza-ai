@@ -1,15 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { submitFeedback } from '../api/feedbackApi';
 import { Soon_GIF } from '../Assets';
 import EmployeeStatusTag from '../components/EmployeeStatusTag';
+import { useEmployees } from '../context/EmployeeContext';
+import BulkImportModal from './employee/BulkImportModal';
 import {
     ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Clock,
     Building2, Laptop, Award, Send, MessageSquare,
     AlertCircle, CheckCircle2, Loader2,
-    BarChart2, FileText, Settings as SettingsIcon
+    BarChart2, FileText, Settings as SettingsIcon, ShieldCheck,
+    Archive, Trash2, Upload, Download
 } from 'lucide-react';
+import { getEmployeeList } from '../api/employeeApi';
+import ExportPreviewModal from './employee/ExportPreviewModal';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -321,6 +326,126 @@ const AutoReportsSection = () => (
 );
 
 // ─────────────────────────────────────────────
+// Section E — Admin (Admin/HR only)
+// ─────────────────────────────────────────────
+
+const AdminSection = ({ employeeData }) => {
+    const { showArchived, setShowArchived, showDeleted, setShowDeleted } = useEmployees();
+    const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportData, setExportData] = useState([]);
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleExportClick = async () => {
+        setIsExporting(true);
+        try {
+            // Specifically fetch active employees only (no resigned/deleted) as requested
+            const data = await getEmployeeList(true, false, false); 
+            setExportData(data);
+            setShowExportModal(true);
+        } catch (err) {
+            console.error("Export fetch failed", err);
+            alert("Failed to prepare export data. Please try again.");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6 max-w-4xl">
+            {/* View Settings */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <h3 className="text-sm font-bold text-mainTheme uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-blue-500" />
+                    Data Visibility Settings
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                                <Archive size={18} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Show Archived Records</p>
+                                <p className="text-[10px] text-slate-500 font-medium tracking-tight">Include resigned/notice employees in lists</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowArchived(!showArchived)}
+                            className={`w-12 h-6 rounded-full transition-colors relative ${showArchived ? 'bg-blue-600' : 'bg-gray-300'}`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${showArchived ? 'left-7' : 'left-1'}`} />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+                                <Trash2 size={18} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Show Deleted Records</p>
+                                <p className="text-[10px] text-slate-500 font-medium tracking-tight">Show employees marked as deleted</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowDeleted(!showDeleted)}
+                            className={`w-12 h-6 rounded-full transition-colors relative ${showDeleted ? 'bg-red-600' : 'bg-gray-300'}`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${showDeleted ? 'left-7' : 'left-1'}`} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Bulk Actions */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <h3 className="text-sm font-bold text-mainTheme uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Upload size={16} className="text-emerald-500" />
+                    Bulk Operations
+                </h3>
+                <div className="flex flex-wrap gap-4">
+                    <button
+                        onClick={() => setShowBulkModal(true)}
+                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors text-left"
+                    >
+                        <div className="p-3 bg-blue-600 text-white rounded-xl">
+                            <Upload size={20} />
+                        </div>
+                        <div>
+                            <p className="font-bold text-blue-900">Import Employees</p>
+                            <p className="text-xs text-blue-700/60 font-medium">Upload CSV or Excel files</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={handleExportClick}
+                        disabled={isExporting}
+                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl hover:bg-emerald-100 transition-colors text-left disabled:opacity-50"
+                    >
+                        <div className="p-3 bg-emerald-600 text-white rounded-xl">
+                            {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+                        </div>
+                        <div>
+                            <p className="font-bold text-emerald-900">Export All Records</p>
+                            <p className="text-xs text-emerald-700/60 font-medium">Download active employee list (CSV)</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
+            {showExportModal && (
+                <ExportPreviewModal 
+                    employees={exportData} 
+                    onClose={() => setShowExportModal(false)} 
+                />
+            )}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────
 // Main Settings component
 // ─────────────────────────────────────────────
 
@@ -336,6 +461,16 @@ const Settings = () => {
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
     const [empNotLinked, setEmpNotLinked] = useState(false);
+
+    const isAdminPrivileged = true; // Enabled for all users as requested
+
+    const tabs = useMemo(() => {
+        const baseTabs = [...TABS];
+        if (isAdminPrivileged) {
+            baseTabs.push({ id: 'admin', label: 'Admin', icon: ShieldCheck });
+        }
+        return baseTabs;
+    }, [isAdminPrivileged]);
 
     useEffect(() => {
         const fetchEmployee = async () => {
@@ -383,7 +518,7 @@ const Settings = () => {
 
             {/* Tab bar */}
             <div className="flex gap-1 mb-6 border-b border-gray-200">
-                {TABS.map(({ id, label, icon: Icon }) => (
+                {tabs.map(({ id, label, icon: Icon }) => (
                     <button
                         key={id}
                         onClick={() => setActiveTab(id)}
@@ -409,6 +544,7 @@ const Settings = () => {
             )}
             {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
             {activeTab === 'reports' && <AutoReportsSection />}
+            {activeTab === 'admin' && isAdminPrivileged && <AdminSection employeeData={employeeData} />}
         </div>
     );
 }

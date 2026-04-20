@@ -462,35 +462,6 @@ const FullAnalytics = () => {
           </div>
         </div>
 
-        {/* Utilization History (Area) */}
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
-              <TrendingUp size={20} />
-            </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 tracking-tight leading-none mb-1">Utilization Trend</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Previous 3 months operational trajectory</p>
-              </div>
-            </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-              <AreaChart data={recentTrends}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 800}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 800}} />
-                <Tooltip contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'}} />
-                <Area type="monotone" dataKey="value" name="Utilization %" stroke="#10b981" fillOpacity={1} fill="url(#colorValue)" strokeWidth={4} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
 
         {/* Skills Equilibrium by Topic */}
         <div className="xl:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 flex flex-col">

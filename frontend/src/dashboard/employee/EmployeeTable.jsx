@@ -111,7 +111,9 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 switch (filters.cardFilter) {
                     case 'billable':
-                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable'; break;
+                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && (emp.employee_allocations || 0) > 0; break;
+                    case 'non-billable':
+                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && (emp.employee_allocations || 0) > 0; break;
                     case 'bench':
                         matchesCardFilter = (emp.employee_allocations || 0) <= 0; break;
                     case 'notice': {
