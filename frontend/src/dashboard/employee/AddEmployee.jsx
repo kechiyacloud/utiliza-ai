@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
 import { useDataRefresh } from '../../context';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
@@ -56,6 +57,7 @@ const AddEmployee = () => {
         reporting_manager_id: '',
         date_of_resign: '',
         pip_start_date: '',
+        pip_end_date: '',
         notice_start_date: '',
         notice_end_date: '',
         skills: [],
@@ -117,6 +119,7 @@ const AddEmployee = () => {
                 reporting_manager_id: source.reporting_manager_id || '',
                 date_of_resign: normalizeDate(source.date_of_resign),
                 pip_start_date: normalizeDate(source.pip_start_date),
+                pip_end_date: normalizeDate(source.pip_end_date),
                 notice_start_date: normalizeDate(source.notice_start_date),
                 notice_end_date: normalizeDate(source.notice_end_date),
                 skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
@@ -224,7 +227,46 @@ const AddEmployee = () => {
         }
     };
 
-    const handleImageUpload = (e) => {
+    const compressImage = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const MAX_SIZE = 400; // Standard avatar resolution
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Export as JPEG with 0.7 quality to reduce size significantly
+                    resolve(canvas.toDataURL('image/jpeg', 0.7));
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (file) {
             // Validate file type
@@ -233,18 +275,19 @@ const AddEmployee = () => {
                 return;
             }
 
-            // Validate file size (max 2MB)
-            if (file.size > 2 * 1024 * 1024) {
-                alert('Image size should be less than 2MB');
+            // Relaxed file size limit (let compressor handle large files)
+            if (file.size > 10 * 1024 * 1024) {
+                alert('Image size is too large (max 10MB)');
                 return;
             }
 
-            // Convert to base64
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData(prev => ({ ...prev, photo_url: reader.result }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressedBase64 = await compressImage(file);
+                setFormData(prev => ({ ...prev, photo_url: compressedBase64 }));
+            } catch (err) {
+                console.error("Image compression error:", err);
+                alert("Failed to process image. Please try another one.");
+            }
         }
     };
 
@@ -375,12 +418,23 @@ const AddEmployee = () => {
 
     // Validation functions for each section
     const validatePersonalSection = () => {
-        return (
+        const basicFields = (
             formData.employee_id?.trim() &&
             formData.employee_name?.trim() &&
             formData.email?.trim() &&
             formData.date_of_joining
         );
+        
+        if (!basicFields) return false;
+
+        // If DOB is provided, DOJ must be after DOB
+        if (formData.date_of_birth && formData.date_of_joining) {
+            const dob = new Date(formData.date_of_birth);
+            const doj = new Date(formData.date_of_joining);
+            if (doj <= dob) return false;
+        }
+
+        return true;
     };
 
     const validateProfessionalSection = () => {
@@ -455,6 +509,7 @@ const AddEmployee = () => {
                 reporting_manager_id: formData.reporting_manager_id || null,
                 date_of_resign: formData.date_of_resign || null,
                 pip_start_date: formData.pip_start_date || null,
+                pip_end_date: formData.pip_end_date || null,
                 notice_start_date: formData.notice_start_date || null,
                 notice_end_date: formData.notice_end_date || null,
                 skills: formData.skills,
@@ -472,6 +527,7 @@ const AddEmployee = () => {
             }
 
             triggerRefresh(); // global signal that data changed
+            clearDashboardCache(); // Sync dashboard
             navigate('/info/employee');
         } catch (error) {
             console.error('Error saving employee:', error);
@@ -559,9 +615,18 @@ const AddEmployee = () => {
                         name="date_of_joining"
                         value={formData.date_of_joining}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            formData.date_of_birth && formData.date_of_joining && new Date(formData.date_of_joining) <= new Date(formData.date_of_birth)
+                                ? 'border-red-500 bg-red-50'
+                                : 'border-gray-300'
+                        }`}
                         required
                     />
+                    {formData.date_of_birth && formData.date_of_joining && new Date(formData.date_of_joining) <= new Date(formData.date_of_birth) && (
+                        <p className="text-[10px] text-red-600 mt-1 font-bold italic anim-pulse">
+                            Date of Joining must be after Date of Birth
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -620,7 +685,7 @@ const AddEmployee = () => {
                             </button>
                         )}
                         <p className="text-xs text-gray-500 mt-2">
-                            Supported formats: JPG, PNG, GIF (Max 2MB)
+                            Supported formats: JPG, PNG, GIF (Auto-compressed)
                         </p>
                     </div>
                 </div>
@@ -756,7 +821,7 @@ const AddEmployee = () => {
                     {!isEditMode && (
                         <p className="text-xs text-gray-500 mt-1">Auto-calculated based on project allocation</p>
                     )}
-                    {isEditMode && formData.employee_status === 'Notice period' && (
+                    {formData.employee_status === 'Notice period' && (
                         <div className="mt-2 space-y-2">
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 mb-1">Notice Start Date</label>
@@ -782,7 +847,7 @@ const AddEmployee = () => {
                             <p className="text-xs text-amber-600">Employee will automatically become Resigned after the end date.</p>
                         </div>
                     )}
-                    {isEditMode && formData.employee_status === 'Resigned' && (
+                    {formData.employee_status === 'Resigned' && (
                         <div className="mt-2">
                             <label className="block text-xs font-bold text-gray-700 mb-1">Resignation Date</label>
                             <input
@@ -794,16 +859,29 @@ const AddEmployee = () => {
                             />
                         </div>
                     )}
-                    {isEditMode && formData.employee_status === 'PIP' && (
-                        <div className="mt-2">
-                            <label className="block text-xs font-bold text-gray-700 mb-1">PIP Start Date</label>
-                            <input
-                                type="date"
-                                name="pip_start_date"
-                                value={formData.pip_start_date}
-                                onChange={handleInputChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
+                    {formData.employee_status === 'PIP' && (
+                        <div className="mt-2 space-y-2">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">PIP Start Date</label>
+                                <input
+                                    type="date"
+                                    name="pip_start_date"
+                                    value={formData.pip_start_date}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">PIP End Date</label>
+                                <input
+                                    type="date"
+                                    name="pip_end_date"
+                                    value={formData.pip_end_date}
+                                    onChange={handleInputChange}
+                                    min={formData.pip_start_date || undefined}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
                         </div>
                     )}
                 </div>

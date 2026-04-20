@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { createEmployee } from '../../api/employeeApi';
+import { clearDashboardCache } from '../../api/dashboardApi';
 
 const FORMAT_OPTIONS = [
   {
@@ -155,6 +156,7 @@ export default function BulkImportModal({ onClose }) {
           const empId = normalizedRow.employee_id || normalizedRow.id;
           const empName = normalizedRow.employee_name || normalizedRow.name || normalizedRow.full_name;
           const email = normalizedRow.email || normalizedRow.email_id;
+          const dobRaw = normalizedRow.date_of_birth || normalizedRow.dob || normalizedRow.birth_date;
           const dojRaw = normalizedRow.date_of_joining || normalizedRow.doj || normalizedRow.joining_date;
 
           if (!empId || !empName || !email || !dojRaw) {
@@ -163,14 +165,35 @@ export default function BulkImportModal({ onClose }) {
             return;
           }
 
-          validCount++;
-          
           let doj = String(dojRaw);
-          if (isExcelOrCSV && !isNaN(doj) && Number(doj) > 20000) {
-             const offset = window.Date.parse("1899-12-30");
-             const d = new window.Date(offset + Number(doj) * 86400000);
-             doj = d.toISOString().split('T')[0];
+          let dob = dobRaw ? String(dobRaw) : null;
+
+          try {
+            // Excel serial date conversion
+            if (isExcelOrCSV && !isNaN(doj) && Number(doj) > 20000) {
+               const offset = window.Date.parse("1899-12-30");
+               const d = new window.Date(offset + Number(doj) * 86400000);
+               doj = d.toISOString().split('T')[0];
+            }
+            if (dob && isExcelOrCSV && !isNaN(dob) && Number(dob) > 10000) {
+               const offset = window.Date.parse("1899-12-30");
+               const d = new window.Date(offset + Number(dob) * 86400000);
+               dob = d.toISOString().split('T')[0];
+            }
+
+            // DOJ vs DOB validation
+            if (dob && doj && new window.Date(doj) < new window.Date(dob)) {
+               errorsCount++;
+               if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: DOJ (${doj}) cannot be before DOB (${dob})`);
+               return;
+            }
+          } catch (dateErr) {
+            errorsCount++;
+            if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: Invalid date format`);
+            return;
           }
+
+          validCount++;
 
           parsedEmployees.push({
              employee_id: String(empId),
@@ -253,6 +276,7 @@ export default function BulkImportModal({ onClose }) {
       setUploadErrors(failMessages);
       setUploadStatus('error');
     } else {
+      clearDashboardCache(); // Sync dashboard
       setUploadStatus('success');
       alert(`Successfully imported ${successCount} out of ${parseResult.data.length} employees.`);
       // Force a reload so tables fetch fresh data

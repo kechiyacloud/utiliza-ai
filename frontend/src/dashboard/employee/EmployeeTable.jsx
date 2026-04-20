@@ -110,23 +110,37 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 switch (filters.cardFilter) {
-                    case 'billable':
-                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && (emp.employee_allocations || 0) > 0; break;
-                    case 'non-billable':
-                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && (emp.employee_allocations || 0) > 0; break;
-                    case 'bench':
-                        matchesCardFilter = (emp.employee_allocations || 0) <= 0; break;
+                    case 'billable': {
+                        const s = (emp.employee_status || '').toLowerCase();
+                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
+                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && !isSpecialStatus; 
+                        break;
+                    }
+                    case 'non-billable': {
+                        const s = (emp.employee_status || '').toLowerCase();
+                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
+                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && !isSpecialStatus; 
+                        break;
+                    }
+                    case 'bench': {
+                        const s = (emp.employee_status || '').toLowerCase();
+                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
+                        matchesCardFilter = (emp.employee_allocations || 0) <= 0 && !isSpecialStatus; 
+                        break;
+                    }
                     case 'notice': {
                         const s = (emp.employee_status || '').toLowerCase();
                         matchesCardFilter = s.includes('notice') || s.includes('pip'); break;
                     }
                     case 'new-joiner': {
                         const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo; 
+                        const s = (emp.employee_status || '').toLowerCase();
+                        const isLeaving = s.includes('notice') || emp.date_of_resign;
+                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo && !isLeaving; 
                         break;
                     }
                     case 'top-performer':
-                        matchesCardFilter = emp.employee_allocations >= 100; break;
+                        matchesCardFilter = (emp.employee_allocations || 0) >= 100; break;
                     default: matchesCardFilter = true;
                 }
             }
@@ -220,7 +234,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     if (loading) return <div className="p-10 text-center font-medium text-gray-400">Loading Employees...</div>;
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
+        <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">

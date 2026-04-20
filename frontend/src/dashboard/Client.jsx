@@ -33,6 +33,7 @@ import ClientDetails from './clients/ClientDetails';
 import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal } from './clients/ClientModals';
 import { fetchClientData, createClient, updateClient, deleteClient } from '../api/clientApi';
 import { deleteProject } from '../api/projectsApi';
+import { clearDashboardCache } from '../api/dashboardApi';
 
 const Client = () => {
   const navigate = useNavigate();
@@ -82,6 +83,7 @@ const Client = () => {
         budget: newClientData.budget || '0'
       };
       await createClient(payload);
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to insert client into database", error);
@@ -98,6 +100,7 @@ const Client = () => {
         status: updatedClient.status || 'Stable',
         budget: updatedClient.budget || '0'
       });
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to update client", error);
@@ -133,6 +136,7 @@ const Client = () => {
       } else if (type === 'project') {
         await deleteProject(item.id);
       }
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to delete item", error);

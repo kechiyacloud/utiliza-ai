@@ -239,11 +239,11 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const normalizeTypeForForm = (t) => {
         if (!t) return 'External';
         const lc = t.toLowerCase();
-        if (lc === 'external' || lc === 'client') return 'External';
-        if (lc === 'internal') return 'Internal';
-        if (lc === 'partner') return 'Partner';
-        if (lc === 'poc') return 'POC';
-        return t; // pass through unknown values
+        if (lc.includes('external') || lc.includes('client')) return 'External';
+        if (lc.includes('internal')) return 'Internal';
+        if (lc.includes('partner')) return 'Partner';
+        if (lc.includes('poc')) return 'POC';
+        return 'External'; // Default to External for safety if unknown
     };
 
     // Map billable value → exactly 'Billable' or 'Non-Billable'
@@ -281,7 +281,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                 clientId: project.client_id || '',
                 partnerId: project.partner_id || '',
                 partnerName: project.partner_name || project.partner || 'Cloud Destination',
-                departmentId: project.department_id || '',
+                departmentId: project.department_id || project.department || '',
                 status: normalizeStatusForForm(project.status || project.project_status),
                 subStatus: (isPartner ? 'External' : projectType) === 'External'
                     ? (project.sub_status || project.subStatus || DEFAULT_SOW_STATUS)
@@ -388,9 +388,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
         const isInternal = formData.type === 'Internal';
         
-        // SOW Validation: required for External projects only
-        if (!isInternal && !formData.subStatus) {
-            setSaveError('SOW Status is required for External projects.');
+        // SOW Validation: required for External projects ONLY if status is 'In Progress'
+        if (!isInternal && formData.status === 'In Progress' && !formData.subStatus) {
+            setSaveError('SOW Status is required for In-Progress External projects.');
             return;
         }
 

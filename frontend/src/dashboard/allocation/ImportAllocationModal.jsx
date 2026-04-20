@@ -7,6 +7,7 @@ import {
     Building2, FolderKanban, Calendar, Layers
 } from 'lucide-react';
 import { importAllocations, fetchFilterOptions, fetchAllocationProjects } from '../../api/allocationApi';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import { exportToCSV } from '../../utils/exportUtils';
 
 // ── Column definitions ───────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
             });
             onClose();
             onImportSuccess();
+            clearDashboardCache(); // Sync dashboard
             triggerRefresh(); // trigger auto-refresh for allocations/dashboard
         } catch (err) {
             setReviewError(err.response?.data?.detail || err.message || 'Save failed. Please try again.');

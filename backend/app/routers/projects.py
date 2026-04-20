@@ -14,6 +14,58 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 
 HOURS_PER_FTE = 40  # 100% allocation per week
 
+def _sync_project_extensions(cur, project_id: str, old_end, new_end):
+    """
+    Sync allocation end dates and generate weekly hour records when a project is extended.
+    """
+    import datetime
+    from datetime import date
+    
+    # Ensure we are comparing date objects
+    if isinstance(old_end, str):
+        try: old_end = datetime.datetime.strptime(old_end, "%Y-%m-%d").date()
+        except: pass
+    if isinstance(new_end, str):
+        try: new_end = datetime.datetime.strptime(new_end, "%Y-%m-%d").date()
+        except: pass
+
+    if not (new_end and old_end and new_end > old_end):
+        return
+
+    # 1. Update allocation dates for all resources ending with or before the project
+    cur.execute("""
+        UPDATE projects_allocation 
+           SET allocation_end_date = %s 
+         WHERE project_id = %s 
+           AND (allocation_end_date <= %s OR allocation_end_date IS NULL)
+    """, (new_end, project_id, old_end))
+
+    # 2. Fetch all project allocations to ensure weekly data exists for the gap
+    cur.execute("""
+        SELECT allocation_id, allocation_percentage, allocation_start_date, allocation_end_date
+        FROM projects_allocation
+        WHERE project_id = %s
+    """, (project_id,))
+    
+    for aid, pct, a_start, a_end in cur.fetchall():
+        if not a_start:
+            continue
+        # Generate the full distribution for the allocation percentage
+        # Use the function defined in the current module
+        weekly_map = _build_weekly_hours_from_pct(pct, a_start, a_end)
+        
+        for (w_year, w_num), hours in weekly_map.items():
+            if hours <= 0:
+                continue
+            # Use ON CONFLICT DO NOTHING to avoid overwriting existing manual hour overrides
+            cur.execute("""
+                INSERT INTO weekly_allocations (allocation_id, allocation_year, week_number, allocated_hours)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (allocation_id, allocation_year, week_number) 
+                DO NOTHING
+            """, (aid, w_year, w_num, hours))
+
+
 class ProjectDetailsUpdate(BaseModel):
     budget: Optional[str] = None
     billing_type: Optional[str] = None
@@ -968,14 +1020,25 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
-        if not cur.fetchone():
+        # 1. Fetch current (old) project dates to check for extensions
+        cur.execute("SELECT start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
+        old_proj = cur.fetchone()
+        if not old_proj:
             raise HTTPException(status_code=404, detail="Project not found")
+        
+        old_start_proj, old_end_proj = old_proj
 
         start_date_val = None if not details.start_date or details.start_date in ['Not Set', 'TBD'] else details.start_date
         end_date_val = None if not details.end_date or details.end_date in ['Not Set', 'TBD'] else details.end_date
 
-        # Update core projects
+        new_end_proj = None
+        if end_date_val:
+            try:
+                new_end_proj = datetime.strptime(end_date_val, "%Y-%m-%d").date() if isinstance(end_date_val, str) else end_date_val
+            except Exception:
+                pass
+
+        # 2. Update core projects
         cur.execute("""
             UPDATE projects SET
                 start_date = COALESCE(%s, start_date),
@@ -983,8 +1046,10 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
             WHERE project_id = %s
         """, (start_date_val, end_date_val, project_id))
 
-        # Partial update for commercial details
-        # We use INSERT ON CONFLICT to ensure the row exists, and COALESCE to keep existing data if current is None
+        # 3. Synchronize Allocations if extended (Synchronize dates + hours)
+        _sync_project_extensions(cur, project_id, old_end_proj, new_end_proj)
+
+        # 4. Partial update for commercial details
         cur.execute("""
             INSERT INTO project_commercials (project_id, budget, billing_type, contract_type, revenue_model, commercial_notes)
             VALUES (%s, %s, %s, %s, %s, %s)
@@ -1359,11 +1424,11 @@ def update_project(project_id: str, updates: ProjectUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT project_status FROM projects WHERE project_id = %s", (project_id,))
+        cur.execute("SELECT project_status, end_date FROM projects WHERE project_id = %s", (project_id,))
         current_row = cur.fetchone()
         if not current_row:
             raise HTTPException(status_code=404, detail="Project not found")
-        current_status = current_row[0]
+        current_status, old_end_date = current_row
 
         payload = _model_payload(updates)
         if not payload:
@@ -1418,12 +1483,14 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "partner_id" in payload:
             updates_map["partner_id"] = _normalize_fk_id(payload["partner_id"])
 
-        # Handle sub_status once
+        # Handle sub_status column removed from projects table logic to fix crash
+        # tracking sub_status in memory but not saving to DB
+        ignore_sub_status = None
         if sub_status_value is not None or ("project_status" in payload):
             if (normalized_status or "").lower() == "in progress":
-                updates_map["sub_status"] = normalized_sub_status
+                ignore_sub_status = normalized_sub_status
             else:
-                updates_map["sub_status"] = None
+                ignore_sub_status = None
 
         if not updates_map:
             raise HTTPException(status_code=400, detail="No valid project fields were provided.")
@@ -1434,6 +1501,11 @@ def update_project(project_id: str, updates: ProjectUpdate):
         values.append(project_id)
 
         cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
+
+        # 3. Synchronize Allocations if end_date was extended (Dates + Hours)
+        if updates_map.get("end_date"):
+            _sync_project_extensions(cur, project_id, old_end_date, updates_map["end_date"])
+
         conn.commit()
 
         # Verification step as requested
@@ -1478,12 +1550,11 @@ def create_project(project: ProjectCreate):
         if normalized_type == "partner" and not partner_id_value:
             raise HTTPException(status_code=422, detail="Partner projects must include a partner_id.")
         project_status, sub_status_val = _validate_status_and_substatus(project.project_status, project.sub_status)
-        insert_fields = ["project_id", "project_name", "project_status", "sub_status", "project_type", "billable", "start_date", "end_date"]
+        insert_fields = ["project_id", "project_name", "project_status", "project_type", "billable", "start_date", "end_date"]
         insert_values = [
             project.project_id,
             project_name,
             project_status,
-            sub_status_val,
             project_type,
             "Non-Billable" if normalized_type == "internal" else _normalize_text(project.billable),
             project.start_date,
