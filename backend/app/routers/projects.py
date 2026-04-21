@@ -262,6 +262,7 @@ def _validate_status_and_substatus(status: Optional[str], sub_status: Optional[s
 
 
 
+
 def _model_payload(model):
     return model.model_dump(exclude_unset=True) if hasattr(model, "model_dump") else model.dict(exclude_unset=True)
 
@@ -330,9 +331,19 @@ def _build_simple_pdf(lines: List[str]) -> bytes:
 @router.get("/overview")
 def projects_overview(
     department: Optional[str] = None,
+    project_name: Optional[str] = None,
+    resource_name: Optional[str] = None,
+    status: Optional[str] = None,
+    sow_status: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None
 ):
+    # Support both camelCase and snake_case
+    final_start = start_date or startDate
+    final_end = end_date or endDate
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -348,14 +359,41 @@ def projects_overview(
             where_clause += " AND em.department = %s "
             params.append(department)
 
-        # Date Range Filter (Overlap Logic)
-        if start_date:
-            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
-            params.append(start_date)
+        if resource_name:
+            if not join_clause:
+                join_clause = " JOIN projects_allocation pa ON p.project_id = pa.project_id JOIN employee_master em ON pa.employee_id = em.employee_id "
+            else:
+                # If join_clause already exists (from department), we can reuse it or add another one
+                # Reusing is better if possible.
+                pass
+            where_clause += " AND em.employee_name ILIKE %s "
+            params.append(f"%{resource_name}%")
+
+        if project_name:
+            where_clause += " AND p.project_name ILIKE %s "
+            params.append(f"%{project_name}%")
+
+        if status and status.lower() not in ('all status', ''):
+            # Resolve all keys that map to this canonical status for robust SQL filtering
+            status_keys = [k for k, v in PROJECT_STATUS_ALIASES.items() if v == status]
+            if not status_keys:
+                status_keys = [status.lower()]
+            
+            where_clause += " AND LOWER(p.project_status) = ANY(%s) "
+            params.append(status_keys)
         
-        if end_date:
+        if sow_status:
+            where_clause += " AND p.sub_status = %s "
+            params.append(sow_status)
+
+        # Date Range Filter (Overlap Logic)
+        if final_start and final_start.strip():
+            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
+            params.append(final_start)
+        
+        if final_end and final_end.strip():
             where_clause += " AND (p.start_date <= %s) "
-            params.append(end_date)
+            params.append(final_end)
 
         # Fetch projects to count them in Python using the centralized normalization logic
         # This ensures dashboard metrics ALWAYS match the list view.
@@ -421,10 +459,19 @@ def projects_overview(
 @router.get("/list")
 def projects_list(
     department: Optional[str] = None, 
+    project_name: Optional[str] = None,
     resource_name: Optional[str] = None,
+    status: Optional[str] = None,
+    sow_status: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None
 ):
+    # Support both camelCase and snake_case
+    final_start = start_date or startDate
+    final_end = end_date or endDate
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -456,13 +503,30 @@ def projects_list(
             params.append(f"%{resource_name}%")
 
         # Date Range Filter (Overlap Logic)
-        if start_date:
+        if final_start and final_start.strip():
             where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
-            params.append(start_date)
+            params.append(final_start)
         
-        if end_date:
+        if final_end and final_end.strip():
             where_clause += " AND (p.start_date <= %s) "
-            params.append(end_date)
+            params.append(final_end)
+
+        if project_name:
+            where_clause += " AND p.project_name ILIKE %s "
+            params.append(f"%{project_name}%")
+        
+        if status and status.lower() not in ('all status', ''):
+            # Resolve all keys that map to this canonical status for robust SQL filtering
+            status_keys = [k for k, v in PROJECT_STATUS_ALIASES.items() if v == status]
+            if not status_keys:
+                status_keys = [status.lower()]
+            
+            where_clause += " AND LOWER(p.project_status) = ANY(%s) "
+            params.append(status_keys)
+        
+        if sow_status:
+            where_clause += " AND p.sub_status = %s "
+            params.append(sow_status)
 
         cur.execute(f"""
             SELECT

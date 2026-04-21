@@ -6,11 +6,20 @@ import api from "./axios";
  */
 export const fetchProjectsData = async (filters = {}) => {
     try {
-        const params = { ...filters };
+        const apiParams = {
+            ...filters,
+            resource_name: filters.resourceName,
+            project_name: filters.projectName,
+            sow_status: filters.sowStatus,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            startDate: filters.startDate,
+            endDate: filters.endDate
+        };
 
         const [overviewRes, listRes] = await Promise.all([
-            api.get('/projects/overview', { params: { ...filters, start_date: filters.startDate, end_date: filters.endDate } }),
-            api.get('/projects/list', { params: { ...filters, start_date: filters.startDate, end_date: filters.endDate } })
+            api.get('/projects/overview', { params: apiParams }),
+            api.get('/projects/list', { params: apiParams })
         ]);
 
         const o = overviewRes?.data || {};

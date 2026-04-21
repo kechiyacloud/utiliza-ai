@@ -66,6 +66,18 @@ const FilterPanel = ({
                 status: value,
                 sowStatus: value === 'In Progress' ? filters.sowStatus : '',
             };
+        } else if (name === 'startDate') {
+            let updatedEndDate = filters.endDate;
+            if (value && updatedEndDate && new Date(value) > new Date(updatedEndDate)) {
+                updatedEndDate = value; // Auto-adjust to prevent invalid overlap
+            }
+            newFilters = { ...filters, startDate: value, endDate: updatedEndDate };
+        } else if (name === 'endDate') {
+            let newEndDate = value;
+            if (filters.startDate && newEndDate && new Date(filters.startDate) > new Date(newEndDate)) {
+                newEndDate = filters.startDate; // Auto-adjust
+            }
+            newFilters = { ...filters, endDate: newEndDate };
         } else {
             newFilters = { ...filters, [name]: value };
         }
@@ -154,9 +166,10 @@ const FilterPanel = ({
                                                 <button
                                                     key={name}
                                                     type="button"
-                                                    onClick={() => {
-                                                        const e = { target: { name: 'resourceName', value: name } };
-                                                        handleChange(e);
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault(); // Prevent input onBlur from firing before this selection
+                                                        const mockEvent = { target: { name: 'resourceName', value: name } };
+                                                        handleChange(mockEvent);
                                                         setFocusedField(null);
                                                     }}
                                                     className="w-full px-4 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors flex items-center gap-3"
@@ -222,6 +235,7 @@ const FilterPanel = ({
                                         type="date"
                                         name="endDate"
                                         value={filters.endDate}
+                                        min={filters.startDate || undefined}
                                         onChange={handleChange}
                                         className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
                                     />

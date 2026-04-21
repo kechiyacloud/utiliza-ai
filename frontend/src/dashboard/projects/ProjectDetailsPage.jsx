@@ -320,7 +320,8 @@ function normalizeAllocationRow(row) {
     const normalized = { 
         ...safeRow,
         weekly_hours: safeRow.weekly_hours || {},
-        allocation_pct: safeRow.allocation_pct ?? safeRow.allocation_percentage ?? 0
+        allocation_pct: safeRow.allocation_pct ?? safeRow.allocation_percentage ?? 0,
+        billable_shadow: safeRow.billable_shadow === 'Shadow' ? 'Non-billable' : (safeRow.billable_shadow || 'Billable')
     };
     return normalized;
 }
@@ -1742,6 +1743,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                         Allocation
                                         <span className="ml-1 font-normal text-slate-400 normal-case">(100%=40h)</span>
                                     </th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
                                     {visibleWeeks.map((wk) => (
                                         <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${
                                             viewMode === 'previous' ? 'bg-rose-50/20' : 
@@ -1763,7 +1765,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                         </th>
                                     ))}
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Total</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
                                     {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Actions</th>}
                                 </tr>
                     </thead>
@@ -1900,6 +1901,36 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                             </span>
                                         )}
                                     </td>
+                                    <td className="px-4 py-3 min-w-[120px]">
+                                        {isEditing ? (
+                                            <div className="relative group">
+                                                <select
+                                                    value={row.billable_shadow || 'Billable'}
+                                                    onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
+                                                    className={`w-full pl-2 pr-8 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
+                                                        ${row.billable_shadow === 'Billable'
+                                                            ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                            : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                        }`}
+                                                >
+                                                    <option value="Billable">Billable</option>
+                                                    <option value="Non-billable">Non-billable</option>
+                                                </select>
+                                                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                    <ChevronDown size={14} className={`${row.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
+                                                ${row.billable_shadow === 'Billable'
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                }`}
+                                            >
+                                                {row.billable_shadow || 'Billable'}
+                                            </span>
+                                        )}
+                                    </td>
                                     {visibleWeeks.map((wk) => {
                                         const { withinRange, hours, rawVal } = getWeeklyHoursForWeek(row, wk);
                                         const safeHours = hours ?? 0;
@@ -1978,36 +2009,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     <td className="px-3 py-3 text-center font-bold text-blue-700 border-l-2 border-slate-200 text-sm">
                                         {rowTotal > 0 ? `${rowTotal}h` : '-'}
                                     </td>
-                                    <td className="px-4 py-3 min-w-[120px]">
-                                        {isEditing ? (
-                                            <select
-                                                value={row.billable_shadow || 'Billable'}
-                                                onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
-                                                className={`w-full px-2 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
-                                                    ${row.billable_shadow === 'Billable'
-                                                        ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
-                                                        : row.billable_shadow === 'Non-billable'
-                                                        ? 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
-                                                        : 'border-slate-200 text-slate-500 focus:border-slate-400 focus:ring-slate-100'
-                                                    }`}
-                                            >
-                                                <option value="Billable">Billable</option>
-                                                <option value="Non-billable">Non-billable</option>
-                                                <option value="Shadow">Shadow</option>
-                                            </select>
-                                        ) : (
-                                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
-                                                ${row.billable_shadow === 'Billable'
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                    : row.billable_shadow === 'Non-billable'
-                                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                    : 'bg-slate-50 text-slate-600 border-slate-200'
-                                                }`}
-                                            >
-                                                {row.billable_shadow || 'Billable'}
-                                            </span>
-                                        )}
-                                    </td>
+
                                     {isEditing && (
                                         <td className="px-3 py-3 text-center">
                                             <button onClick={() => handleRemoveRow(ridx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Remove Resource">
@@ -2026,7 +2028,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                                 <Plus size={18} /> Add Resource
                                             </button>
                                         </td>
-                                        <td colSpan={9 + visibleWeeks.length}></td>
+                                        <td colSpan={7 + visibleWeeks.length}></td>
                                     </tr>
                                 )}
                                 </React.Fragment>
@@ -2034,7 +2036,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         })}
                         {localRows.length > 0 && displayRows.length === 0 && (
                             <tr>
-                                <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                <td colSpan={8 + visibleWeeks.length + (isEditing ? 1 : 0)} className="px-4 py-8 text-center text-slate-400 text-sm">
                                     No resources match the selected utilization filters.
                                 </td>
                             </tr>
@@ -2045,6 +2047,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={5}>
                                 Total
                             </td>
+                            <td></td> { /* Resource Type placeholder */ }
                             {columnTotals.map((total, idx) => (
                                 <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${
                                     viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' : 

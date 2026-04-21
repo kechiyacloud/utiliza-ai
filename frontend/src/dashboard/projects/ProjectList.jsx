@@ -253,6 +253,16 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
     if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = useMemo(() => {
+        // Debug logging for filter verification
+        if (filters?.startDate || filters?.endDate || searchTerm) {
+            console.log("Applying Project Filters:", {
+                count: projects.length,
+                searchTerm,
+                selectedStart: filters?.startDate,
+                selectedEnd: filters?.endDate
+            });
+        }
+
         return projects.filter(project => {
             if (!project || !project.name) return false;
 
@@ -280,11 +290,48 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                 matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes(projectStatus);
             }
 
+            // Date Overlap Filter Logic
+            let matchesDateFilter = true;
+            if (filters?.startDate || filters?.endDate) {
+                const pStartStr = project.startDate || project.start_date;
+                const pEndStr = project.endDate || project.end_date;
+
+                if (pStartStr) {
+                    const pStart = new Date(pStartStr);
+                    const pEnd = pEndStr ? new Date(pEndStr) : new Date('9999-12-31');
+                    
+                    // Normalize to midnight to avoid time-of-day mismatches
+                    pStart.setHours(0, 0, 0, 0);
+                    pEnd.setHours(0, 0, 0, 0);
+
+                    if (filters.startDate && filters.endDate) {
+                        const fStart = new Date(filters.startDate);
+                        const fEnd = new Date(filters.endDate);
+                        fStart.setHours(0, 0, 0, 0);
+                        fEnd.setHours(0, 0, 0, 0);
+                        
+                        // Overlap: project.startDate <= selectedEndDate && project.endDate >= selectedStartDate
+                        matchesDateFilter = (pStart <= fEnd) && (pEnd >= fStart);
+                    } else if (filters.startDate) {
+                        const fStart = new Date(filters.startDate);
+                        fStart.setHours(0, 0, 0, 0);
+                        matchesDateFilter = (pEnd >= fStart);
+                    } else if (filters.endDate) {
+                        const fEnd = new Date(filters.endDate);
+                        fEnd.setHours(0, 0, 0, 0);
+                        matchesDateFilter = (pStart <= fEnd);
+                    }
+                } else if (filters.startDate || filters.endDate) {
+                    // Filter applied but project has no start date
+                    matchesDateFilter = false;
+                }
+            }
+
             const isFinishingSoonSort = sortBy === 'finishing-soon';
             const hideCompleted = isFinishingSoonSort || activeCardFilter === 'Ending Soon';
             if (hideCompleted && projectStatus === 'completed') return false;
 
-            return matchesSearchTerm && matchesCardFilter;
+            return matchesSearchTerm && matchesCardFilter && matchesDateFilter;
         }).sort((a, b) => {
             // Force finishing-soon sort if Ending Soon filter is applied
             const effectiveSort = activeCardFilter === 'Ending Soon' ? 'finishing-soon' : sortBy;

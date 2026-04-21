@@ -100,7 +100,7 @@ const normalizeTeamMember = (tm = {}) => ({
     allocation_pct: tm.allocation_pct === '' ? null : Number(tm.allocation_pct || 0),
     allocation_start_date: tm.allocation_start_date || null,
     allocation_end_date: tm.allocation_end_date || null,
-    billable_shadow: tm.billable_shadow || 'Billable',
+    billable_shadow: tm.billable_shadow === 'Shadow' ? 'Non-billable' : (tm.billable_shadow || 'Billable'),
     weekly_hours: sanitizeWeeklyHours(tm.weekly_hours),
     w1: Number(tm.w1 || 0),
     w2: Number(tm.w2 || 0),
@@ -425,23 +425,15 @@ const SearchableDropdown = ({
     isLoading = false,
     onBeforeOpen,
     onOpenChange,
-    loadOptions,
 }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
-    const [asyncItems, setAsyncItems] = useState(items || []);
-    const [asyncLoading, setAsyncLoading] = useState(false);
     const containerRef = useRef(null);
     const menuRef = useRef(null);
     const [menuStyle, setMenuStyle] = useState({ top: 0, left: 0, width: 0 });
-    const requestSeqRef = useRef(0);
 
-    const selectedPool = loadOptions ? [...asyncItems, ...(items || [])] : items;
-    const selectedItem = selectedPool.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
-    const filtered = loadOptions
-        ? asyncItems
-        : items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
-    const loading = isLoading || asyncLoading;
+    const selectedItem = items.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
+    const filtered = items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
 
     const syncMenuPosition = () => {
         if (!containerRef.current) return;
@@ -471,45 +463,6 @@ const SearchableDropdown = ({
     }, [isOpen, onOpenChange]);
 
     useEffect(() => {
-        if (!loadOptions) {
-            return;
-        }
-
-        if (!isOpen) {
-            setAsyncItems(items || []);
-            setAsyncLoading(false);
-            requestSeqRef.current += 1;
-            return;
-        }
-
-        let cancelled = false;
-        const requestSeq = ++requestSeqRef.current;
-        const timer = window.setTimeout(async () => {
-            try {
-                setAsyncLoading(true);
-                const result = await loadOptions(search);
-                if (!cancelled && requestSeqRef.current === requestSeq) {
-                    setAsyncItems(Array.isArray(result) ? result : []);
-                }
-            } catch (error) {
-                console.error(`[SearchableDropdown:${label}] failed to load options`, error);
-                if (!cancelled && requestSeqRef.current === requestSeq) {
-                    setAsyncItems([]);
-                }
-            } finally {
-                if (!cancelled && requestSeqRef.current === requestSeq) {
-                    setAsyncLoading(false);
-                }
-            }
-        }, 180);
-
-        return () => {
-            cancelled = true;
-            window.clearTimeout(timer);
-        };
-    }, [loadOptions, isOpen, items, label, search]);
-
-    useEffect(() => {
         if (!isOpen || !containerRef.current) return;
         syncMenuPosition();
         const updatePosition = () => syncMenuPosition();
@@ -527,22 +480,12 @@ const SearchableDropdown = ({
             {/* Trigger */}
             <button
                 type="button"
-                onClick={async () => {
+                onClick={() => {
                     if (disabled) return;
                     setSearch('');
                     if (!isOpen) {
-                        if (loadOptions) {
-                            setAsyncItems(items || []);
-                        }
                         syncMenuPosition();
                         setIsOpen(true);
-                        if (onBeforeOpen) {
-                            try {
-                                await onBeforeOpen();
-                            } catch (err) {
-                                console.error(`[SearchableDropdown:${label}] pre-open load failed`, err);
-                            }
-                        }
                         return;
                     }
                     setIsOpen(false);
@@ -586,7 +529,7 @@ const SearchableDropdown = ({
                         </div>
 
                         <div className="py-1">
-                            {loading && filtered.length === 0 ? (
+                            {isLoading && filtered.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
                             ) : filtered.length === 0 && search.trim().length > 0 ? (
                                 <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
@@ -597,7 +540,8 @@ const SearchableDropdown = ({
                                     <button
                                         type="button"
                                         key={item.id}
-                                        onClick={() => {
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
                                             onSelect(item);
                                             setIsOpen(false);
                                             setSearch('');
@@ -674,26 +618,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // ——— Modal State ———
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
 
-    const loadClientsForPartner = async (partnerId) => {
-        if (!partnerId) {
-            setClients([]);
-            setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
-            return;
-        }
-        try {
-            const data = await fetchClientsByPartner(partnerId);
-            setClients(data);
-            // auto-select first client if exists
-            if (data.length > 0) {
-                setFormData(prev => ({ ...prev, clientId: String(data[0].id), clientName: data[0].name }));
-            } else {
-                setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
-            }
-        } catch (err) {
-            console.error('[AddProjectPanel] Failed to load clients for partner', err);
-            setEntityError('Failed to load clients for selected partner.');
-        }
+    // ——— Toast State ———
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
     };
+
+
 
     async function loadEntities() {
         setEntityError('');
@@ -790,11 +722,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     useEffect(() => {
         const isPartnerFlow = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
-        if (isPartnerFlow && formData.partnerId) {
-            loadClientsForPartner(formData.partnerId);
-        }
         if (isPartnerFlow && !formData.partnerId) {
-            setClients([]);
             setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
         }
     }, [formData.type, formData.clientType, formData.partnerId]);
@@ -836,6 +764,27 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             }));
             return;
         }
+        if (name === 'startDate') {
+            setFormData(prev => {
+                let updatedEndDate = prev.endDate;
+                if (value && updatedEndDate && new Date(value) > new Date(updatedEndDate)) {
+                    updatedEndDate = value; // Auto-adjust to prevent invalid overlap
+                }
+                return { ...prev, startDate: value, endDate: updatedEndDate };
+            });
+            return;
+        }
+        if (name === 'endDate') {
+            setFormData(prev => {
+                let newEndDate = value;
+                if (prev.startDate && newEndDate && new Date(prev.startDate) > new Date(newEndDate)) {
+                    newEndDate = prev.startDate; // Auto-adjust
+                }
+                return { ...prev, endDate: newEndDate };
+            });
+            return;
+        }
+
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
@@ -851,7 +800,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             clientId: '',
             clientName: '',
         }));
-        loadClientsForPartner(item.id);
     };
 
     const skillExistsInList = (skillsList, targetSkill) => {
@@ -1111,6 +1059,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             }
             setEntityError('');
             closeModal();
+            const actionWord = modal.mode === 'add' ? 'added' : modal.mode === 'edit' ? 'updated' : 'deleted';
+            showToast(`${isClient ? 'Client' : 'Partner'} ${actionWord} successfully`, 'success');
         } catch (error) {
             const detail = error?.response?.data?.detail;
             let msg = `Failed to ${modal.mode} ${isClient ? 'client' : 'partner'}.`;
@@ -1122,6 +1072,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 msg = detail.msg || JSON.stringify(detail);
             }
             setModal(prev => ({ ...prev, error: msg }));
+            showToast(msg, 'error');
         }
     };
 
@@ -1451,6 +1402,20 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     return (
         <>
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${
+                        toast.type === 'error' 
+                            ? 'bg-red-500 border-red-400 text-white shadow-red-200' 
+                            : 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-200'
+                    }`}>
+                        {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+                        <span className="text-xs font-bold whitespace-nowrap">{toast.message}</span>
+                    </div>
+                </div>
+            )}
+
             {!pageMode && (
                 <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
             )}
@@ -1559,17 +1524,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handlePartnerSelect}
                                                 placeholder="Select Partner"
                                                 label="partners"
+                                                isLoading={isDirectoryLoading}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'partner')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Partner">
                                                 <Plus size={12} /> Add
                                             </button>
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Edit Partner">
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('edit', 'partner')}
+                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Partner">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Delete Partner">
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Partner">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1587,20 +1553,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 onSelect={handleClientSelect}
                                                 placeholder={isPartnerClient && hasPartnerMappedClients && !formData.partnerId ? 'Select Partner first' : 'Select Client'}
                                                 label="clients"
-                                                disabled={isPartnerClient && !formData.partnerId}
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
-                                                loadOptions={fetchAutocompleteClients}
+                                                isLoading={isDirectoryLoading}
                                             />
-                                            <button type="button" onClick={() => openModal('add', 'client')} disabled={isPartnerClient && !formData.partnerId}
-                                                className={`px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold ${isPartnerClient && !formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-emerald-100 transition-colors'} flex items-center gap-1`} title="Add Client">
+                                            <button type="button" onClick={() => openModal('add', 'client')}
+                                                className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
                                                 <Plus size={12} /> Add
                                             </button>
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Edit Client">
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('edit', 'client')}
+                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.clientId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Client">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled
-                                                className="px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold opacity-60 cursor-not-allowed flex items-center gap-1" title="Delete Client">
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete', 'client')}
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.clientId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Client">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1670,6 +1635,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <label className="text-xs font-bold text-gray-600 uppercase">End Date</label>
                                     <input type="date" name="endDate"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
+                                        min={formData.startDate || undefined}
                                         value={formData.endDate} onChange={handleChange} />
                                 </div>
 
@@ -1688,22 +1654,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 placeholder="Search or add skills..."
                                                 label="skills"
                                                 noResultsText="Skill not found. Select Add or use + Add Skill."
-                                                loadOptions={async (query) => {
-                                                    const normalizedQuery = normalizeSkillValue(query);
-                                                    const filtered = availableSkills.filter(s => s.toLowerCase().includes(query.toLowerCase()));
-                                                    if (normalizedQuery && !filtered.some(s => normalizeSkillToken(s) === normalizeSkillToken(normalizedQuery))) {
-                                                        return [
-                                                            {
-                                                                id: `create-skill:${normalizedQuery}`,
-                                                                name: `Add '${normalizedQuery}'`,
-                                                                skillName: normalizedQuery,
-                                                                isCreateOption: true,
-                                                            },
-                                                            ...filtered.map(s => ({ id: s, name: s }))
-                                                        ];
-                                                    }
-                                                    return filtered.map(s => ({ id: s, name: s }));
-                                                }}
                                             />
                                         </div>
                                         <div className="flex flex-col sm:flex-row gap-2">
@@ -1800,9 +1750,9 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[220px]">Name</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
+                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
                                                     <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
                                                     {visibleWeeks.map((wk, wIdx) => {
                                                         const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
@@ -1869,16 +1819,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <option value="Hybrid">Hybrid</option>
                                                             </select>
                                                         </td>
-                                                        {/* Allocation % */}
-                                                        <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
-                                                            <input
-                                                                type="number" min="0" max="100"
-                                                                placeholder="0"
-                                                                value={member.allocation_pct}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
-                                                                className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                            />
-                                                        </td>
                                                         {/* Start Date */}
                                                         <td className="px-2 py-2 min-w-[130px]">
                                                             <input
@@ -1897,23 +1837,35 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
                                                             />
                                                         </td>
+                                                        {/* Allocation % */}
+                                                        <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
+                                                            <input
+                                                                type="number" min="0" max="100"
+                                                                placeholder="0"
+                                                                value={member.allocation_pct}
+                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
+                                                                className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            />
+                                                        </td>
                                                         {/* Resource Type column */}
                                                         <td className="px-2 py-2 min-w-[110px]">
-                                                            <select
-                                                                value={member.billable_shadow}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
-                                                                className={`w-full h-10 px-2 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
-                                                                    ${member.billable_shadow === 'Billable'
-                                                                        ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
-                                                                        : member.billable_shadow === 'Non-billable'
-                                                                        ? 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
-                                                                        : 'border-slate-200 text-slate-500 focus:border-slate-400 focus:ring-slate-100'
-                                                                    }`}
-                                                            >
-                                                                <option value="Billable">Billable</option>
-                                                                <option value="Non-billable">Non-billable</option>
-                                                                <option value="Shadow">Shadow</option>
-                                                            </select>
+                                                            <div className="relative group">
+                                                                <select
+                                                                    value={member.billable_shadow}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
+                                                                    className={`w-full h-10 pl-2 pr-8 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
+                                                                        ${member.billable_shadow === 'Billable'
+                                                                            ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                                            : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                                        }`}
+                                                                >
+                                                                    <option value="Billable">Billable</option>
+                                                                    <option value="Non-billable">Non-billable</option>
+                                                                </select>
+                                                                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                                    <ChevronDown size={14} className={`${member.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
+                                                                </div>
+                                                            </div>
                                                         </td>
                                                         {/* Dynamic week columns — Excel-style */}
                                                         {visibleWeeks.map((wk, wIdx) => {
