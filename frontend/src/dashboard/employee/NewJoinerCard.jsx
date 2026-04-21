@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users } from 'lucide-react';
+import { UserSearch } from 'lucide-react';
 
 const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);
@@ -32,7 +32,7 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     if (joiners.length === 0) {
         return (
             <div 
-                className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between h-full cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+                className={`bg-white p-3 rounded-xl shadow-md border flex items-center justify-between h-full cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
                 onClick={onClick}
             >
                 <div>
@@ -40,7 +40,7 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
                     <h3 className="font-extrabold text-sm text-gray-800 mt-1">No results</h3>
                 </div>
                 <div className="p-2 rounded-lg bg-slate-400 bg-opacity-10">
-                    <Users size={20} className="text-slate-500" />
+                    <UserSearch size={20} className="text-slate-500" />
                 </div>
             </div>
         );
@@ -50,7 +50,7 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
 
     return (
         <div
-            className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between transition-all hover:shadow-md cursor-pointer group relative overflow-hidden h-full ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+            className={`bg-white p-3 rounded-xl shadow-md border flex items-center justify-between transition-all hover:shadow-lg cursor-pointer group relative overflow-hidden h-full ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
             onClick={onClick}
         >
             <div className="w-full">

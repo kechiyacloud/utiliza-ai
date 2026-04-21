@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, TrendingUp, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
 import FilterOverlay from './employee/FilterOverlay'
 import SkillsOverview from './employee/insights/SkillsOverview'
-import UtilizationTrend from './employee/insights/UtilizationTrend'
 import { getEmployeeList } from '../api/employeeApi'
 import { normalizeSkillName } from '../utils/skillTopics'
 import MultiSelectDropdown from '../components/MultiSelectDropdown'
@@ -42,9 +41,7 @@ function Employee() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
-  const [showBulkDropdown, setShowBulkDropdown] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const bulkDropdownRef = useRef(null);
 
   // Filter States
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -191,15 +188,6 @@ function Employee() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Utilization Trend Icon Button */}
-          <button
-            onClick={() => setActiveDrawer('trend')}
-            className="flex items-center justify-center p-2.5 bg-white border border-gray-200 text-teal-600 rounded-xl hover:bg-teal-50 hover:border-teal-200 transition-all shadow-sm"
-            title="Utilization Trend"
-          >
-            <TrendingUp size={18} />
-          </button>
-
           {/* Add Employee Button */}
           <button
             onClick={() => navigate('/info/employee/add')}
@@ -209,70 +197,6 @@ function Employee() {
             <UserPlus size={18} />
           </button>
 
-          {/* Bulk Actions Dropdown */}
-          <div className="relative" ref={bulkDropdownRef}>
-            <button
-              onClick={() => setShowBulkDropdown(prev => !prev)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200"
-            >
-              <Upload size={16} />
-              Bulk Actions
-              <ChevronDown size={14} className={`transition-transform ${showBulkDropdown ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showBulkDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-30 overflow-hidden">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bulk Employee Actions</p>
-                </div>
-                <button
-                  onClick={() => { setShowBulkDropdown(false); setShowBulkModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left"
-                >
-                  <Upload size={16} className="text-blue-500" />
-                  <div>
-                    <p className="font-bold">Import Employees</p>
-                    <p className="text-xs text-gray-400">CSV, Excel, JSON, PDF</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowBulkDropdown(false);
-                    const exportData = allEmployees.map(emp => ({
-                      'Employee ID': emp.employee_id,
-                      'Name': emp.employee_name,
-                      'Designation': emp.role_designation,
-                      'Department': emp.department,
-                      'Location': emp.location,
-                      'Status': emp.employee_status,
-                      'Allocation %': emp.employee_allocations ?? 0,
-                      'Billable': emp.billable,
-                      'Employee Type': emp.employee_type,
-                      'Date of Joining': emp.date_of_joining,
-                    }));
-                    exportToCSV(exportData, `Employees_${new Date().toISOString().split('T')[0]}`);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-left"
-                >
-                  <Download size={16} className="text-emerald-500" />
-                  <div>
-                    <p className="font-bold">Export to CSV</p>
-                    <p className="text-xs text-gray-400">Download current list</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => { setShowBulkDropdown(false); setShowBulkModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-left border-t border-gray-50"
-                >
-                  <FileSpreadsheet size={16} className="text-indigo-500" />
-                  <div>
-                    <p className="font-bold">Download Template</p>
-                    <p className="text-xs text-gray-400">Get the import template</p>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -357,7 +281,6 @@ function Employee() {
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
           <h2 className="text-xl font-bold text-gray-800">
-            {activeDrawer === 'skills' ? 'Skills Overview' : 'Utilization Trend'}
           </h2>
           <button
             onClick={() => setActiveDrawer(null)}
@@ -368,7 +291,6 @@ function Employee() {
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
           {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
-          {activeDrawer === 'trend' && <UtilizationTrend employees={baseGroup} />}
         </div>
       </div>
 
@@ -378,11 +300,6 @@ function Employee() {
           className="fixed inset-0 bg-black/20 z-40"
           onClick={() => setActiveDrawer(null)}
         />
-      )}
-
-      {/* Click-outside to close dropdown */}
-      {showBulkDropdown && (
-        <div className="fixed inset-0 z-20" onClick={() => setShowBulkDropdown(false)} />
       )}
 
       {/* Bulk Import Modal */}

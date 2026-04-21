@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info } from 'lucide-react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info, ArrowLeft } from 'lucide-react';
 import axios from '../../api/axios';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import {
     fetchSimpleClients,
     fetchAutocompleteClients,
@@ -17,9 +19,9 @@ import {
 } from '../../api/entitiesApi';
 import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
-/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-   HELPERS ΓÇö for Last 4 Weeks visualization
-   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+/* —————————————————————————————————————————————
+   HELPERS — for Last 4 Weeks visualization
+   ————————————————————————————————————————————— */
 function normalizeDateString(dateStr) {
     if (!dateStr) return '';
     const trimmed = (dateStr || '').trim();
@@ -139,7 +141,7 @@ function getLast4Weeks() {
         const wk = getISOWeekNumber(monday);
         weeks.push({
             label: i === 0 ? `This Week` : `Week -${i}`,
-            dateRange: `${fmtDate(monday)} ΓÇô ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(monday)} – ${fmtDate(sunday)}`,
             weekNum: wk,
             year: monday.getFullYear()
         });
@@ -171,7 +173,7 @@ function getProjectWeeks(startDateStr, endDateStr) {
             weekNum: getISOWeekNumber(cursor),
             year: cursor.getFullYear(),
             label: `W${wIdx}`,
-            dateRange: `${fmtDate(cursor)} ΓÇô ${fmtDate(sunday)}`,
+            dateRange: `${fmtDate(cursor)} – ${fmtDate(sunday)}`,
         });
         cursor.setDate(cursor.getDate() + 7);
         wIdx++;
@@ -180,9 +182,9 @@ function getProjectWeeks(startDateStr, endDateStr) {
 }
 
 
-/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-   INLINE MODAL ΓÇö Add / Edit / Delete confirmation
-   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+/* —————————————————————————————————————————————
+   INLINE MODAL — Add / Edit / Delete confirmation
+   ————————————————————————————————————————————— */
 const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCancel, error }) => {
     const [name, setName] = useState(initialName || '');
     const inputRef = useRef(null);
@@ -409,9 +411,9 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
 };
 
 
-/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-   SEARCHABLE DROPDOWN  ΓÇö  scrollable + filterable
-   ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+/* —————————————————————————————————————————————
+   SEARCHABLE DROPDOWN  —  scrollable + filterable
+   ————————————————————————————————————————————— */
 const SearchableDropdown = ({
     items,
     selectedId,
@@ -621,10 +623,11 @@ const SearchableDropdown = ({
 };
 
 
-/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
-   MAIN COMPONENT ΓÇö AddProjectPanel
-   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+/* —————————————————————————————————————————————
+   MAIN COMPONENT — AddProjectPanel
+   ————————————————————————————————————————————— */
 const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
+    const navigate = useNavigate();
     const DIRECT_CLIENT_TYPE = 'Direct Client';
     const PARTNER_CLIENT_TYPE = 'Partner Client';
     const CLOUD_DESTINATION_PARTNER = 'Cloud Destination';
@@ -661,14 +664,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
     const teamTableRef = useRef(null);
 
-    // --- UI State ---
+    // ——— UI State ———
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [teamHoursError, setTeamHoursError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
 
-    // --- Modal State ---
+    // ——— Modal State ———
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
 
     const loadClientsForPartner = async (partnerId) => {
@@ -796,7 +799,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
     }, [formData.type, formData.clientType, formData.partnerId]);
 
-    // --- Handlers ---
+    // ——— Handlers ———
     const handleChange = (e) => {
         const { name, value } = e.target;
         if (name === 'type') {
@@ -1032,7 +1035,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const isDropdownOpen = Boolean(activeDropdown);
     const hideTeamHorizontalScroll = isDropdownOpen || isTeamInputsActive;
 
-    // --- Entity Modal Openers ---
+    // ——— Entity Modal Openers ———
     const openModal = (mode, entityType) => {
         const isClient = entityType === 'client';
         const selectedId = isClient ? formData.clientId : formData.partnerId;
@@ -1337,7 +1340,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         setTeamHoursError(validateProjectWeeklyHours(newTeam));
     };
 
-    // --- Form Submission ---
+    // ——— Form Submission ———
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
@@ -1393,7 +1396,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('SOW Status is required for External projects.');
             return;
         }
-
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
         const effectiveType = formData.type;
         const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
@@ -1431,43 +1433,24 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
-        if (isClientProject) {
-            payload.client_id = normalizedClientId;
-        }
-        if (isPartnerClientProject) {
-            payload.partner_id = normalizedPartnerId;
-        }
-
-        console.log('Payload:', payload, 'client_id:', payload.client_id);
-
         try {
-            const response = await axios.post('/projects', payload);
-            if (!response || response.data?.error) {
-                throw new Error(response?.data?.message || 'Save failed');
-            }
-            setSubmitError('');
-            setIsSubmitting(false);
-            if (onAdd) onAdd(response?.data || payload);
+            await onAdd(payload);
+            clearDashboardCache(); // Sync dashboard
             onClose();
-        } catch (err) {
-            console.error('Save Error:', err);
-            const message =
-                err?.response?.data?.message ||
-                err?.response?.data?.detail ||
-                err?.message ||
-                err ||
-                'Failed to save changes';
-            setSubmitError(toMessage(message, 'Failed to save changes'));
+        } catch (error) {
+            setSubmitError(toMessage(error));
+        } finally {
             setIsSubmitting(false);
         }
     };
 
-    if (!isOpen) return null;
-
+    const isDirectClient = formData.type === 'Client' && formData.clientType === DIRECT_CLIENT_TYPE;
+    const isPartnerClient = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
     const isClientProject = formData.type === 'Client';
-    const isDirectClient = isClientProject && formData.clientType === DIRECT_CLIENT_TYPE;
-    const isPartnerClient = isClientProject && formData.clientType === PARTNER_CLIENT_TYPE;
     const entityLabel = modal.entityType === 'client' ? 'Client' : 'Partner';
+    
+    // --- Visibility Guard ---
+    if (!isOpen && !pageMode) return null;
 
     return (
         <>
@@ -1483,9 +1466,20 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50/50">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800">Add New Project</h2>
-                        <p className="text-xs text-gray-500 mt-1">Configure project details and allocate team members</p>
+                    <div className="flex items-center gap-4">
+                        {pageMode && (
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                                title="Go Back"
+                            >
+                                <ArrowLeft size={20} className="text-gray-600" />
+                            </button>
+                        )}
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800">Add New Project</h2>
+                            <p className="text-xs text-gray-500 mt-1">Configure project details and allocate team members</p>
+                        </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white rounded-full text-gray-500 shadow-sm border border-transparent hover:border-gray-200 transition-all">
                         <X size={20} />
@@ -1616,7 +1610,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </div>
                                 )}
 
-                                {/* INTERNAL ΓÇö Department dropdown */}
+                                {/* INTERNAL — Department dropdown */}
                                 {formData.type === 'Internal' && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600 uppercase">Department (Optional)</label>
@@ -1831,7 +1825,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 onClick={() => setShowAllWeeks(v => !v)}
                                                                 className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
                                                             >
-                                                                {showAllWeeks ? 'ΓåÉ Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
+                                                                {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
                                                             </button>
                                                         </th>
                                                     )}
@@ -1926,7 +1920,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <option value="Shadow">Shadow</option>
                                                             </select>
                                                         </td>
-                                                        {/* Dynamic week columns ΓÇö Excel-style */}
+                                                        {/* Dynamic week columns — Excel-style */}
                                                         {visibleWeeks.map((wk, wIdx) => {
                                                             const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                             return (

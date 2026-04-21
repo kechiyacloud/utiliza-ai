@@ -542,12 +542,13 @@ function ImportResourcesPage() {
 
     return (
         <div className="p-6 h-full w-full overflow-y-auto bg-slate-50/30">
-            <div className="mb-5">
+            <div className="mb-5 flex items-center gap-4">
                 <button
                     onClick={() => navigate('/info/projects')}
-                    className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mb-4 w-fit"
+                    className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                    title="Go Back"
                 >
-                    <ArrowLeft size={16} /> Back to Dashboard
+                    <ArrowLeft size={20} className="text-gray-600" />
                 </button>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4">

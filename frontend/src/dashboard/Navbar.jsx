@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, FolderKanban, Users, PieChart, CalendarClock, Briefcase, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -15,11 +15,11 @@ const Navbar = () => {
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard' },
-        { icon: FolderKanban, label: 'Projects', path: 'projects' },
+        { icon: Briefcase, label: 'Projects', path: 'projects' },
         { icon: Users, label: 'Employees', path: 'employees/list' },
         { icon: PieChart, label: 'Allocations', path: 'allocation' },
         { icon: CalendarClock, label: 'Availability', path: 'availability' },
-        { icon: Briefcase, label: 'Clients', path: 'client' },
+        { icon: Building2, label: 'Clients', path: 'client' },
         { icon: Settings, label: 'Settings', path: 'settings' },
     ];
 
@@ -37,9 +37,9 @@ const Navbar = () => {
                 {/* Toggle Button */}
                 <button
                     onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="absolute -right-3 top-8 bg-white text-mainTheme p-1 rounded-full shadow-md z-10 hover:bg-gray-100 transition-colors"
+                    className="absolute -right-3 top-8 bg-white text-mainTheme p-1.5 rounded-full shadow-md z-10 hover:bg-gray-100 transition-colors flex items-center justify-center"
                 >
-                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                 </button>
 
                 <div

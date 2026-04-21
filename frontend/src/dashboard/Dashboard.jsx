@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
-  AlertCircle, ChevronRight, BarChart2, DollarSign,
+  AlertCircle, ChevronRight, BarChart2, DollarSign, Clock, UserCheck, UserMinus,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
   CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft
 } from 'lucide-react';
@@ -63,6 +63,7 @@ function Dashboard() {
   const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [forcedTab] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,14 +103,18 @@ function Dashboard() {
   const [editingTodoId, setEditingTodoId] = useState(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadData = async () => {
       const forceRefresh = refreshKey > 0 && lastHandledRefreshKeyRef.current !== refreshKey;
       if (forceRefresh) {
         lastHandledRefreshKeyRef.current = refreshKey;
       }
+      
       try {
-        // Parallel fetch for all initial dashboard requirements
+        setLoading(true);
         const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
+        
+        // Pass signal to fetchDashboardData if possible, or handle post-fetch cancellation
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
           fetchDashboardData(forceRefresh, deptParam),
           getEmployeeList(forceRefresh),
@@ -117,10 +122,10 @@ function Dashboard() {
           fetchDepartments()
         ]);
 
+        if (controller.signal.aborted) return;
+
         if (dashRes.status === 'fulfilled') {
           setData(dashRes.value.data);
-          // The todos from dashRes are dynamic suggestions, we combine them with manual todos
-          // if (dashRes.value.todos) setTodos(prev => [...dashRes.value.todos, ...prev.filter(t => !t.isSystemSuggestion)]);
         }
 
         if (empListRes.status === 'fulfilled') {
@@ -134,13 +139,22 @@ function Dashboard() {
         if (deptsRes.status === 'fulfilled') {
           setDepartmentOptions(deptsRes.value);
         }
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
+        if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && todosRes.status === 'rejected') {
+          setError("Connection failed. Please ensure the backend is running.");
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error("Failed to load dashboard data", err);
+          setError("Failed to load some dashboard components.");
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
     loadData();
+    return () => controller.abort();
   }, [selectedDepartments, refreshKey]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
@@ -215,9 +229,10 @@ function Dashboard() {
         } else if (sessionStorage.getItem('returnToHighAllocation') === 'true') {
           elId = 'dashboard-high-allocation';
           sessionStorage.removeItem('returnToHighAllocation');
-        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true') {
-          elId = 'dashboard-resource-availability';
+        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true' || sessionStorage.getItem('returnToDashboardOperational') === 'true') {
+          elId = 'dashboard-operational-insights';
           sessionStorage.removeItem('returnToResourceAvailability');
+          sessionStorage.removeItem('returnToDashboardOperational');
         }
 
         if (elId) {
@@ -275,10 +290,94 @@ function Dashboard() {
   const contextLabel = Array.isArray(selectedDepartments) && selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
   const dynamicKpiData = [
-    { title: `${String(contextLabel)} Utilization`, value: `${_metrics?.company_utilization || 0}%`, subtext: "Target 85%", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100", route: "/info/allocation", state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } },
-    { title: "Billable Headcount", value: _metrics?.billable_headcount || 0, subtext: `out of ${String(_metrics?.total_employees || 0)} total`, icon: UsersIcon, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100", route: "/info/employees/list", state: { cardFilter: 'billable', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Bench Headcount", value: _metrics?.bench_headcount || 0, subtext: "employees currently idle", icon: DollarSign, color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100", route: "/info/employees/list", state: { cardFilter: 'bench', showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } },
-    { title: "Upcoming Bench (30days)", value: _metrics?.upcoming_bench || 0, subtext: "", icon: Activity, color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100", route: "/info/allocation", state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } }
+    { 
+      title: "Total Employee", 
+      value: _metrics?.total_employees || 0, 
+      subtext: "Across all departments", 
+      icon: UsersIcon, 
+      color: "text-slate-500", 
+      bg: "bg-slate-50", 
+      border: "border-slate-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'total', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Billable Headcount", 
+      value: _metrics?.billable_headcount || 0, 
+      subtext: `out of ${String(_metrics?.total_employees || 0)} total`, 
+      icon: UserCheck, 
+      color: "text-blue-500", 
+      bg: "bg-blue-50", 
+      border: "border-blue-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Non-Billable Headcount", 
+      value: _metrics?.internal_headcount || 0, 
+      subtext: "Internal & Shared services", 
+      icon: Activity, 
+      color: "text-emerald-500", 
+      bg: "bg-emerald-50", 
+      border: "border-emerald-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: "Bench Headcount", 
+      value: _metrics?.bench_headcount || 0, 
+      subtext: "resources currently idle", 
+      icon: UserMinus, 
+      color: "text-rose-500", 
+      bg: "bg-rose-50", 
+      border: "border-rose-100", 
+      route: "/info/resource-highlights", 
+      state: { cardType: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
+    },
+    { 
+      title: `${String(contextLabel)} Utilization`, 
+      value: `${_metrics?.company_utilization || 0}%`, 
+      subtext: "Target 85%", 
+      icon: TrendingUp, 
+      color: "text-emerald-500", 
+      bg: "bg-emerald-50", 
+      border: "border-emerald-100", 
+      route: "/info/allocation", 
+      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Active Clients", 
+      value: data?.executiveCards?.activeClients?.value || 0, 
+      subtext: data?.executiveCards?.activeClients?.change || "Current month", 
+      icon: Building2, 
+      color: "text-blue-600", 
+      bg: "bg-blue-50", 
+      border: "border-blue-100", 
+      route: "/info/client", 
+      state: { showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Running Projects", 
+      value: data?.executiveCards?.runningProjects?.value || 0, 
+      subtext: data?.executiveCards?.runningProjects?.change || "Active delivery", 
+      icon: Briefcase, 
+      color: "text-amber-500", 
+      bg: "bg-amber-50", 
+      border: "border-amber-100", 
+      route: "/info/projects", 
+      state: { showBack: true, fromDashboard: true } 
+    },
+    { 
+      title: "Upcoming Bench (30days)", 
+      value: _metrics?.upcoming_bench || 0, 
+      subtext: "Resources roll-off", 
+      icon: Clock, 
+      color: "text-amber-500", 
+      bg: "bg-amber-50", 
+      border: "border-amber-100", 
+      route: "/info/allocation", 
+      state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } 
+    }
   ];
 
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
@@ -303,12 +402,37 @@ function Dashboard() {
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
       .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
-      .slice(0, 10)
+      .slice(0, 4)
       .map(emp => ({
         name: emp.employee_name,
         skills: emp.skills.join(', ')
       }));
   }, [filteredDashboardEmployees]);
+
+  if (error && !data) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center gap-6 min-h-[400px] w-full bg-slate-50">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-2">
+            <ShieldAlert size={32} />
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
+          <p className="text-gray-500 max-w-sm text-sm">
+            We couldn't reach the dashboard analytics engine. Please ensure the backend server and its matching containers are running.
+          </p>
+        </div>
+        <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
+          {error}
+        </div>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -362,7 +486,7 @@ function Dashboard() {
               icon={Building2}
             />
             <button
-              onClick={() => navigate('/info/projects?highlight=add-project')}
+              onClick={() => navigate('/info/projects/add')}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus size={20} strokeWidth={3} />
@@ -374,8 +498,7 @@ function Dashboard() {
         {/* --- EXECUTIVE SECTION --- */}
         <div className="flex flex-col w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-          {/* Executive KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="dashboard-cards">
             {dynamicKpiData.map((kpi, idx) => (
               <div
                 key={idx}
@@ -384,7 +507,7 @@ function Dashboard() {
                     navigate(kpi.route, { state: kpi.state, hash: kpi.hash || '' });
                   }
                 }}
-                className={`bg-white border ${kpi.border} p-3 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-sm cursor-pointer flex flex-col items-start min-w-[140px] h-full flex-1`}
+                className={`bg-white border border-slate-100 p-3 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-md cursor-pointer flex flex-col items-start min-w-[140px] h-full flex-1`}
               >
                 <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${kpi.bg}`}></div>
                 <div className="flex w-full items-start justify-between z-10 mb-2">
@@ -401,42 +524,44 @@ function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="dashboard-cards">
-            <ExecutiveDashboardCards data={data?.executiveCards} selectedDepartments={selectedDepartments} />
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
             {/* Allocated vs Availability (Span 2) */}
             <div
-              className="lg:col-span-2 bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              className="lg:col-span-2 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
             >
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Allocate vs. Available
+                    Allocate vs Available
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
-                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-                  <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                    <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {dynamicDemandCapacityData.length > 0 ? (
+                  <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                    <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
+                      <RechartsTooltip content={<CustomTooltip />} />
+                      <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
+                      <Bar dataKey="available" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="allocate" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm italic">
+                    Forecast data unavailable
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Actionable Todo List (Span 1) — Coming Soon */}
-            <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[380px]">
+            <div className="relative bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
 
               {/* Blurred background preview */}
               <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
@@ -502,7 +627,7 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
-              className={`bg-white border p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-gray-100'}`}
+              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
               onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
@@ -510,25 +635,31 @@ function Dashboard() {
                 {contextLabel} Allocation
               </h2>
               <div className="h-[200px] w-full relative">
-                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-                  <PieChart>
-                    <Pie
-                      data={dynamicAllocationData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {dynamicAllocationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {dynamicAllocationData.length > 0 ? (
+                  <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                    <PieChart>
+                      <Pie
+                        data={dynamicAllocationData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {dynamicAllocationData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-[10px] italic">
+                    No allocation data
+                  </div>
+                )}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-2xl font-bold text-slate-800">{totalAllocationCount}</span>
                   <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Total</span>
@@ -562,7 +693,7 @@ function Dashboard() {
 
             {/* Top Skills on Bench */}
             <div
-              className="bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
+              className="bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
               onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
@@ -570,9 +701,8 @@ function Dashboard() {
                   <ShieldAlert size={18} className="text-emerald-500" />
                   Top Skills on Bench
                 </h2>
-                <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
+              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
                 <table className="w-full">
                   <thead className="sticky top-0 z-10">
                     <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
@@ -661,8 +791,12 @@ function Dashboard() {
         <NominationModal
           onClose={() => setIsNominationModalOpen(false)}
           onSuccess={() => {
-            // Simplified refresh: reload the page to see new data
-            window.location.reload();
+            // Manual refresh of dashboard data without reloading page
+            const deptParam = (selectedDepartments && selectedDepartments.length > 0) ? selectedDepartments.join(',') : 'Overall';
+            fetchDashboardData(true, deptParam).then(res => {
+              if (res.data) setData(res.data);
+              if (res.todos) setTodos(res.todos);
+            }).catch(console.error);
           }}
         />
       )}

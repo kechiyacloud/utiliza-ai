@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 // Insight Components
 import BenchPool from './BenchPool';
 import SkillsOverview from './SkillsOverview';
-import UtilizationTrend from './UtilizationTrend';
 
 const EmployeeInsights = ({ employees, filters }) => {
     const [activeTab, setActiveTab] = useState('skills');
@@ -18,15 +17,12 @@ const EmployeeInsights = ({ employees, filters }) => {
 
     const tabs = [
         { id: 'skills', label: 'Skills Overview' },
-        { id: 'trend', label: 'Utilization Trend' }
     ];
 
     const renderContent = () => {
         switch (activeTab) {
             case 'skills':
                 return <SkillsOverview employees={filteredEmployees} />;
-            case 'trend':
-                return <UtilizationTrend employees={filteredEmployees} />;
             default:
                 return <div className="p-10 text-center text-gray-500">Component Under Construction</div>;
         }

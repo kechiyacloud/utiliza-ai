@@ -4,6 +4,7 @@ import { useDataRefresh } from '../../context';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import { exportToCSV, exportToExcel, loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../../utils/exportUtils';
 import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
@@ -47,6 +48,7 @@ function getISOWeekNumber(date) {
 
 /** Formats a Date as "Mar 17" */
 function fmtDate(d) {
+    if (!d || !(d instanceof Date) || isNaN(d.getTime())) return '-';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
@@ -96,21 +98,24 @@ function buildWeekDescriptor(mondayDate, index) {
 }
 
 const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
+    const safeName = name || 'User';
+    const initial = (safeName[0] || 'U').toUpperCase();
+
     return (
-        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={safeName}>
             {photo_url ? (
                 <img 
                     src={photo_url} 
-                    alt={name} 
+                    alt={safeName} 
                     className="w-full h-full object-cover"
                     onError={(e) => {
                         e.target.onerror = null;
                         e.target.src = '';
-                        e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-slate-400">${name?.[0].toUpperCase()}</span>`;
+                        e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-slate-400">${initial}</span>`;
                     }}
                 />
             ) : (
-                <span className="text-xs font-bold text-slate-400">{name?.[0].toUpperCase()}</span>
+                <span className="text-xs font-bold text-slate-400">{initial}</span>
             )}
         </div>
     );
@@ -119,16 +124,16 @@ const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
 const AvatarStack = ({ members, totalCount, size = 'w-8 h-8' }) => {
     if (!members || members.length === 0) return null;
     
-    const displayMembers = members.slice(0, 4);
-    const remainingCount = totalCount - displayMembers.length;
+    const displayMembers = (members || []).slice(0, 4);
+    const remainingCount = (totalCount || 0) - displayMembers.length;
 
     return (
         <div className="flex -space-x-3 overflow-hidden items-center group/stack cursor-pointer">
             {displayMembers.map((member, i) => (
                 <AvatarCircle 
-                    key={member.id || member.employee_id || i} 
-                    name={member.name} 
-                    photo_url={member.photo_url} 
+                    key={member?.id || member?.employee_id || i} 
+                    name={member?.name || member?.employee_name} 
+                    photo_url={member?.photo_url} 
                     size={size}
                 />
             ))}
@@ -310,11 +315,12 @@ function getWeeklyHoursForWeek(row = {}, weekDescriptor) {
     return { withinRange: true, hours: Math.round(hours * 100) / 100, rawVal };
 }
 
-function normalizeAllocationRow(row = {}) {
+function normalizeAllocationRow(row) {
+    const safeRow = row || {};
     const normalized = { 
-        ...row,
-        weekly_hours: row.weekly_hours || {},
-        allocation_pct: row.allocation_pct ?? row.allocation_percentage ?? 0
+        ...safeRow,
+        weekly_hours: safeRow.weekly_hours || {},
+        allocation_pct: safeRow.allocation_pct ?? safeRow.allocation_percentage ?? 0
     };
     return normalized;
 }
@@ -1572,6 +1578,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             };
 
             await axios.put(`/projects/${projectId}/resources`, payload);
+            clearDashboardCache(); // Sync dashboard
             if (onUpdate) await onUpdate();
             setStatusMessage('Changes saved successfully!');
             setIsEditing(false);
@@ -1593,6 +1600,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         try {
             if (onClearAll) onClearAll();
             await axios.put(`/projects/${projectId}/resources`, { resources: [] });
+            clearDashboardCache(); // Sync dashboard
             setLocalRows([]);
             if (onUpdate) await onUpdate();
             setIsDeleteAllModalOpen(false);
@@ -2099,10 +2107,27 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     );
 };
 
-const calculateProjectProgress = (project) => {
+const calculateProjectProgress = (project, resources = []) => {
     const today = new Date();
-    const start = new Date(project.startDate || project.start_date || project.start);
-    const end = new Date(project.endDate || project.end_date || project.end);
+    
+    // Calculate actual boundaries from resources
+    let minS = project.start_date || project.startDate || project.start;
+    let maxE = project.end_date || project.endDate || project.end;
+    
+    if (resources && resources.length > 0) {
+        resources.forEach(r => {
+            if (r.allocation_start_date && (!minS || r.allocation_start_date < minS)) {
+                minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date && (!maxE || r.allocation_end_date > maxE)) {
+                maxE = r.allocation_end_date;
+            }
+        });
+    }
+
+    const start = new Date(minS);
+    const end = new Date(maxE);
+    
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
     const msDay = 1000 * 60 * 60 * 24;
     const totalDuration = Math.max((end - start) / msDay, 1);
@@ -2128,7 +2153,7 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     
-    const progressPct = calculateProjectProgress(project);
+    const progressPct = calculateProjectProgress(project, resources);
     const statusClasses = getStatusBadgeClasses(progressPct);
 
     return (
@@ -2232,8 +2257,24 @@ const ProjectHealthCard = ({ project, resources }) => {
         : 'SOW - NA';
 
     // 2. Timeline
-    const startDate = project.start_date || project.startDate || 'TBD';
-    const endDate = project.end_date || project.endDate || 'TBD';
+    const getMinMaxDates = (res) => {
+        if (!res || res.length === 0) return { start: null, end: null };
+        let minS = null;
+        let maxE = null;
+        res.forEach(r => {
+            if (r.allocation_start_date) {
+                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date) {
+                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
+            }
+        });
+        return { start: minS, end: maxE };
+    };
+
+    const { start: minAllocStart, end: maxAllocEnd } = getMinMaxDates(resources);
+    const startDate = minAllocStart || project.start_date || project.startDate || 'TBD';
+    const endDate = maxAllocEnd || project.end_date || project.endDate || 'TBD';
     const timeline = `${startDate} - ${endDate}`;
 
     // 3. Team Size
@@ -2292,26 +2333,13 @@ const ProjectHealthCard = ({ project, resources }) => {
 const CommercialSection = ({ project, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     
-    const [data, setData] = useState({
+    const [editData, setEditData] = useState({
         budget: project.budget || '$0',
         billingType: project.billing_type || 'Not Set',
         contractType: project.contract_type || 'Not Set',
         revenueModel: project.revenue_model || 'Not Set',
         notes: project.commercial_notes || 'No notes.'
     });
-    const [editData, setEditData] = useState(data);
-
-    useEffect(() => {
-        const newData = {
-            budget: project.budget || '$0',
-            billingType: project.billing_type || 'Not Set',
-            contractType: project.contract_type || 'Not Set',
-            revenueModel: project.revenue_model || 'Not Set',
-            notes: project.commercial_notes || 'No notes.'
-        };
-        setData(newData);
-        setEditData(newData);
-    }, [project]);
 
     const [saveError, setSaveError] = useState('');
 
@@ -2344,8 +2372,8 @@ const CommercialSection = ({ project, onUpdate }) => {
             if (!response || response.data?.error) {
                 throw new Error(response?.data?.message || 'Save failed');
             }
+            clearDashboardCache(); // Sync dashboard
             setSaveError('');
-            setData(payload);
             setIsEditing(false);
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -2360,7 +2388,6 @@ const CommercialSection = ({ project, onUpdate }) => {
     };
 
     const handleCancel = () => {
-        setEditData(data);
         setIsEditing(false);
     };
 
@@ -2418,24 +2445,24 @@ const CommercialSection = ({ project, onUpdate }) => {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Project Budget</p>
-                            <p className="font-bold text-slate-800 text-sm">{data.budget}</p>
+                            <p className="font-bold text-slate-800 text-sm">{project.budget || '$0'}</p>
                         </div>
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Billing Type</p>
-                            <p className="font-bold text-slate-800 text-sm">{data.billingType}</p>
+                            <p className="font-bold text-slate-800 text-sm">{project.billing_type || 'Not Set'}</p>
                         </div>
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Contract Type</p>
-                            <p className="font-bold text-slate-800 text-sm">{data.contractType}</p>
+                            <p className="font-bold text-slate-800 text-sm">{project.contract_type || 'Not Set'}</p>
                         </div>
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Revenue Model</p>
-                            <p className="font-bold text-slate-800 text-sm">{data.revenueModel}</p>
+                            <p className="font-bold text-slate-800 text-sm">{project.revenue_model || 'Not Set'}</p>
                         </div>
                     </div>
                     <div className="pt-2 border-t border-gray-50">
                         <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Commercial Notes</p>
-                        <p className="text-sm font-medium text-slate-600">{data.notes}</p>
+                        <p className="text-sm font-medium text-slate-600">{project.commercial_notes || 'No notes.'}</p>
                     </div>
                 </div>
             )}
@@ -2443,10 +2470,10 @@ const CommercialSection = ({ project, onUpdate }) => {
     );
 };
 
-const ScopeSection = ({ project, onUpdate }) => {
+const ScopeSection = ({ project, resources, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     
-    const [data, setData] = useState({
+    const [editData, setEditData] = useState({
         objective: project.objective || 'Not defined.',
         deliverables: project.deliverables || 'No deliverables listed.',
         startDate: project.start_date || 'Not Set',
@@ -2454,20 +2481,6 @@ const ScopeSection = ({ project, onUpdate }) => {
         milestones: project.milestones || 'No milestones listed.',
         notes: project.timeline_notes || 'No timeline notes.'
     });
-    const [editData, setEditData] = useState(data);
-
-    useEffect(() => {
-        const newData = {
-            objective: project.objective || 'Not defined.',
-            deliverables: project.deliverables || 'No deliverables listed.',
-            startDate: project.start_date || 'Not Set',
-            endDate: project.end_date || 'TBD',
-            milestones: project.milestones || 'No milestones listed.',
-            notes: project.timeline_notes || 'No timeline notes.'
-        };
-        setData(newData);
-        setEditData(newData);
-    }, [project]);
 
     const handleSave = async () => {
         const pId = project.project_id || project.id;
@@ -2481,7 +2494,7 @@ const ScopeSection = ({ project, onUpdate }) => {
                 milestones: editData.milestones,
                 timeline_notes: editData.notes
             });
-            setData(editData);
+            clearDashboardCache(); // Sync dashboard
             setIsEditing(false);
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -2491,9 +2504,26 @@ const ScopeSection = ({ project, onUpdate }) => {
     };
 
     const handleCancel = () => {
-        setEditData(data);
         setIsEditing(false);
     };
+
+    const { start: minAllocStart, end: maxAllocEnd } = useMemo(() => {
+        if (!resources || resources.length === 0) return { start: null, end: null };
+        let minS = null;
+        let maxE = null;
+        resources.forEach(r => {
+            if (r.allocation_start_date) {
+                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date) {
+                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
+            }
+        });
+        return { start: minS, end: maxE };
+    }, [resources]);
+
+    const displayStart = minAllocStart || project.start_date || 'Not Set';
+    const displayEnd = maxAllocEnd || project.end_date || 'TBD';
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative group w-full">
@@ -2548,29 +2578,29 @@ const ScopeSection = ({ project, onUpdate }) => {
                 <div className="space-y-3">
                     <div>
                         <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Objective &amp; Scope</p>
-                        <p className="font-medium text-sm text-slate-700">{data.objective}</p>
+                        <p className="font-medium text-sm text-slate-700">{project.objective || 'Not defined.'}</p>
                     </div>
                     <div>
                         <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Key Deliverables</p>
-                        <p className="font-medium text-sm text-slate-700">{data.deliverables}</p>
+                        <p className="font-medium text-sm text-slate-700">{project.deliverables || 'No deliverables listed.'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3 py-1.5 border-y border-gray-50">
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Start Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{data.startDate}</p>
+                            <p className="font-mono text-sm font-semibold text-slate-700">{displayStart}</p>
                         </div>
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">End Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{data.endDate}</p>
+                            <p className="font-mono text-sm font-semibold text-slate-700">{displayEnd}</p>
                         </div>
                     </div>
                     <div>
                         <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Major Milestones</p>
-                        <p className="font-medium text-sm text-slate-700">{data.milestones}</p>
+                        <p className="font-medium text-sm text-slate-700">{project.milestones || 'No milestones listed.'}</p>
                     </div>
                     <div>
                         <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Timeline Notes</p>
-                        <p className="font-medium text-sm text-slate-600 italic">{data.notes}</p>
+                        <p className="font-medium text-sm text-slate-600 italic">{project.timeline_notes || 'No timeline notes.'}</p>
                     </div>
                 </div>
             )}
@@ -2708,12 +2738,13 @@ const ProjectDetailsPage = () => {
 
     return (
         <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
-            <div className="mb-5">
+            <div className="mb-5 flex items-center gap-4">
                 <button
                     onClick={() => navigate('/info/projects')}
-                    className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mb-4 w-fit"
+                    className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                    title="Go Back"
                 >
-                    <ArrowLeft size={16} /> Back to Project Overview
+                    <ArrowLeft size={20} className="text-gray-600" />
                 </button>
 
                 <OngoingProjectInfoCard project={project} resources={resources} onEdit={() => setIsEditPanelOpen(true)} />
@@ -2789,10 +2820,10 @@ const ProjectDetailsPage = () => {
                 {/* Scope & Commercial side-by-side below allocation */}
                 <div>
                     <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                            <ScopeSection project={project} onUpdate={loadProjectData} />
+                        <div key={`scope-${project.project_id || project.id}`}>
+                            <ScopeSection project={project} resources={resources} onUpdate={loadProjectData} />
                         </div>
-                        <div>
+                        <div key={`commercial-${project.project_id || project.id}`}>
                             <CommercialSection project={project} onUpdate={loadProjectData} />
                         </div>
                     </div>

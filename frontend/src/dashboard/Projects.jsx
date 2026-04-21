@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { fetchProjectsData } from '../api/projectsApi';
 import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
 
 function Projects() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,10 +61,26 @@ function Projects() {
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center gap-4">
-        <div className="text-red-500 text-sm font-normal bg-red-50 px-6 py-4 rounded-xl border border-red-100">{error}</div>
-        <button onClick={() => loadData()} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 font-normal transition-colors shadow-lg shadow-blue-100">
-          Retry
+      <div className="p-8 flex flex-col items-center justify-center gap-6 min-h-[300px]">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
+          <p className="text-gray-500 max-w-sm text-sm">
+            We couldn't reach the projects API. Please ensure the backend server and its matching containers are running.
+          </p>
+        </div>
+        <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
+          {error}
+        </div>
+        <button 
+          onClick={() => loadData()} 
+          className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
+        >
+          Retry Connection
         </button>
       </div>
     );
@@ -76,6 +95,18 @@ function Projects() {
         }
       `}</style>
       <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
+        {/* Back Button */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+            title="Go Back"
+          >
+            <ArrowLeft size={20} className="text-gray-600" />
+          </button>
+          <div className="h-px bg-slate-200 flex-1"></div>
+        </div>
+
         {/* Overview Section */}
         <ProjectsOverview
           stats={data?.stats}

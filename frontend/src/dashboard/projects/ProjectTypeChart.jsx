@@ -1,6 +1,22 @@
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
+// Custom Tooltip
+const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white p-3 rounded-xl shadow-lg border border-gray-100 font-semibold text-sm">
+                <p className="text-gray-600 mb-1">{payload[0].name}</p>
+                <p className="text-gray-900 text-lg flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: payload[0].payload.color }}></span>
+                    {payload[0].value} <span className="text-gray-400 text-xs font-medium ml-1">Projects</span>
+                </p>
+            </div>
+        );
+    }
+    return null;
+};
+
 const ProjectTypeChart = ({ projects }) => {
     // Calculate distribution from the projects array
     const data = useMemo(() => {
@@ -37,22 +53,6 @@ const ProjectTypeChart = ({ projects }) => {
     }, [projects]);
 
     const totalProjects = data.reduce((sum, item) => sum + item.value, 0);
-
-    // Custom Tooltip
-    const CustomTooltip = ({ active, payload }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white p-3 rounded-xl shadow-lg border border-gray-100 font-semibold text-sm">
-                    <p className="text-gray-600 mb-1">{payload[0].name}</p>
-                    <p className="text-gray-900 text-lg flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: payload[0].payload.color }}></span>
-                        {payload[0].value} <span className="text-gray-400 text-xs font-medium ml-1">Projects</span>
-                    </p>
-                </div>
-            );
-        }
-        return null;
-    };
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full h-full flex flex-col relative overflow-hidden">

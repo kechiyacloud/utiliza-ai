@@ -24,6 +24,10 @@ const ImportResourcesPage = lazy(() => import('./dashboard/projects/ImportResour
 const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
 const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
+const ResourceHighlights = lazy(() => import('./dashboard/employee/ResourceHighlights'))
+const SkillsSummaryPage = lazy(() => import('./dashboard/employee/SkillsSummaryPage'))
+
+import ErrorBoundary from './components/ErrorBoundary'
 
 function RouteLoader({ label = 'Loading page...' }) {
   return (
@@ -47,8 +51,9 @@ function withSuspense(element, label) {
 function App() {
   return (
     <AppDataProvider>
-      <BrowserRouter>
-        <Routes>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
 
           {/* AUTH LAYOUT ROUTE */}
           <Route path='/' element={withSuspense(<LoginRegister />, 'Loading sign in...')}>
@@ -77,6 +82,8 @@ function App() {
               <Route path='availability' element={withSuspense(<Availability />, 'Loading availability...')} />
               <Route path='organization' element={withSuspense(<Organization />, 'Loading organization...')} />
               <Route path='settings' element={withSuspense(<Settings />, 'Loading settings...')} />
+              <Route path='resource-highlights' element={withSuspense(<ResourceHighlights />, 'Loading highlights...')} />
+              <Route path='skills' element={withSuspense(<SkillsSummaryPage />, 'Loading skills analysis...')} />
               <Route path='analytics' element={withSuspense(<FullAnalytics />, 'Loading analytics...')} />
               <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
             </Route>
@@ -87,6 +94,7 @@ function App() {
 
         </Routes>
       </BrowserRouter>
+      </ErrorBoundary>
     </AppDataProvider>
   )
 }

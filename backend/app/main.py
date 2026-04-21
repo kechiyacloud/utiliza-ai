@@ -46,16 +46,17 @@ app.add_middleware(
 )
 
 # -------------------- Include Routers --------------------
-app.include_router(auth.router)
-app.include_router(employees.router)
-app.include_router(dashboard.router)
-app.include_router(projects.router)
-app.include_router(allocations.router)
-app.include_router(clients.router)
-app.include_router(clients.api_router)
-app.include_router(partner_clients.router)
-app.include_router(availability.router)
-app.include_router(feedback.router)
+app.include_router(auth.router, prefix="/api")
+app.include_router(employees.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")
+app.include_router(allocations.router, prefix="/api")
+app.include_router(clients.router, prefix="/api")
+# clients.api_router is redundant now as clients.router is under /api prefix
+# app.include_router(clients.api_router) 
+app.include_router(partner_clients.router, prefix="/api")
+app.include_router(availability.router, prefix="/api")
+app.include_router(feedback.router, prefix="/api")
 
 @app.get("/")
 def root():

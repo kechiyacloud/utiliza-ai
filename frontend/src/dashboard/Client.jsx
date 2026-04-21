@@ -7,10 +7,10 @@ const ClientMask = ({ onBack }) => (
         {onBack && (
             <button 
                 onClick={onBack}
-                className="absolute top-6 left-6 p-2 hover:bg-white rounded-full transition-all border border-transparent hover:border-slate-200 shadow-sm group"
+                className="absolute top-6 left-6 p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                 title="Go Back"
             >
-                <ArrowLeft size={24} className="text-slate-400 group-hover:text-slate-600" />
+                <ArrowLeft size={20} className="text-gray-600" />
             </button>
         )}
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-16 py-14 shadow-sm text-center">
@@ -33,6 +33,7 @@ import ClientDetails from './clients/ClientDetails';
 import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal } from './clients/ClientModals';
 import { fetchClientData, createClient, updateClient, deleteClient } from '../api/clientApi';
 import { deleteProject } from '../api/projectsApi';
+import { clearDashboardCache } from '../api/dashboardApi';
 
 const Client = () => {
   const navigate = useNavigate();
@@ -82,6 +83,7 @@ const Client = () => {
         budget: newClientData.budget || '0'
       };
       await createClient(payload);
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to insert client into database", error);
@@ -98,6 +100,7 @@ const Client = () => {
         status: updatedClient.status || 'Stable',
         budget: updatedClient.budget || '0'
       });
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to update client", error);
@@ -133,6 +136,7 @@ const Client = () => {
       } else if (type === 'project') {
         await deleteProject(item.id);
       }
+      clearDashboardCache(); // Sync dashboard
       await loadData();
     } catch (error) {
       console.error("Failed to delete item", error);
@@ -162,10 +166,10 @@ const Client = () => {
         <div className="flex items-center gap-4">
           <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+              className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
               title="Go Back"
           >
-              <ArrowLeft size={20} className="text-slate-600" />
+              <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Client Dashboard</h1>

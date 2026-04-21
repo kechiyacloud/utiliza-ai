@@ -43,7 +43,7 @@ def allocation_metrics(
             tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
             tr_params.append('%non%billab%')
         elif resource_type == 'Bench Strength':
-            tr_where.append("COALESCE((SELECT SUM(pa3.allocation_percentage) FROM projects_allocation pa3 WHERE pa3.employee_id = em.employee_id AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
+            tr_where.append("COALESCE((SELECT SUM(pa3.allocation_percentage) FROM projects_allocation pa3 JOIN projects pj3 ON pa3.project_id = pj3.project_id WHERE pa3.employee_id = em.employee_id AND pa3.allocation_start_date <= CURRENT_DATE AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE) AND LOWER(pj3.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')), 0) <= 0")
             
         if tr_where:
             tr_query += " AND " + " AND ".join(tr_where)
@@ -93,7 +93,7 @@ def allocation_metrics(
             SELECT COUNT(*) FROM employee_master em
             LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
             WHERE em.date_of_resign IS NULL
-              AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = em.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+              AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 JOIN projects pj2 ON pa2.project_id = pj2.project_id WHERE pa2.employee_id = em.employee_id AND pa2.allocation_start_date <= CURRENT_DATE AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE) AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')), 0) <= 0
         """
         ben_where = list(where_clauses)
         if resource_type == 'Billable Only' or resource_type == 'Internal Only':
@@ -116,8 +116,11 @@ def allocation_metrics(
                     NULLIF(COUNT(DISTINCT em.employee_id), 0)
                 FROM employee_master em
                 LEFT JOIN projects_allocation pa ON em.employee_id = pa.employee_id 
+                    AND pa.allocation_start_date <= CURRENT_DATE
                     AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                LEFT JOIN projects pj ON pa.project_id = pj.project_id
                 {util_where_clause}
+                {" AND " if util_where_clause else " WHERE "} (pj.project_id IS NULL OR LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))
             """
             cur.execute(util_query, tuple(params))
             avg_utilization_val = cur.fetchone()[0]
@@ -131,10 +134,13 @@ def allocation_metrics(
                 SELECT COUNT(*) FROM (
                     SELECT pa.employee_id
                     FROM projects_allocation pa
+                    JOIN projects pj ON pa.project_id = pj.project_id
                     JOIN employee_master em ON pa.employee_id = em.employee_id
                     WHERE pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s
 
+                      AND pa.allocation_start_date <= CURRENT_DATE
                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                     {0}
                     GROUP BY pa.employee_id
                     HAVING SUM(pa.allocation_percentage) > 100
@@ -183,8 +189,8 @@ def allocation_projects(
             SELECT
                 pa.project_id,
                 p.project_name,
-                COUNT(DISTINCT CASE WHEN (pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s) AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS billable_count,
-                COUNT(DISTINCT CASE WHEN pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) THEN pa.employee_id END) AS non_billable_count
+                COUNT(DISTINCT CASE WHEN (pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s) AND pa.allocation_start_date <= CURRENT_DATE AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) AND LOWER(p.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') THEN pa.employee_id END) AS billable_count,
+                COUNT(DISTINCT CASE WHEN pa.project_tags ILIKE %s AND pa.allocation_start_date <= CURRENT_DATE AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) AND LOWER(p.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') THEN pa.employee_id END) AS non_billable_count
             FROM projects_allocation pa
             JOIN projects p ON pa.project_id = p.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
@@ -206,7 +212,7 @@ def allocation_projects(
         elif resource_type == 'Internal Only':
             where_clauses.append("pa.project_tags ILIKE '%%non%%billable%%'")
         elif resource_type == 'Bench Strength':
-            where_clauses.append("COALESCE((SELECT SUM(pa4.allocation_percentage) FROM projects_allocation pa4 WHERE pa4.employee_id = em.employee_id AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE)), 0) <= 0")
+            where_clauses.append("COALESCE((SELECT SUM(pa4.allocation_percentage) FROM projects_allocation pa4 JOIN projects pj4 ON pa4.project_id = pj4.project_id WHERE pa4.employee_id = em.employee_id AND pa4.allocation_start_date <= CURRENT_DATE AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE) AND LOWER(pj4.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')), 0) <= 0")
 
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
@@ -254,9 +260,12 @@ def project_employees(project_id: str):
                 (pa.allocation_percentage) AS allocation_pct,
                 pa.project_tags
             FROM projects_allocation pa
+            JOIN projects pj ON pa.project_id = pj.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
             WHERE pa.project_id = %s
+              AND pa.allocation_start_date <= CURRENT_DATE
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ORDER BY em.employee_name
         """, (project_id,))
 
@@ -299,8 +308,11 @@ def organization_utilization(
         util_query = """
             SELECT COALESCE(AVG(pa.allocation_percentage), 0) 
             FROM projects_allocation pa
+            JOIN projects pj ON pa.project_id = pj.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
-            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            WHERE pa.allocation_start_date <= CURRENT_DATE
+              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         """
         where_clauses = []
         params = []
@@ -419,9 +431,9 @@ def department_allocation_breakdown(
                     em.employee_id,
                     em.department,
                     CASE
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 1
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 2
-                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))) THEN 3
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa JOIN projects pj ON pa.project_id = pj.project_id WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND pa.allocation_start_date <= CURRENT_DATE AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))) THEN 1
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa JOIN projects pj ON pa.project_id = pj.project_id WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage > 0 AND pa.project_tags ILIKE %s AND pa.allocation_start_date <= CURRENT_DATE AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))) THEN 2
+                        WHEN (EXISTS (SELECT 1 FROM projects_allocation pa JOIN projects pj ON pa.project_id = pj.project_id WHERE pa.employee_id = em.employee_id AND pa.allocation_percentage = 0 AND pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s AND pa.allocation_start_date <= CURRENT_DATE AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))) THEN 3
                         ELSE 4
                     END as status_rank
                 FROM employee_master em

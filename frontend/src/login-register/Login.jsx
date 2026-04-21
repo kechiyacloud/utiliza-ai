@@ -14,6 +14,7 @@ function Login() {
     email: '',
     password: ''
   })
+  const [error, setError] = useState(null)
 
   const successMessage = location.state?.message || null
 
@@ -28,6 +29,7 @@ function Login() {
     e.preventDefault()
 
     setLoading(true)
+    setError(null)
 
     try {
       const response = await api.post("/login", {
@@ -44,7 +46,11 @@ function Login() {
       navigate("/info")
 
     } catch (err) {
-      alert(err.response?.data?.detail || "Login failed")
+      console.error("Login attempt failed:", err);
+      const errorMessage = err.code === 'ECONNABORTED' 
+        ? "Connection timeout. Please check your internet or if the server is down."
+        : (err.response?.data?.detail || "Login failed. Please check your credentials.");
+      setError(errorMessage);
     } finally {
       setLoading(false)
     }
@@ -61,6 +67,13 @@ function Login() {
         <div className="flex items-center gap-2 rounded-xl bg-emerald-500/20 border border-emerald-400/40 px-4 py-3 text-emerald-300 text-sm font-medium">
           <CheckCircle2 size={16} className="flex-shrink-0" />
           {successMessage}
+        </div>
+      )}
+      
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl bg-rose-500/20 border border-rose-400/40 px-4 py-3 text-rose-300 text-sm font-medium">
+          <div className="flex-shrink-0 w-1 h-1 rounded-full bg-rose-400 animate-pulse" />
+          {error}
         </div>
       )}
 
@@ -85,9 +98,33 @@ function Login() {
         Forgot Password?
       </p>
 
-      <button type="submit" className="form-button" >
-        Sign In
+      <button 
+        type="submit" 
+        className={`form-button flex items-center justify-center ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+        disabled={loading}
+      >
+        {loading ? (
+          <div className="flex items-center gap-2">
+            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            Signing In...
+          </div>
+        ) : 'Sign In'}
       </button>
+
+      {/* Development Bypass */}
+      <div className="mt-4 pt-4 border-t border-white/10 text-center">
+        <button
+          type="button"
+          onClick={() => {
+            sessionStorage.setItem("token", "fake-token");
+            sessionStorage.setItem("userEmail", "dev@utilizai.local");
+            navigate("/info");
+          }}
+          className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 hover:text-CD_Blue transition-colors"
+        >
+          Bypass Login (Local Dev)
+        </button>
+      </div>
     </form>
   )
 }

@@ -29,14 +29,19 @@ const clearEmployeeCache = () => {
 };
 
 // Fetch all employees list
-export const getEmployeeList = async (forceUpdate = false, includeResigned = false) => {
+export const getEmployeeList = async (forceUpdate = false, includeResigned = false, includeDeleted = false) => {
     try {
-        // Cache only applies for default view (no resigned employees)
-        if (!includeResigned && !forceUpdate && employeeListCache && (Date.now() - employeeListCacheTime < 5 * 60 * 1000)) {
+        // Cache only applies for default view (no resigned or deleted employees)
+        if (!includeResigned && !includeDeleted && !forceUpdate && employeeListCache && (Date.now() - employeeListCacheTime < 5 * 60 * 1000)) {
             return employeeListCache;
         }
 
-        const res = await api.get('/employees/list', { params: { include_resigned: includeResigned } });
+        const res = await api.get('/employees/list', { 
+            params: { 
+                include_resigned: includeResigned,
+                include_deleted: includeDeleted
+            } 
+        });
         const rawData = Array.isArray(res?.data) ? res.data : [];
 
         const enriched = rawData.map(emp => {
@@ -158,6 +163,13 @@ export const createEmployee = async (employeeData) => {
 // Update employee
 export const updateEmployee = async (id, employeeData) => {
     const res = await api.put(`/employees/${id}`, employeeData);
+    clearEmployeeCache();
+    return res.data;
+};
+
+// Restore employee
+export const restoreEmployee = async (id) => {
+    const res = await api.put(`/employees/${id}/restore`);
     clearEmployeeCache();
     return res.data;
 };

@@ -88,7 +88,7 @@ const DashboardTables = ({
     const trendDelta = selectedTrend && previousTrend ? (selectedTrend.value || 0) - (previousTrend.value || 0) : null;
 
     return (
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[400px]" id="dashboard-operational-insights">
+        <div className="bg-white rounded-3xl shadow-md border border-slate-100 overflow-hidden flex flex-col h-[400px]" id="dashboard-operational-insights">
             {/* Tab Header */}
             <div className="px-5 pt-4 pb-2 border-b border-gray-50 bg-slate-50/30">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
@@ -100,7 +100,6 @@ const DashboardTables = ({
                             { id: 'transitions', label: 'Transitions', icon: Activity },
                             { id: 'optimization', label: 'Bench Aging', icon: Clock },
                             { id: 'certifications', label: 'Certificates', icon: Award },
-                            { id: 'growth', label: 'Growth Trends', icon: BarChart2 },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -145,7 +144,7 @@ const DashboardTables = ({
                 {activeTab === 'availability' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Project</th>
                                 <th className="text-center py-2">Release Date</th>
@@ -192,7 +191,7 @@ const DashboardTables = ({
                 {activeTab === 'utilization' && utilizationSubTab === 'employee' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Role</th>
                                 <th className="text-right py-2 px-5">Alloc %</th>
@@ -226,7 +225,7 @@ const DashboardTables = ({
                 {activeTab === 'utilization' && utilizationSubTab === 'project' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Project</th>
                                 <th className="text-center py-2">Resources</th>
                                 <th className="text-right py-2 px-5">Overall Util</th>
@@ -255,7 +254,7 @@ const DashboardTables = ({
                 {activeTab === 'transitions' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Movement</th>
                                 <th className="text-right py-2 px-5">Date</th>
@@ -294,7 +293,7 @@ const DashboardTables = ({
                 {activeTab === 'optimization' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Resource</th>
                                 <th className="text-center py-2">Bench Aging</th>
                                 <th className="text-right py-2 px-5">Status</th>
@@ -329,7 +328,7 @@ const DashboardTables = ({
                 {activeTab === 'certifications' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Name</th>
                                 <th className="text-right py-2 px-5">Expiry</th>
                             </tr>
@@ -354,55 +353,6 @@ const DashboardTables = ({
                     </table>
                 )}
 
-                {activeTab === 'growth' && (
-                    <div className="p-5 flex flex-col h-full">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-1">Utilization Speed</span>
-                                <h4 className="text-xl font-black text-slate-800 tracking-tighter">
-                                    {trendLatest}% <span className={`text-xs ml-1 ${trendDelta >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {trendDelta >= 0 ? '+' : ''}{trendDelta}%
-                                    </span>
-                                </h4>
-                            </div>
-                            <div className="flex gap-2">
-                                <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Peak</span>
-                                    <span className="text-xs font-bold text-slate-700">{trendPeak}%</span>
-                                </div>
-                                <div className="px-3 py-1 bg-slate-50 rounded-lg border border-slate-100 flex flex-col items-center">
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Avg</span>
-                                    <span className="text-xs font-bold text-slate-700">{trendAverage}%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 flex flex-col gap-3">
-                            {recentTrends.length > 0 ? recentTrends.map((trend, idx) => (
-                                <div
-                                    key={idx}
-                                    onClick={() => setSelectedTrendIndex(idx)}
-                                    className={`p-3 rounded-2xl border transition-all cursor-pointer ${selectedTrendIndex === idx ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedTrendIndex === idx ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-slate-100 text-slate-400'}`}>
-                                                <TrendingUp size={14} />
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{trend.month} Status</span>
-                                                <span className="text-xs font-bold text-slate-800">Growth Progress</span>
-                                            </div>
-                                        </div>
-                                        <span className={`text-sm font-black ${selectedTrendIndex === idx ? 'text-blue-600' : 'text-slate-700'}`}>
-                                            {trend.value}%
-                                        </span>
-                                    </div>
-                                </div>
-                            )) : <EmptyTable icon={BarChart2} message="Insufficient trend data available." colSpan={1} />}
-                        </div>
-                    </div>
-                )}
 
                 {activeTab === 'riskboard' && (() => {
                     const suggestions = [

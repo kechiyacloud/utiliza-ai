@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, RotateCcw, Search, X } from 'lucide-react';
+import { ArrowLeft, CalendarRange, ChevronDown, Download, FileSpreadsheet, FileText, RotateCcw, Search, X } from 'lucide-react';
 import { getAvailabilityData, getAvailabilityFilters } from '../api/availabilityApi';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -71,6 +71,7 @@ const Availability = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [error, setError] = useState(null);
     const timelineRef = useRef(null);
     const exportMenuRef = useRef(null);
     const projectDropdownRef = useRef(null);
@@ -206,22 +207,31 @@ const Availability = () => {
     };
 
     useEffect(() => {
+        const controller = new AbortController();
         const loadInitialData = async () => {
+            setLoading(true);
             try {
                 const [filterData, availabilityData] = await Promise.all([
                     getAvailabilityFilters(),
                     getAvailabilityData()
                 ]);
+                if (controller.signal.aborted) return;
                 setFilters(filterData);
                 setData(Array.isArray(availabilityData) ? availabilityData : []);
             } catch (error) {
-                console.error('Error loading availability page:', error);
+                if (!controller.signal.aborted) {
+                    console.error('Error loading availability page:', error);
+                    setError(error?.message || 'Failed to connection to availability service');
+                }
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
         loadInitialData();
+        return () => controller.abort();
     }, []);
 
     useEffect(() => {
@@ -470,6 +480,36 @@ const Availability = () => {
         );
     }
 
+    if (error && !data.length) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center bg-[#f8fafc] p-8 gap-8">
+                <div className="flex flex-col items-center text-center gap-4">
+                    <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 shadow-sm border border-rose-100">
+                        <CalendarRange size={40} />
+                    </div>
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Timeline Connection Error</h2>
+                        <p className="text-slate-500 max-w-md text-sm leading-relaxed">
+                            We were unable to synchronize the resource availability timeline. Please verify that the backend server is active and accessible.
+                        </p>
+                    </div>
+                </div>
+                <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+                    <div className="text-rose-600 text-[11px] font-bold uppercase tracking-widest bg-rose-50/50 px-4 py-2 rounded-lg border border-rose-100/50 w-full text-center">
+                        {error}
+                    </div>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="w-full py-3.5 bg-CD_Blue text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-all shadow-lg shadow-blue-100 active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <RotateCcw size={16} />
+                        Reconnect Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const hasActiveFilters = selectedDept || selectedLocation || selectedProjects.length > 0 || selectedEmployee;
 
     return (
@@ -477,7 +517,16 @@ const Availability = () => {
             <div className="mb-3 flex flex-col gap-2">
                 {/* Header row: title + preview badge + reset + export */}
                 <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <h1 className="text-[30px] font-bold leading-none text-mainTheme">Resource Availability</h1>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                            title="Go Back"
+                        >
+                            <ArrowLeft size={20} className="text-gray-600" />
+                        </button>
+                        <h1 className="text-[30px] font-bold leading-none text-mainTheme">Resource Availability</h1>
+                    </div>
 
                     <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                         {/* Preview stats badge */}
@@ -807,9 +856,9 @@ const Availability = () => {
                                         className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs hover:bg-violet-50"
                                     >
                                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-black text-violet-600">
-                                            {emp.name.charAt(0).toUpperCase()}
+                                            {(emp.name || 'U').charAt(0).toUpperCase()}
                                         </span>
-                                        <span className="truncate font-semibold text-slate-700">{emp.name}</span>
+                                        <span className="truncate font-semibold text-slate-700">{emp.name || 'Unknown'}</span>
                                     </button>
                                 ))}
                             </div>

@@ -121,45 +121,6 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
           </div>
         </div>
 
-        {/* Tenure & Headcount */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm col-span-1 lg:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-sm font-bold text-slate-800">Growth & Headcount Trends</h3>
-            <select className="text-[10px] bg-slate-50 border-none rounded px-2 py-1 font-bold text-slate-500">
-              <option>Last 6 Months</option>
-              <option>Year to Date</option>
-            </select>
-          </div>
-          <div className="h-56">
-            <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-              <LineChart data={growthData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} 
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} 
-                />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="headcount" 
-                  stroke="#14b8a6" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#14b8a6', strokeWidth: 2, stroke: '#fff' }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
     </div>
   );
