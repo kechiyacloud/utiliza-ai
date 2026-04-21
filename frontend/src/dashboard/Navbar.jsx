@@ -37,9 +37,9 @@ const Navbar = () => {
                 {/* Toggle Button */}
                 <button
                     onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="absolute -right-3 top-8 bg-white text-mainTheme p-1 rounded-full shadow-md z-10 hover:bg-gray-100 transition-colors"
+                    className="absolute -right-3 top-8 bg-white text-mainTheme p-1.5 rounded-full shadow-md z-10 hover:bg-gray-100 transition-colors flex items-center justify-center"
                 >
-                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                 </button>
 
                 <div

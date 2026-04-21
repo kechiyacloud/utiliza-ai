@@ -16,6 +16,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
+import { clearDashboardCache } from '../../api/dashboardApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 
@@ -260,6 +261,8 @@ const EmployeeDetails = () => {
         let startWeek = 0;
         let durationWeeks = TOTAL_WEEKS; // default: show full window if no dates given
         let isVisibleInTimeline = true;
+        let sWeekRaw = 0; // Default: current
+        let eWeekRaw = TOTAL_WEEKS; // Default: current/ongoing
 
         const rawStartDate = p?.start_date || p?.allocation_start_date || p?.project_start_date;
         const rawEndDate = p?.end_date || p?.allocation_end_date || p?.project_end_date;
@@ -273,8 +276,8 @@ const EmployeeDetails = () => {
                 : new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
 
             // Week offsets relative to TODAY
-            const sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
-            const eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
+            sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
+            eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
 
             // If the project ends before today — exclude from timeline
             if (eWeekRaw <= 0) {
@@ -299,13 +302,19 @@ const EmployeeDetails = () => {
             }
         }
 
+        // Determine if project is current (active as of today)
+        const isCurrent = sWeekRaw <= 0 && eWeekRaw >= 0;
+        const isFuture = sWeekRaw > 0;
+
         return {
             name: p.project_name || p.name,
             value: p.allocation_percentage || p.project_allocation || p.value || 0,
             color: COLORS[index % COLORS.length],
             startWeek,
             durationWeeks,
-            isVisibleInTimeline
+            isVisibleInTimeline,
+            isCurrent,
+            isFuture
         };
     });
 
@@ -319,6 +328,7 @@ const EmployeeDetails = () => {
                     setIsDeleting(true);
                     try {
                         await deleteEmployee(id);
+                        clearDashboardCache(); // Sync dashboard
                         triggerRefresh();
                         navigate('/info/employee');
                     } catch (err) {
@@ -345,7 +355,7 @@ const EmployeeDetails = () => {
             </div>
 
             {/* 1. Top Profile Header */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
                 {/* Actions */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
                     <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
@@ -410,7 +420,7 @@ const EmployeeDetails = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
                 {/* Left Column: Profile Info */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
+                <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
                     <div className="flex justify-between items-start">
                         <h2 className="text-lg font-bold text-slate-800">Profile Details</h2>
                         <div className="flex gap-2">
@@ -473,12 +483,48 @@ const EmployeeDetails = () => {
                                 {userData.shiftTiming}
                             </div>
                         </div>
+                        {userData.employee_status === 'PIP' && (
+                            <div className="pt-2 border-t border-slate-50">
+                                <p className="text-amber-600 text-xs font-bold mb-2 flex items-center gap-1">
+                                    <Clock size={12} />
+                                    PIP PERIOD
+                                </p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">Start Date</p>
+                                        <p className="font-semibold text-slate-700 text-xs">{userData.pip_start_date || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">End Date</p>
+                                        <p className="font-semibold text-slate-700 text-xs">{userData.pip_end_date || '—'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {userData.employee_status === 'Notice period' && (
+                            <div className="pt-2 border-t border-slate-50">
+                                <p className="text-red-600 text-xs font-bold mb-2 flex items-center gap-1">
+                                    <Clock size={12} />
+                                    NOTICE PERIOD
+                                </p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">Start Date</p>
+                                        <p className="font-semibold text-slate-700 text-xs">{userData.notice_start_date || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">End Date</p>
+                                        <p className="font-semibold text-slate-700 text-xs">{userData.notice_end_date || '—'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
 
                 {/* Middle Column: Projects */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-visible">
+                <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-visible">
                     <h2 className="text-lg font-bold text-slate-800">Projects Allocation</h2>
 
                     {/* Chart - Reduced Size */}
@@ -486,7 +532,7 @@ const EmployeeDetails = () => {
                         <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
                                 <Pie
-                                    data={chartData}
+                                    data={chartData.filter(item => item.isCurrent)}
                                     cx="50%"
                                     cy="50%"
                                     innerRadius={45}
@@ -494,7 +540,7 @@ const EmployeeDetails = () => {
                                     paddingAngle={5}
                                     dataKey="value"
                                 >
-                                    {chartData.map((entry, index) => (
+                                    {chartData.filter(item => item.isCurrent).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
@@ -504,20 +550,36 @@ const EmployeeDetails = () => {
                         {/* Center Text */}
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center">
                             <span className="text-lg font-bold text-slate-800">
-                                {chartData.reduce((sum, item) => sum + (Number(item.value) || 0), 0)}%
+                                {chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0)}%
                             </span>
                         </div>
                     </div>
 
                     {/* Project Skills Detail */}
                     <div className="flex flex-col gap-2 overflow-y-auto flex-1 max-h-[140px] pr-2 custom-scrollbar py-1">
-                        {chartData.map((project, idx) => (
+                        {chartData.filter(p => p.isCurrent).map((project, idx) => (
                             <ProjectAllocationDropdown
                                 key={idx}
                                 project={project}
                                 rawProject={projects[idx]}
                                 navigate={navigate}
                             />
+                        ))}
+                        
+                        {/* Upcoming Projects (Future) */}
+                        {chartData.some(p => p.isFuture) && (
+                            <div className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">
+                                Upcoming Assignments
+                            </div>
+                        )}
+                        {chartData.filter(p => p.isFuture).map((project, idx) => (
+                            <div key={`future-${idx}`} className="opacity-60 grayscale-[0.5]">
+                                <ProjectAllocationDropdown
+                                    project={project}
+                                    rawProject={projects[chartData.indexOf(project)]}
+                                    navigate={navigate}
+                                />
+                            </div>
                         ))}
                         
                         {/* Completed Projects Dropdown Toggle */}
@@ -553,7 +615,7 @@ const EmployeeDetails = () => {
 
 
                 {/* Right Column: Skills & Certificates */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
+                <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col gap-6 max-h-[420px] overflow-y-auto custom-scrollbar">
 
                     {/* Master Skills */}
                     <div>
@@ -673,12 +735,11 @@ const EmployeeDetails = () => {
             </div>
 
 
-            {/* 3. Bottom Section: Timeline (Forecast) */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6">
                 <h2 className="text-lg font-bold text-slate-800 mb-6">Resource Forecast Timeline (90 Days)</h2>
 
                 {/* Improved Timeline Grid */}
-                <div className="w-full overflow-x-auto custom-scrollbar border border-slate-100 rounded-xl shadow-sm">
+                <div className="w-full overflow-x-auto custom-scrollbar border border-slate-100 rounded-xl shadow-md">
                     <div className="min-w-[900px]">
 
                         {/* 1. Header Section (Fixed at top of chart) */}

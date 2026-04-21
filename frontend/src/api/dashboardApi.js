@@ -26,7 +26,8 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
         const cacheKey = department || 'Overall';
         const cacheEntry = dashboardCaches[cacheKey];
 
-        if (!forceUpdate && cacheEntry && (Date.now() - cacheEntry.time < 5 * 60 * 1000)) {
+        // Reduced cache to 1 minute for better syncing
+        if (!forceUpdate && cacheEntry && (Date.now() - cacheEntry.time < 1 * 60 * 1000)) {
             return { data: cacheEntry.data, todos: cacheEntry.todos };
         }
 

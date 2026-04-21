@@ -11,10 +11,11 @@ import {
     Building2, Laptop, Award, Send, MessageSquare,
     AlertCircle, CheckCircle2, Loader2,
     BarChart2, FileText, Settings as SettingsIcon, ShieldCheck,
-    Archive, Trash2, Upload, Download
+    Archive, Trash2, Upload, Download, RefreshCcw, Database
 } from 'lucide-react';
 import { getEmployeeList } from '../api/employeeApi';
 import ExportPreviewModal from './employee/ExportPreviewModal';
+import { clearDashboardCache } from '../api/dashboardApi';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -335,6 +336,24 @@ const AdminSection = ({ employeeData }) => {
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportData, setExportData] = useState([]);
     const [isExporting, setIsExporting] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSyncAll = async () => {
+        if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
+        
+        setIsSyncing(true);
+        try {
+            await api.post('/employees/sync-all');
+            clearDashboardCache();
+            alert("Global data synchronization completed successfully.");
+            window.location.reload(); // Refresh to show fresh data
+        } catch (err) {
+            console.error("Sync all failed", err);
+            alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const handleExportClick = async () => {
         setIsExporting(true);
@@ -429,6 +448,20 @@ const AdminSection = ({ employeeData }) => {
                         <div>
                             <p className="font-bold text-emerald-900">Export All Records</p>
                             <p className="text-xs text-emerald-700/60 font-medium">Download active employee list (CSV)</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={handleSyncAll}
+                        disabled={isSyncing}
+                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-colors text-left disabled:opacity-50"
+                    >
+                        <div className="p-3 bg-amber-600 text-white rounded-xl">
+                            {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
+                        </div>
+                        <div>
+                            <p className="font-bold text-amber-900">Sync All Data</p>
+                            <p className="text-xs text-amber-700/60 font-medium">Re-calculate allocations & statuses</p>
                         </div>
                     </button>
                 </div>

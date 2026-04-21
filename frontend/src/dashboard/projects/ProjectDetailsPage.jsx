@@ -4,6 +4,7 @@ import { useDataRefresh } from '../../context';
 import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import { exportToCSV, exportToExcel, loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../../utils/exportUtils';
 import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
@@ -1577,6 +1578,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             };
 
             await axios.put(`/projects/${projectId}/resources`, payload);
+            clearDashboardCache(); // Sync dashboard
             if (onUpdate) await onUpdate();
             setStatusMessage('Changes saved successfully!');
             setIsEditing(false);
@@ -1598,6 +1600,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         try {
             if (onClearAll) onClearAll();
             await axios.put(`/projects/${projectId}/resources`, { resources: [] });
+            clearDashboardCache(); // Sync dashboard
             setLocalRows([]);
             if (onUpdate) await onUpdate();
             setIsDeleteAllModalOpen(false);
@@ -2104,10 +2107,27 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     );
 };
 
-const calculateProjectProgress = (project) => {
+const calculateProjectProgress = (project, resources = []) => {
     const today = new Date();
-    const start = new Date(project.startDate || project.start_date || project.start);
-    const end = new Date(project.endDate || project.end_date || project.end);
+    
+    // Calculate actual boundaries from resources
+    let minS = project.start_date || project.startDate || project.start;
+    let maxE = project.end_date || project.endDate || project.end;
+    
+    if (resources && resources.length > 0) {
+        resources.forEach(r => {
+            if (r.allocation_start_date && (!minS || r.allocation_start_date < minS)) {
+                minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date && (!maxE || r.allocation_end_date > maxE)) {
+                maxE = r.allocation_end_date;
+            }
+        });
+    }
+
+    const start = new Date(minS);
+    const end = new Date(maxE);
+    
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
     const msDay = 1000 * 60 * 60 * 24;
     const totalDuration = Math.max((end - start) / msDay, 1);
@@ -2133,7 +2153,7 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     
-    const progressPct = calculateProjectProgress(project);
+    const progressPct = calculateProjectProgress(project, resources);
     const statusClasses = getStatusBadgeClasses(progressPct);
 
     return (
@@ -2237,8 +2257,24 @@ const ProjectHealthCard = ({ project, resources }) => {
         : 'SOW - NA';
 
     // 2. Timeline
-    const startDate = project.start_date || project.startDate || 'TBD';
-    const endDate = project.end_date || project.endDate || 'TBD';
+    const getMinMaxDates = (res) => {
+        if (!res || res.length === 0) return { start: null, end: null };
+        let minS = null;
+        let maxE = null;
+        res.forEach(r => {
+            if (r.allocation_start_date) {
+                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date) {
+                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
+            }
+        });
+        return { start: minS, end: maxE };
+    };
+
+    const { start: minAllocStart, end: maxAllocEnd } = getMinMaxDates(resources);
+    const startDate = minAllocStart || project.start_date || project.startDate || 'TBD';
+    const endDate = maxAllocEnd || project.end_date || project.endDate || 'TBD';
     const timeline = `${startDate} - ${endDate}`;
 
     // 3. Team Size
@@ -2336,6 +2372,7 @@ const CommercialSection = ({ project, onUpdate }) => {
             if (!response || response.data?.error) {
                 throw new Error(response?.data?.message || 'Save failed');
             }
+            clearDashboardCache(); // Sync dashboard
             setSaveError('');
             setIsEditing(false);
             if (onUpdate) onUpdate();
@@ -2433,7 +2470,7 @@ const CommercialSection = ({ project, onUpdate }) => {
     );
 };
 
-const ScopeSection = ({ project, onUpdate }) => {
+const ScopeSection = ({ project, resources, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     
     const [editData, setEditData] = useState({
@@ -2457,6 +2494,7 @@ const ScopeSection = ({ project, onUpdate }) => {
                 milestones: editData.milestones,
                 timeline_notes: editData.notes
             });
+            clearDashboardCache(); // Sync dashboard
             setIsEditing(false);
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -2468,6 +2506,24 @@ const ScopeSection = ({ project, onUpdate }) => {
     const handleCancel = () => {
         setIsEditing(false);
     };
+
+    const { start: minAllocStart, end: maxAllocEnd } = useMemo(() => {
+        if (!resources || resources.length === 0) return { start: null, end: null };
+        let minS = null;
+        let maxE = null;
+        resources.forEach(r => {
+            if (r.allocation_start_date) {
+                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
+            }
+            if (r.allocation_end_date) {
+                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
+            }
+        });
+        return { start: minS, end: maxE };
+    }, [resources]);
+
+    const displayStart = minAllocStart || project.start_date || 'Not Set';
+    const displayEnd = maxAllocEnd || project.end_date || 'TBD';
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative group w-full">
@@ -2531,11 +2587,11 @@ const ScopeSection = ({ project, onUpdate }) => {
                     <div className="grid grid-cols-2 gap-3 py-1.5 border-y border-gray-50">
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Start Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{project.start_date || 'Not Set'}</p>
+                            <p className="font-mono text-sm font-semibold text-slate-700">{displayStart}</p>
                         </div>
                         <div>
                             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">End Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{project.end_date || 'TBD'}</p>
+                            <p className="font-mono text-sm font-semibold text-slate-700">{displayEnd}</p>
                         </div>
                     </div>
                     <div>
@@ -2765,7 +2821,7 @@ const ProjectDetailsPage = () => {
                 <div>
                     <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div key={`scope-${project.project_id || project.id}`}>
-                            <ScopeSection project={project} onUpdate={loadProjectData} />
+                            <ScopeSection project={project} resources={resources} onUpdate={loadProjectData} />
                         </div>
                         <div key={`commercial-${project.project_id || project.id}`}>
                             <CommercialSection project={project} onUpdate={loadProjectData} />

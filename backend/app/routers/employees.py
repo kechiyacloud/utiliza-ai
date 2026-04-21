@@ -6,6 +6,38 @@ from datetime import date
 import uuid
 
 
+def _ensure_employee_columns(cur):
+    """Ensures all necessary columns exist in employee_master and employee_master_pro."""
+    cur.execute("""
+        DO $$ 
+        BEGIN 
+            -- employee_master column
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='employee_master' AND column_name='is_deleted') THEN
+                ALTER TABLE employee_master ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE;
+            END IF;
+
+            -- employee_master_pro columns
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='employee_master_pro' AND column_name='pip_start_date') THEN
+                ALTER TABLE employee_master_pro ADD COLUMN pip_start_date DATE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='employee_master_pro' AND column_name='pip_end_date') THEN
+                ALTER TABLE employee_master_pro ADD COLUMN pip_end_date DATE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='employee_master_pro' AND column_name='notice_start_date') THEN
+                ALTER TABLE employee_master_pro ADD COLUMN notice_start_date DATE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='employee_master_pro' AND column_name='notice_end_date') THEN
+                ALTER TABLE employee_master_pro ADD COLUMN notice_end_date DATE;
+            END IF;
+        END $$;
+    """)
+
+
 def _table_has_column(cur, table_name: str, column_name: str) -> bool:
     cur.execute(
         """
@@ -54,8 +86,11 @@ def _sync_employee_allocations(cur, employee_ids):
         SET employee_allocations = COALESCE((
             SELECT SUM(pa.allocation_percentage)
             FROM projects_allocation pa
+            JOIN projects pj ON pa.project_id = pj.project_id
             WHERE pa.employee_id = p.employee_id
+              AND pa.allocation_start_date <= CURRENT_DATE
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         ), 0),
         employee_status = CASE
             WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
@@ -64,20 +99,29 @@ def _sync_employee_allocations(cur, employee_ids):
             WHEN COALESCE((
                 SELECT SUM(pa2.allocation_percentage)
                 FROM projects_allocation pa2
+                JOIN projects pj2 ON pa2.project_id = pj2.project_id
                 WHERE pa2.employee_id = p.employee_id
+                  AND pa2.allocation_start_date <= CURRENT_DATE
                   AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) <= 0 THEN 'Bench'
             WHEN COALESCE((
-                SELECT SUM(pa2.allocation_percentage)
-                FROM projects_allocation pa2
-                WHERE pa2.employee_id = p.employee_id
-                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                SELECT SUM(pa3.allocation_percentage)
+                FROM projects_allocation pa3
+                JOIN projects pj3 ON pa3.project_id = pj3.project_id
+                WHERE pa3.employee_id = p.employee_id
+                  AND pa3.allocation_start_date <= CURRENT_DATE
+                  AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj3.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
             WHEN COALESCE((
-                SELECT SUM(pa2.allocation_percentage)
-                FROM projects_allocation pa2
-                WHERE pa2.employee_id = p.employee_id
-                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                SELECT SUM(pa4.allocation_percentage)
+                FROM projects_allocation pa4
+                JOIN projects pj4 ON pa4.project_id = pj4.project_id
+                WHERE pa4.employee_id = p.employee_id
+                  AND pa4.allocation_start_date <= CURRENT_DATE
+                  AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj4.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
             ELSE 'Allocated'
         END
@@ -114,6 +158,7 @@ class EmployeeCreateUpdate(BaseModel):
     reporting_manager_id: Optional[str] = None
     date_of_resign: Optional[date] = None
     pip_start_date: Optional[date] = None
+    pip_end_date: Optional[date] = None
     notice_start_date: Optional[date] = None
     notice_end_date: Optional[date] = None
     skills: List[str] = []
@@ -153,8 +198,10 @@ def get_bench_employee_count():
 def get_notice_employee_count():
     with db_cursor() as cur:
         cur.execute("""
-            SELECT COUNT(*) FROM employee_master 
-            WHERE date_of_resign IS NOT NULL
+            SELECT COUNT(*) FROM employee_master m
+            JOIN employee_master_pro p ON m.employee_id = p.employee_id
+            WHERE m.date_of_resign IS NULL
+              AND (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%')
         """)
         result = cur.fetchone()
         return {"notice_employees": result[0]}
@@ -166,27 +213,30 @@ def get_employee_roles():
         roles = [row[0] for row in cur.fetchall()]
         return {"roles": roles}
 
+@router.post("/employees/sync-all")
+def sync_all_employees():
+    """Forces a global synchronization of all active employee allocations and statuses."""
+    with db_cursor() as cur:
+        cur.execute("SELECT employee_id FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
+        ids = [row[0] for row in cur.fetchall()]
+        if ids:
+            _sync_employee_allocations(cur, ids)
+        return {"status": "success", "synced_count": len(ids)}
+
 @router.get("/employees/list")
 def get_all_employees(include_resigned: bool = False, include_deleted: bool = False):
     print("API: Fetching all employees...")
     with db_cursor() as cur:
-        # Migration: Ensure is_deleted column exists safely
-        cur.execute("""
-            DO $$ 
-            BEGIN 
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                             WHERE table_name='employee_master' AND column_name='is_deleted') THEN
-                    ALTER TABLE employee_master ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE;
-                END IF;
-            END $$;
-        """)
+        _ensure_employee_columns(cur)
         has_employee_type = _table_has_column(cur, "employee_master", "employee_type")
         has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
+        has_pip_end_date = _table_has_column(cur, "employee_master_pro", "pip_end_date")
         has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
         has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
 
         employee_type_expr = "COALESCE(MAX(m.employee_type), 'Full Time')" if has_employee_type else "'Full Time'"
         pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
+        pip_end_expr = "p.pip_end_date" if has_pip_end_date else "NULL::date"
         notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
         notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
 
@@ -202,9 +252,9 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
                 SELECT 
                     employee_id,
                     MAX(CASE 
-                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'billable' THEN 3
-                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'nonbillable' THEN 2
-                        WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) = 'billable' THEN 1
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2
+                        WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1
                         ELSE 0 
                     END) as priority_rank
                 FROM projects_allocation
@@ -242,11 +292,12 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
                     WHEN ap.priority_rank = 3 THEN 'billable'
                     WHEN ap.priority_rank = 2 THEN 'non-billable'
                     WHEN ap.priority_rank = 1 THEN 'billable'
-                    ELSE 'non-billable'
+                    ELSE 'bench'
                 END as billable,
                 COALESCE(da.total_alloc, 0) as employee_allocations,
                 m.date_of_resign,
                 MAX({pip_start_expr}) as pip_start_date,
+                MAX({pip_end_expr}) as pip_end_date,
                 MAX({notice_start_expr}) as notice_start_date,
                 MAX({notice_end_expr}) as notice_end_date,
                 ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
@@ -278,6 +329,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
                 employee_type_expr=employee_type_expr,
                 notice_status_expr=notice_status_expr,
                 pip_start_expr=pip_start_expr,
+                pip_end_expr=pip_end_expr,
                 notice_start_expr=notice_start_expr,
                 notice_end_expr=notice_end_expr,
             ),
@@ -533,13 +585,16 @@ def get_employee_id_by_email(email_id: str):
 @router.get("/employees/{employee_id}")
 def get_employee_by_id(employee_id: str):
     with db_cursor() as cur:
+        _ensure_employee_columns(cur)
         has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
+        has_pip_end_date = _table_has_column(cur, "employee_master_pro", "pip_end_date")
         has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
         has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
         has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
         has_address = _table_has_column(cur, "employee_master", "address")
 
         pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
+        pip_end_expr = "p.pip_end_date" if has_pip_end_date else "NULL::date"
         notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
         notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
         dob_expr = "m.date_of_birth" if has_dob else "NULL::text"
@@ -557,9 +612,9 @@ def get_employee_by_id(employee_id: str):
             SELECT 
                 employee_id,
                 MAX(CASE 
-                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'billable' THEN 3
-                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) = 'nonbillable' THEN 2
-                    WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) = 'billable' THEN 1
+                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3
+                    WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2
+                    WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1
                     ELSE 0 
                 END) as priority_rank
             FROM projects_allocation
@@ -605,6 +660,7 @@ def get_employee_by_id(employee_id: str):
             COALESCE(da.total_alloc, 0) as employee_allocations,
             m.date_of_resign,
             {pip_start_expr} as pip_start_date,
+            {pip_end_expr} as pip_end_date,
             {notice_start_expr} as notice_start_date,
             {notice_end_expr} as notice_end_date,
             p.reporting_manager_id,
@@ -734,6 +790,7 @@ def get_employee_by_id(employee_id: str):
             "employee_allocations": employee.get("employee_allocations"),
             "date_of_resign": str(employee.get("date_of_resign")) if employee.get("date_of_resign") else None,
             "pip_start_date": str(employee.get("pip_start_date")) if employee.get("pip_start_date") else None,
+            "pip_end_date": str(employee.get("pip_end_date")) if employee.get("pip_end_date") else None,
             "notice_start_date": str(employee.get("notice_start_date")) if employee.get("notice_start_date") else None,
             "notice_end_date": str(employee.get("notice_end_date")) if employee.get("notice_end_date") else None,
             "date_of_birth": employee.get("date_of_birth"),
@@ -748,6 +805,7 @@ def get_employee_by_id(employee_id: str):
 @router.post("/employees")
 def create_employee(emp: EmployeeCreateUpdate):
     with db_cursor() as cur:
+        _ensure_employee_columns(cur)
         # Check if exists
         cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (emp.employee_id,))
         if cur.fetchone():
@@ -776,9 +834,9 @@ def create_employee(emp: EmployeeCreateUpdate):
 
         # 2. Insert into employee_master_pro
         cur.execute("""
-            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, notice_start_date, notice_end_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date))
+            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
 
         # 3. Handle skills
         for skill_name in emp.skills:
@@ -831,6 +889,7 @@ def create_employee(emp: EmployeeCreateUpdate):
 @router.put("/employees/{employee_id}")
 def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
     with db_cursor() as cur:
+        _ensure_employee_columns(cur)
         cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Employee not found")
@@ -883,14 +942,14 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
             cur.execute("""
                 UPDATE employee_master_pro SET
                     employee_status = %s, employee_allocations = %s, reporting_manager_id = %s,
-                    pip_start_date = %s, notice_start_date = %s, notice_end_date = %s
+                    pip_start_date = %s, pip_end_date = %s, notice_start_date = %s, notice_end_date = %s
                 WHERE employee_id = %s
-            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date, employee_id))
+            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date, employee_id))
         else:
             cur.execute("""
-                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, notice_start_date, notice_end_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.notice_start_date, emp.notice_end_date))
+                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
 
         # 3. Update skills (delete old, insert new)
         cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))

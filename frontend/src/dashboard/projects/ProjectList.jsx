@@ -9,6 +9,7 @@ import {
     MoreVertical, Info
 } from 'lucide-react';
 import axios from '../../api/axios';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
@@ -343,6 +344,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         setIsDeleting(true);
         try {
             await axios.delete(`/projects/${projectToDelete.project_id || projectToDelete.id}`);
+            clearDashboardCache(); // Sync dashboard
             triggerRefresh();
             if (onRefresh) onRefresh();
             setProjectToDelete(null);
@@ -400,6 +402,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
     const handleSaveProject = async (payload) => {
         try {
             await axios.put(`/projects/${payload.project_id || payload.id}`, payload);
+            clearDashboardCache(); // Sync dashboard
             if (onRefresh) onRefresh();
             setIsEditFormOpen(false);
         } catch (error) {

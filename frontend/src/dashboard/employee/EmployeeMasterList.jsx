@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive, UserCheck, Activity, UserRoundPlus, UserSearch } from 'lucide-react'
 import BulkImportModal from './BulkImportModal'
 import EmployeeTable from './EmployeeTable'
 import NewJoinerCard from './NewJoinerCard'
@@ -13,7 +13,7 @@ import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between transition-all hover:shadow-md cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+    className={`bg-white p-3 rounded-xl shadow-md border flex items-center justify-between transition-all hover:shadow-lg cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
     onClick={onClick}
   >
     <div className="flex-1">
@@ -56,7 +56,6 @@ function EmployeeMasterList() {
   const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
   const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
-  const [activeDrawer, setActiveDrawer] = useState(null);
   const { showArchived, showDeleted } = useEmployees();
   const [showArchivedLocal, setShowArchivedLocal] = useState(false); // We still need this for internal table filtering if we don't want to re-fetch? 
   // Wait, let's use the context ones for the fetch.
@@ -155,8 +154,40 @@ function EmployeeMasterList() {
   const contextLabel = combinedFilters.departments?.length > 0 ? 'Team' : 'Organization';
 
   const totalEmployeesCount = baseGroup.length;
-  const benchEmployeesCount = baseGroup.filter(e => (e.employee_allocations || 0) <= 0).length;
-  const noticeEmployeesCount = baseGroup.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
+  
+  const billableCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
+  }).length;
+
+  const nonBillableCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
+  }).length;
+
+  const benchEmployeesCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.employee_allocations || 0) <= 0 && !isSpecialStatus;
+  }).length;
+
+  const noticeEmployeesCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    return s.includes('notice') || s.includes('pip');
+  }).length;
+
+  const newJoinersCount = useMemo(() => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    return baseGroup.filter(e => {
+      const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
+      const s = (e.employee_status || '').toLowerCase();
+      const isLeaving = s.includes('notice') || e.date_of_resign;
+      return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
+    }).length;
+  }, [baseGroup]);
 
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
@@ -191,7 +222,30 @@ function EmployeeMasterList() {
             className="flex items-center justify-center p-2.5 bg-white border border-gray-100 text-gray-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm"
             title="Add Single Employee"
           >
-            <UserPlus size={18} />
+            <UserRoundPlus size={18} />
+          </button>
+
+          {/* Skill Summary Button */}
+          <button
+            onClick={() => navigate('/info/skills', { state: { employees: baseGroup } })}
+            className="flex items-center justify-center p-2.5 bg-white border border-gray-100 text-gray-400 rounded-xl hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300 transition-all shadow-sm"
+            title="View Skill Summary"
+          >
+            <Award size={18} />
+          </button>
+
+          {/* New Joiners Button */}
+          <button
+            onClick={() => setCardFilter('new-joiner')}
+            className={`flex items-center justify-center p-2.5 bg-white border rounded-xl transition-all shadow-sm relative ${cardFilter === 'new-joiner' ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-600 hover:border-green-300'}`}
+            title="View New Joiners"
+          >
+            <UserSearch size={18} />
+            {newJoinersCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white shadow-sm border-2 border-white">
+                {newJoinersCount}
+              </span>
+            )}
           </button>
 
           {/* Department Selector */}
@@ -219,6 +273,26 @@ function EmployeeMasterList() {
           onClick={() => setCardFilter(null)}
         />
         <StatCard
+          label="BILLABLE"
+          value={billableCount}
+          icon={UserCheck}
+          colorClass="bg-emerald-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'billable'}
+          onClick={() => setCardFilter('billable')}
+        />
+        <StatCard
+          label="NON-BILLABLE"
+          value={nonBillableCount}
+          icon={Activity}
+          colorClass="bg-slate-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'non-billable'}
+          onClick={() => setCardFilter('non-billable')}
+        />
+        <StatCard
           label="TOTAL BENCH"
           value={benchEmployeesCount}
           icon={UserMinus}
@@ -237,16 +311,6 @@ function EmployeeMasterList() {
           error={error}
           isActive={cardFilter === 'notice'}
           onClick={() => setCardFilter('notice')}
-        />
-        <NewJoinerCard employees={baseGroup} isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
-        <StatCard
-          label="SKILL SUMMARY"
-          value="Tap to View"
-          icon={Award}
-          colorClass="bg-purple-500"
-          loading={loading}
-          error={error}
-          onClick={() => setActiveDrawer('skills')}
         />
       </div>
 
@@ -306,32 +370,7 @@ function EmployeeMasterList() {
       </div>
       )}
 
-      {/* Sliding Drawer for Insights */}
-      <div
-        className={`fixed inset-y-0 right-0 z-50 w-full md:w-[600px] lg:w-[800px] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${activeDrawer ? 'translate-x-0' : 'translate-x-full'}`}
-      >
-        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-xl font-bold text-gray-800">
-          </h2>
-          <button
-            onClick={() => setActiveDrawer(null)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-          {activeDrawer === 'skills' && <SkillsOverview employees={baseGroup} />}
-        </div>
-      </div>
 
-      {/* Backdrop */}
-      {activeDrawer && (
-        <div
-          className="fixed inset-0 bg-black/20 z-40"
-          onClick={() => setActiveDrawer(null)}
-        />
-      )}
 
       {/* Bulk Import Modal */}
       {showBulkModal && (

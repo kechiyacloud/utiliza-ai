@@ -88,7 +88,7 @@ const DashboardTables = ({
     const trendDelta = selectedTrend && previousTrend ? (selectedTrend.value || 0) - (previousTrend.value || 0) : null;
 
     return (
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[400px]" id="dashboard-operational-insights">
+        <div className="bg-white rounded-3xl shadow-md border border-slate-100 overflow-hidden flex flex-col h-[400px]" id="dashboard-operational-insights">
             {/* Tab Header */}
             <div className="px-5 pt-4 pb-2 border-b border-gray-50 bg-slate-50/30">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
@@ -144,7 +144,7 @@ const DashboardTables = ({
                 {activeTab === 'availability' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Project</th>
                                 <th className="text-center py-2">Release Date</th>
@@ -191,7 +191,7 @@ const DashboardTables = ({
                 {activeTab === 'utilization' && utilizationSubTab === 'employee' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Role</th>
                                 <th className="text-right py-2 px-5">Alloc %</th>
@@ -225,7 +225,7 @@ const DashboardTables = ({
                 {activeTab === 'utilization' && utilizationSubTab === 'project' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Project</th>
                                 <th className="text-center py-2">Resources</th>
                                 <th className="text-right py-2 px-5">Overall Util</th>
@@ -254,7 +254,7 @@ const DashboardTables = ({
                 {activeTab === 'transitions' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Employee</th>
                                 <th className="text-center py-2">Movement</th>
                                 <th className="text-right py-2 px-5">Date</th>
@@ -293,7 +293,7 @@ const DashboardTables = ({
                 {activeTab === 'optimization' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Resource</th>
                                 <th className="text-center py-2">Bench Aging</th>
                                 <th className="text-right py-2 px-5">Status</th>
@@ -328,7 +328,7 @@ const DashboardTables = ({
                 {activeTab === 'certifications' && (
                     <table className="w-full">
                         <thead className="sticky top-0 bg-white z-10">
-                            <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50">
+                            <tr className="text-[9px] font-black tracking-widest text-slate-900 uppercase border-b border-gray-50">
                                 <th className="text-left py-2 px-5">Name</th>
                                 <th className="text-right py-2 px-5">Expiry</th>
                             </tr>

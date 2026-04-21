@@ -456,7 +456,11 @@ CREATE TABLE public.employee_master_pro (
     reporting_manager_id character varying(50),
     employee_status character varying(50) DEFAULT 'Active'::character varying,
     upcoming_leaves character varying(255),
-    employee_allocations integer DEFAULT 0
+    employee_allocations integer DEFAULT 0,
+    pip_start_date date,
+    pip_end_date date,
+    notice_start_date date,
+    notice_end_date date
 );
 
 ALTER TABLE public.employee_master_pro OWNER TO postgres;

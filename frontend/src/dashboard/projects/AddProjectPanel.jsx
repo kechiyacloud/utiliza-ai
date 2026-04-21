@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info, ArrowLeft } from 'lucide-react';
 import axios from '../../api/axios';
+import { clearDashboardCache } from '../../api/dashboardApi';
 import {
     fetchSimpleClients,
     fetchAutocompleteClients,
@@ -1434,6 +1435,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
         try {
             await onAdd(payload);
+            clearDashboardCache(); // Sync dashboard
             onClose();
         } catch (error) {
             setSubmitError(toMessage(error));

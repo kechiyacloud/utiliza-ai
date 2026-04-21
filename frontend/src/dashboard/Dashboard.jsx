@@ -229,9 +229,10 @@ function Dashboard() {
         } else if (sessionStorage.getItem('returnToHighAllocation') === 'true') {
           elId = 'dashboard-high-allocation';
           sessionStorage.removeItem('returnToHighAllocation');
-        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true') {
-          elId = 'dashboard-resource-availability';
+        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true' || sessionStorage.getItem('returnToDashboardOperational') === 'true') {
+          elId = 'dashboard-operational-insights';
           sessionStorage.removeItem('returnToResourceAvailability');
+          sessionStorage.removeItem('returnToDashboardOperational');
         }
 
         if (elId) {
@@ -401,7 +402,7 @@ function Dashboard() {
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
       .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
-      .slice(0, 10)
+      .slice(0, 4)
       .map(emp => ({
         name: emp.employee_name,
         skills: emp.skills.join(', ')
@@ -506,7 +507,7 @@ function Dashboard() {
                     navigate(kpi.route, { state: kpi.state, hash: kpi.hash || '' });
                   }
                 }}
-                className={`bg-white border ${kpi.border} p-3 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-sm cursor-pointer flex flex-col items-start min-w-[140px] h-full flex-1`}
+                className={`bg-white border border-slate-100 p-3 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-md cursor-pointer flex flex-col items-start min-w-[140px] h-full flex-1`}
               >
                 <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${kpi.bg}`}></div>
                 <div className="flex w-full items-start justify-between z-10 mb-2">
@@ -526,14 +527,14 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
             {/* Allocated vs Availability (Span 2) */}
             <div
-              className="lg:col-span-2 bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              className="lg:col-span-2 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
             >
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <BarChart2 size={16} className="text-blue-500" />
-                    Allocate vs. Available
+                    Allocate vs Available
                   </h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
                 </div>
@@ -547,8 +548,8 @@ function Dashboard() {
                       <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                       <RechartsTooltip content={<CustomTooltip />} />
                       <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
-                      <Bar dataKey="availability" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="allocated" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="available" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="allocate" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -560,7 +561,7 @@ function Dashboard() {
             </div>
 
             {/* Actionable Todo List (Span 1) — Coming Soon */}
-            <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[380px]">
+            <div className="relative bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
 
               {/* Blurred background preview */}
               <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
@@ -626,7 +627,7 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
-              className={`bg-white border p-6 rounded-2xl shadow-sm cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-gray-100'}`}
+              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
               onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
@@ -692,7 +693,7 @@ function Dashboard() {
 
             {/* Top Skills on Bench */}
             <div
-              className="bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
+              className="bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
               onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
@@ -700,9 +701,8 @@ function Dashboard() {
                   <ShieldAlert size={18} className="text-emerald-500" />
                   Top Skills on Bench
                 </h2>
-                <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[260px]">
+              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
                 <table className="w-full">
                   <thead className="sticky top-0 z-10">
                     <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
