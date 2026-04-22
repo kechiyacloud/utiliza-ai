@@ -9,7 +9,7 @@ const Navbar = () => {
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(false);
 
-    const userEmail = sessionStorage.getItem('userEmail') || 'user@example.com';
+    const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
     const userName = (userEmail || '').split('@')[0] || 'User';
     const userInitials = (userName || 'U').substring(0, 2).toUpperCase();
 
@@ -25,8 +25,8 @@ const Navbar = () => {
 
     const handleLogout = () => {
         // Clear any auth tokens/session data
-        sessionStorage.removeItem('token');
-        sessionStorage.clear();
+        localStorage.removeItem('token');
+        localStorage.clear();
         navigate('/login');
     };
 
@@ -87,7 +87,7 @@ const Navbar = () => {
                     <div
                         onClick={async () => {
                             try {
-                                const response = await api.get(`/employee/by-email/${userEmail}`);
+                                const response = await api.get(`/employee/by-email/${encodeURIComponent(userEmail)}`);
                                 if (response.data && response.data.employee_id) {
                                     navigate(`/info/employee/${response.data.employee_id}`, {
                                         state: {
@@ -99,10 +99,12 @@ const Navbar = () => {
                                             }
                                         }
                                     });
+                                } else {
+                                    alert(`No employee profile found for ${userEmail}. Please ensure your email is linked to an active employee record.`);
                                 }
                             } catch (error) {
                                 console.error("Could not fetch user profile ID", error);
-                                alert("Failed to load your advanced profile. Are you synced as an employee?");
+                                alert("Failed to load your advanced profile. Please try again later.");
                             }
                         }}
                         className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl group relative cursor-pointer hover:bg-white/10 transition-colors ${isCollapsed ? 'justify-center' : ''}`}

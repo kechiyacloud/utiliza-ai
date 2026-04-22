@@ -344,7 +344,7 @@ function EmployeeMasterList() {
           contextLabel={contextLabel}
           employees={allEmployees}
           loading={loading}
-          onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id || '123'}`, { state: { employee: emp } })}
+          onEmployeeClick={(emp) => navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, { state: { employee: emp } })}
           onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
           onEmployeeDelete={(deletedId) => {
             // If we are in "Archived" mode, we don't necessarily want to remove it from UI immediately

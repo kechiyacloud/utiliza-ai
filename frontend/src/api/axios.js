@@ -5,7 +5,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_U
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
-  timeout: 5000,
+  timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -14,7 +14,7 @@ const api = axios.create({
 const MAX_RETRIES = 2;
 
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("token");
+  const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -27,8 +27,8 @@ api.interceptors.response.use(
     
     // Explicitly reject and logout on 401s
     if (error.response?.status === 401) {
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("userEmail");
+      localStorage.removeItem("token");
+      localStorage.removeItem("userEmail");
       window.location.replace("/");
       return Promise.reject(error);
     }

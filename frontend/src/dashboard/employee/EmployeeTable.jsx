@@ -24,7 +24,9 @@ const AllocationBar = ({ percentage, status }) => {
     return (
         <div className="w-full max-w-[110px]">
             <div className="flex justify-end mb-1">
-                <span className="text-[10px] font-bold text-gray-600">{percentage}%</span>
+                <span className="text-[10px] font-bold text-gray-600">
+                    {percentage === 0 ? 'No project allocation' : `${percentage}%`}
+                </span>
             </div>
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -57,7 +59,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSortOpen, setIsSortOpen] = useState(false);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
-        const saved = sessionStorage.getItem('employeeRowsPerPage');
+        const saved = localStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
     });
 
@@ -212,11 +214,11 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     const startIndex = (currentPage - 1) * itemsPerPage;
     const currentEmployees = sortedEmployees.slice(startIndex, startIndex + itemsPerPage);
 
-    const handleDelete = async () => {
+    const handleDelete = async (permanent = false) => {
         if (!deleteTarget) return;
         setIsDeleting(true);
         try {
-            await deleteEmployee(deleteTarget.employee_id);
+            await deleteEmployee(deleteTarget.employee_id, permanent);
             if (onEmployeeDelete) onEmployeeDelete(deleteTarget.employee_id);
         } catch (err) {
             console.error('Delete failed', err);
@@ -455,7 +457,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                 onChange={(e) => {
                                     const val = Number(e.target.value);
                                     setItemsPerPage(val);
-                                    sessionStorage.setItem('employeeRowsPerPage', val);
+                                    localStorage.setItem('employeeRowsPerPage', val);
                                     setCurrentPage(1);
                                 }}
                                 className="bg-white border border-gray-200 text-gray-700 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 cursor-pointer font-medium"

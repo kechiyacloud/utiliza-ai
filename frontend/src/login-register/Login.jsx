@@ -41,8 +41,8 @@ function Login() {
         throw new Error("Login failed: no token received from server")
       }
 
-      sessionStorage.setItem("token", response.data.token);
-      sessionStorage.setItem("userEmail", formData.email);
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("userEmail", formData.email);
       navigate("/info")
 
     } catch (err) {
@@ -116,8 +116,8 @@ function Login() {
         <button
           type="button"
           onClick={() => {
-            sessionStorage.setItem("token", "fake-token");
-            sessionStorage.setItem("userEmail", "dev@utilizai.local");
+            localStorage.setItem("token", "fake-token");
+            localStorage.setItem("userEmail", "dev@utilizai.local");
             navigate("/info");
           }}
           className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 hover:text-CD_Blue transition-colors"

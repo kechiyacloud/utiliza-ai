@@ -8,6 +8,33 @@ import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
 
+const normalizeDate = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value.slice(0, 10);
+    try {
+        return new Date(value).toISOString().slice(0, 10);
+    } catch {
+        return '';
+    }
+};
+
+const normalizeEmploymentType = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'Full Time';
+    if (normalized === 'fte' || normalized === 'full-time' || normalized === 'full time') return 'Full Time';
+    if (normalized === 'intern') return 'Intern';
+    if (normalized === 'consultant') return 'Consultant';
+    return 'Contract';
+};
+
+const normalizeWorkMode = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'Hybrid';
+    if (normalized === 'onsite' || normalized === 'office') return 'Office';
+    if (normalized === 'remote') return 'Remote';
+    return 'Hybrid';
+};
+
 const AddEmployee = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -62,39 +89,13 @@ const AddEmployee = () => {
         notice_end_date: '',
         skills: [],
         certificates: [], // Array of {name: '', file: null, fileData: ''}
+        shift: '',
 
         // Projects - now array for multiple projects
         projects: []
     });
 
     useEffect(() => {
-        const normalizeDate = (value) => {
-            if (!value) return '';
-            if (typeof value === 'string') return value.slice(0, 10);
-            try {
-                return new Date(value).toISOString().slice(0, 10);
-            } catch {
-                return '';
-            }
-        };
-
-        const normalizeEmploymentType = (value) => {
-            const normalized = String(value || '').trim().toLowerCase();
-            if (!normalized) return 'Full Time';
-            if (normalized === 'fte' || normalized === 'full-time' || normalized === 'full time') return 'Full Time';
-            if (normalized === 'intern') return 'Intern';
-            if (normalized === 'consultant') return 'Consultant';
-            return 'Contract';
-        };
-
-        const normalizeWorkMode = (value) => {
-            const normalized = String(value || '').trim().toLowerCase();
-            if (!normalized) return 'Hybrid';
-            if (normalized === 'onsite' || normalized === 'office') return 'Office';
-            if (normalized === 'remote') return 'Remote';
-            return 'Hybrid';
-        };
-
         const applyEditData = (source) => {
             if (!source) return;
 
@@ -115,6 +116,7 @@ const AddEmployee = () => {
                 location: source.status?.location || source.location || '',
                 work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
                 employee_status: source.status?.allocated || source.employee_status || 'Bench',
+                shift: source.shift || '',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
                 reporting_manager_id: source.reporting_manager_id || '',
                 date_of_resign: normalizeDate(source.date_of_resign),
@@ -443,7 +445,8 @@ const AddEmployee = () => {
             formData.department &&
             formData.location &&
             formData.work_mode &&
-            formData.employment_type
+            formData.employment_type &&
+            formData.shift?.trim()
         );
     };
 
@@ -504,8 +507,9 @@ const AddEmployee = () => {
                 employment_type: formData.employment_type,
                 location: formData.location,
                 work_mode: formData.work_mode,
-                employee_status: formData.employee_status,
-                employee_allocations: formData.employee_allocations,
+                employee_status: formData.employee_status || 'Bench',
+                shift: formData.shift || '',
+                employee_allocations: formData.employee_allocations || 0,
                 reporting_manager_id: formData.reporting_manager_id || null,
                 date_of_resign: formData.date_of_resign || null,
                 pip_start_date: formData.pip_start_date || null,
@@ -777,6 +781,17 @@ const AddEmployee = () => {
             </div>
 
             <div className="grid grid-cols-3 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Shift Timing <span className="text-red-500">*</span></label>
+                    <input
+                        type="text"
+                        name="shift"
+                        value={formData.shift}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 9:00 AM - 6:00 PM"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Work Mode</label>
                     <select
@@ -1052,7 +1067,7 @@ const AddEmployee = () => {
 
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Project</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Project <span className="text-red-500">*</span></label>
                         <select
                             value={currentProject.project_id}
                             onChange={(e) => handleProjectChange('project_id', e.target.value)}
@@ -1069,7 +1084,7 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project <span className="text-red-500">*</span></label>
                             <input
                                 type="text"
                                 value={currentProject.project_role}
@@ -1079,7 +1094,7 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day <span className="text-red-500">*</span></label>
                             <input
                                 type="number"
                                 value={currentProject.daily_hours}
@@ -1091,7 +1106,7 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation % <span className="text-red-500">*</span></label>
                             <input
                                 type="number"
                                 value={currentProject.project_allocation}
@@ -1105,7 +1120,7 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date <span className="text-red-500">*</span></label>
                             <input
                                 type="date"
                                 value={currentProject.project_start_date}
@@ -1238,6 +1253,7 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Work Mode:</span> {formData.work_mode || 'N/A'}</div>
                     <div><span className="font-semibold">Employment Type:</span> {formData.employment_type || 'N/A'}</div>
                     <div><span className="font-semibold">Status:</span> <span className={`px-2 py-1 rounded text-xs ${formData.employee_status === 'Allocated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{formData.employee_status}</span></div>
+                    <div><span className="font-semibold">Shift:</span> {formData.shift || 'N/A'}</div>
                     <div><span className="font-semibold">Allocation:</span> {formData.employee_allocations}%</div>
                     <div><span className="font-semibold">Reporting Manager:</span> {formData.reporting_manager_id ? (() => { const mgr = allEmployees.find(e => e.employee_id === formData.reporting_manager_id); return mgr ? `${mgr.employee_name} (${mgr.employee_id})` : formData.reporting_manager_id; })() : 'N/A'}</div>
                 </div>
@@ -1251,7 +1267,7 @@ const AddEmployee = () => {
                         </div>
                     </div>
                 )}
-                {formData.certificates.length > 0 && (
+                {formData.certificates.length > 0 ? (
                     <div className="mt-3">
                         <span className="font-semibold text-sm">Certificates:</span>
                         <ul className="list-disc list-inside mt-1 text-sm text-gray-600">
@@ -1259,6 +1275,11 @@ const AddEmployee = () => {
                                 <li key={i}>{cert.name} {cert.file && <span className="text-xs text-green-600">✓</span>}</li>
                             ))}
                         </ul>
+                    </div>
+                ) : (
+                    <div className="mt-3">
+                        <span className="font-semibold text-sm">Certificates:</span>
+                        <p className="mt-1 text-sm text-gray-500 italic">No certification</p>
                     </div>
                 )}
             </div>

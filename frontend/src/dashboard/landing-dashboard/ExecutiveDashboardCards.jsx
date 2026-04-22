@@ -54,7 +54,7 @@ const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
                 subtext={data.totalEmployees?.change}
                 colorTheme="slate"
                 onClick={() => {
-                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    localStorage.setItem('returnToDashboardCards', 'true');
                     navigate('/info/employees/list', { 
                         state: { 
                             showBack: true,
@@ -71,7 +71,7 @@ const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
                 subtext={data.activeClients?.change}
                 colorTheme="blue"
                 onClick={() => {
-                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    localStorage.setItem('returnToDashboardCards', 'true');
                     navigate('/info/client', { 
                         state: { 
                             showBack: true,
@@ -89,7 +89,7 @@ const ExecutiveDashboardCards = ({ data, selectedDepartments }) => {
                 alertCount={data.runningProjects?.alertCount}
                 colorTheme="amber"
                 onClick={() => {
-                    sessionStorage.setItem('returnToDashboardCards', 'true');
+                    localStorage.setItem('returnToDashboardCards', 'true');
                     navigate('/info/projects', { 
                         state: { 
                             showBack: true,

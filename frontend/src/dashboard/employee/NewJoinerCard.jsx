@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserSearch } from 'lucide-react';
+import { UserSearch, Users } from 'lucide-react';
 
 const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);

@@ -30,13 +30,13 @@ function isTokenValid(token) {
 }
 
 function ProtectedRoute() {
-  const token = sessionStorage.getItem('token')
+  const token = localStorage.getItem('token')
 
   if (!isTokenValid(token)) {
     // Remove any stale / expired / malformed token so the login page
     // starts fresh and the user is not confused by a lingering entry.
-    sessionStorage.removeItem('token')
-    sessionStorage.removeItem('userEmail')
+    localStorage.removeItem('token')
+    localStorage.removeItem('userEmail')
     return <Navigate to="/" replace />
   }
 

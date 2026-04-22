@@ -9,11 +9,11 @@ const EXPORT_COLUMNS = [
     { key: 'department', label: 'Department' },
     { key: 'role_designation', label: 'Designation' },
     { key: 'location', label: 'Location' },
-    { key: 'mode_of_work', label: 'Work Mode' },
     { key: 'employee_status', label: 'Status' },
+    { key: 'billable', label: 'Billing Status' },
     { key: 'employee_type', label: 'Employment Type' },
     { key: 'date_of_joining', label: 'Joining Date' },
-    { key: 'total_experience', label: 'Years of Exp' },
+    { key: 'employee_allocations', label: 'Allocation %' },
     { key: 'skills', label: 'Skills' },
 ];
 

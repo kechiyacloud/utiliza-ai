@@ -1,8 +1,23 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
-from app.database import get_db_connection, release_db_connection
+from fastapi import APIRouter, HTTPException, Query, Body
+from typing import Optional, List, Dict
+from datetime import datetime, date
+import calendar
+from pydantic import BaseModel
+from app.database import get_db_connection, release_db_connection, db_cursor
+from app.routers.allocation_utils import (
+    TeamMemberCreate, _save_single_resource, _resolve_employee_id,
+    _fetch_existing_weekly_load, _available_capacity_pct, _normalize_text
+)
 
 router = APIRouter(prefix="/allocations", tags=["Allocations"])
+
+class ImportAllocationsRequest(BaseModel):
+    records: List[Dict]
+    dry_run: bool = True
+    import_mode: str = "monthly"  # "monthly" | "bulk"
+    import_scope: str = "department" # "department" | "project"
+    selected_month: Optional[str] = None # "YYYY-MM"
+    scope_value: Optional[str] = None
 
 
 @router.get("/metrics")
@@ -14,153 +29,141 @@ def allocation_metrics(
     """
     Returns all 6 info-card metrics for the Allocation page,
     filtered by department, resource type, and location.
+    Optimized: single CTE query replaces 5-6 sequential queries and eliminates
+    the N+1 correlated subquery in bench-strength calculation.
     """
     conn = get_db_connection()
     cur = conn.cursor()
 
     try:
-        # Build base WHERE clauses for employee filtering
-        where_clauses = []
+        # --- Build shared filter fragments ---
+        emp_filters = ["em.date_of_resign IS NULL", "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
         params = []
-        
+
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
-            where_clauses.append("em.department = ANY(%s)")
+            emp_filters.append("em.department = ANY(%s)")
             params.append(dept_list)
         if location and location != 'All Locations':
-            where_clauses.append("em.location = %s")
+            emp_filters.append("em.location = %s")
             params.append(location)
 
-        # 1. Total Resources (Active employees only)
-        tr_query = "SELECT COUNT(*) FROM employee_master em WHERE em.date_of_resign IS NULL"
-        tr_where = list(where_clauses)
-        tr_params = list(params)
-        
+        emp_where = " AND ".join(emp_filters)
+
+        # Resource-type row-level pre-filter (injected as f-string, no extra params).
+        # Bench Strength is handled purely via conditional aggregation in the outer SELECT.
+        rt_filter = ""
         if resource_type == 'Billable Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
-            tr_params.append('%billab%')
+            rt_filter = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_rt
+                    WHERE pa_rt.employee_id = em.employee_id
+                      AND pa_rt.project_tags ILIKE '%%billab%%'
+                      AND pa_rt.project_tags NOT ILIKE '%%non%%'
+                      AND (pa_rt.allocation_end_date IS NULL OR pa_rt.allocation_end_date >= CURRENT_DATE)
+                )"""
         elif resource_type == 'Internal Only':
-            tr_where.append("EXISTS (SELECT 1 FROM projects_allocation pa WHERE pa.employee_id = em.employee_id AND pa.project_tags ILIKE %s AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE))")
-            tr_params.append('%non%billab%')
-        elif resource_type == 'Bench Strength':
-            tr_where.append("COALESCE((SELECT SUM(pa3.allocation_percentage) FROM projects_allocation pa3 JOIN projects pj3 ON pa3.project_id = pj3.project_id WHERE pa3.employee_id = em.employee_id AND pa3.allocation_start_date <= CURRENT_DATE AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE) AND LOWER(pj3.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')), 0) <= 0")
-            
-        if tr_where:
-            tr_query += " AND " + " AND ".join(tr_where)
-        cur.execute(tr_query, tuple(tr_params))
-        total_resources = cur.fetchone()[0]
+            rt_filter = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_rt
+                    WHERE pa_rt.employee_id = em.employee_id
+                      AND pa_rt.project_tags ILIKE '%%non%%billab%%'
+                      AND (pa_rt.allocation_end_date IS NULL OR pa_rt.allocation_end_date >= CURRENT_DATE)
+                )"""
 
-        # 2. Billable Count (Headcount with Billable tag)
-        billable_query = """
-            SELECT COUNT(DISTINCT pa.employee_id)
-            FROM projects_allocation pa
-            JOIN employee_master em ON pa.employee_id = em.employee_id
-            WHERE pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s
-              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-              AND em.date_of_resign IS NULL
-        """
-        b_where = list(where_clauses)
-        b_params = ['%billab%', '%non%'] + list(params)
-        
-        if resource_type == 'Bench Strength':
-             b_where.append("1=0")
-        if b_where:
-            billable_query += " AND " + " AND ".join(b_where)
-        cur.execute(billable_query, tuple(b_params))
-        billable_count = cur.fetchone()[0]
-
-        # 3. Non-Billable Count (Headcount with Non-Billable tag)
-        non_billable_query = """
-            SELECT COUNT(DISTINCT pa.employee_id)
-            FROM projects_allocation pa
-            JOIN employee_master em ON pa.employee_id = em.employee_id
-            WHERE pa.project_tags ILIKE %s
-              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-              AND em.date_of_resign IS NULL
-        """
-        nb_where = list(where_clauses)
-        nb_params = ['%non%billab%'] + list(params)
-        
-        if resource_type == 'Bench Strength':
-             nb_where.append("1=0")
-        if nb_where:
-            non_billable_query += " AND " + " AND ".join(nb_where)
-        cur.execute(non_billable_query, tuple(nb_params))
-        non_billable_count = cur.fetchone()[0]
-
-        # 4. Bench Strength
-        bench_query = """
-            SELECT COUNT(*) FROM employee_master em
-            LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
-            WHERE em.date_of_resign IS NULL
-              AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 JOIN projects pj2 ON pa2.project_id = pj2.project_id WHERE pa2.employee_id = em.employee_id AND pa2.allocation_start_date <= CURRENT_DATE AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE) AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')), 0) <= 0
-        """
-        ben_where = list(where_clauses)
-        if resource_type == 'Billable Only' or resource_type == 'Internal Only':
-             ben_where.append("1=0")
-        if ben_where:
-            bench_query += " AND " + " AND ".join(ben_where)
-        cur.execute(bench_query, tuple(params))
-        bench_strength = cur.fetchone()[0]
-
-        # 5. Avg Utilization
-        if resource_type == 'Bench Strength':
-             avg_utilization = 0
-        else:
-            # Use a robust LEFT JOIN to accurately calculate average utilization 
-            # across the filtered employee set, ensuring numerator and denominator stay in sync.
-            util_where_clause = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-            util_query = f"""
-                SELECT 
-                    COALESCE(SUM(pa.allocation_percentage), 0)::FLOAT / 
-                    NULLIF(COUNT(DISTINCT em.employee_id), 0)
+        # -----------------------------------------------------------------------
+        # Single CTE query – all 6 metrics in one round-trip
+        #
+        # ActiveAlloc : materialises every employee's active allocation stats ONCE
+        #               (eliminates the N+1 correlated subquery for bench detection)
+        # EmpBase     : filtered active employee roster
+        # Final SELECT: derives all 6 metrics via conditional aggregation
+        # -----------------------------------------------------------------------
+        query = f"""
+            WITH ActiveAlloc AS (
+                SELECT
+                    pa.employee_id,
+                    SUM(pa.allocation_percentage) AS total_pct,
+                    SUM(CASE
+                        WHEN pa.project_tags ILIKE '%%billab%%'
+                         AND pa.project_tags NOT ILIKE '%%non%%'
+                        THEN pa.allocation_percentage ELSE 0
+                    END) AS billable_pct,
+                    SUM(CASE
+                        WHEN pa.project_tags ILIKE '%%non%%billab%%'
+                        THEN pa.allocation_percentage ELSE 0
+                    END) AS non_billable_pct,
+                    MAX(CASE
+                        WHEN pa.project_tags ILIKE '%%billab%%'
+                         AND pa.project_tags NOT ILIKE '%%non%%'
+                        THEN 1 ELSE 0
+                    END) AS has_billable,
+                    MAX(CASE
+                        WHEN pa.project_tags ILIKE '%%non%%billab%%'
+                        THEN 1 ELSE 0
+                    END) AS has_non_billable
+                FROM projects_allocation pa
+                JOIN projects pj ON pa.project_id = pj.project_id
+                WHERE pa.allocation_start_date <= CURRENT_DATE
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                GROUP BY pa.employee_id
+            ),
+            EmpBase AS (
+                SELECT em.employee_id
                 FROM employee_master em
-                LEFT JOIN projects_allocation pa ON em.employee_id = pa.employee_id 
-                    AND pa.allocation_start_date <= CURRENT_DATE
-                    AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                LEFT JOIN projects pj ON pa.project_id = pj.project_id
-                {util_where_clause}
-                {" AND " if util_where_clause else " WHERE "} (pj.project_id IS NULL OR LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))
-            """
-            cur.execute(util_query, tuple(params))
-            avg_utilization_val = cur.fetchone()[0]
-            avg_utilization = round(float(avg_utilization_val or 0), 2)
+                WHERE {emp_where}
+                {rt_filter}
+            )
+            SELECT
+                COUNT(DISTINCT eb.employee_id)                                                          AS total_resources,
+                COUNT(DISTINCT CASE WHEN COALESCE(aa.has_billable, 0) = 1
+                                    THEN eb.employee_id END)                                            AS billable_count,
+                COUNT(DISTINCT CASE WHEN COALESCE(aa.has_non_billable, 0) = 1
+                                    THEN eb.employee_id END)                                            AS non_billable_count,
+                COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) <= 0
+                                    THEN eb.employee_id END)                                            AS bench_strength,
+                ROUND(
+                    COALESCE(SUM(COALESCE(aa.total_pct, 0)), 0)::NUMERIC /
+                    NULLIF(COUNT(DISTINCT eb.employee_id), 0),
+                2)                                                                                      AS avg_utilization,
+                COUNT(DISTINCT CASE WHEN COALESCE(aa.billable_pct, 0) > 100
+                                    THEN eb.employee_id END)                                            AS overallocated
+            FROM EmpBase eb
+            LEFT JOIN ActiveAlloc aa ON aa.employee_id = eb.employee_id
+        """
 
-        # 6. Overallocated
-        if resource_type == 'Bench Strength' or resource_type == 'Internal Only':
-             overallocated = 0
+        cur.execute(query, tuple(params))
+        row = cur.fetchone()
+
+        (
+            total_resources,
+            billable_count,
+            non_billable_count,
+            bench_strength,
+            avg_utilization_raw,
+            overallocated,
+        ) = row
+
+        # Apply resource_type suppression rules for semantically invalid metrics
+        if resource_type == 'Bench Strength':
+            billable_count     = 0
+            non_billable_count = 0
+            avg_utilization    = 0
+            overallocated      = 0
+        elif resource_type == 'Internal Only':
+            overallocated   = 0
+            avg_utilization = round(float(avg_utilization_raw or 0), 2)
         else:
-            overalloc_query = """
-                SELECT COUNT(*) FROM (
-                    SELECT pa.employee_id
-                    FROM projects_allocation pa
-                    JOIN projects pj ON pa.project_id = pj.project_id
-                    JOIN employee_master em ON pa.employee_id = em.employee_id
-                    WHERE pa.project_tags ILIKE %s AND pa.project_tags NOT ILIKE %s
-
-                      AND pa.allocation_start_date <= CURRENT_DATE
-                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                    {0}
-                    GROUP BY pa.employee_id
-                    HAVING SUM(pa.allocation_percentage) > 100
-                ) overalloc
-            """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
-            over_params = list(params)
-            over_params.insert(0, '%billable%')
-            over_params.insert(1, '%non%billab%')
-            cur.execute(overalloc_query, tuple(over_params))
-
-            row = cur.fetchone()
-            overallocated = row[0] if row else 0
+            avg_utilization = round(float(avg_utilization_raw or 0), 2)
 
         return {
-            "totalResources": {"value": total_resources, "label": "Total Resources"},
-            "billable":       {"value": billable_count,   "label": "Billable Count"},
-            "nonBillable":    {"value": non_billable_count, "label": "Non-Billable"},
-            "benchStrength":  {"value": bench_strength,   "label": "Bench Strength"},
+            "totalResources": {"value": total_resources,      "label": "Total Resources"},
+            "billable":       {"value": billable_count,        "label": "Billable Count"},
+            "nonBillable":    {"value": non_billable_count,    "label": "Non-Billable"},
+            "benchStrength":  {"value": bench_strength,        "label": "Bench Strength"},
             "avgUtilization": {"value": f"{avg_utilization}%", "label": "Avg Utilization"},
-            "overallocated":  {"value": overallocated,    "label": "Overallocated", "isAlert": overallocated > 0}
+            "overallocated":  {"value": overallocated,         "label": "Overallocated", "isAlert": overallocated > 0}
         }
 
     except Exception as e:
@@ -196,7 +199,7 @@ def allocation_projects(
             JOIN employee_master em ON pa.employee_id = em.employee_id
             JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
         """
-        where_clauses = []
+        where_clauses = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
         params = []
         
         if department and department != 'All Departments':
@@ -265,6 +268,7 @@ def project_employees(project_id: str):
             WHERE pa.project_id = %s
               AND pa.allocation_start_date <= CURRENT_DATE
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+              AND (em.is_deleted IS FALSE OR em.is_deleted IS NULL)
               AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ORDER BY em.employee_name
         """, (project_id,))
@@ -314,7 +318,7 @@ def organization_utilization(
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
               AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         """
-        where_clauses = []
+        where_clauses = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
         params = []
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
@@ -333,7 +337,7 @@ def organization_utilization(
              where_clauses.append("ppro.employee_status = 'Bench'")
         
         if where_clauses:
-            util_query += " WHERE " + " AND ".join(where_clauses)
+            util_query += " AND " + " AND ".join(where_clauses)
         
         cur.execute(util_query, tuple(params))
         avg_util = float(cur.fetchone()[0])
@@ -344,7 +348,7 @@ def organization_utilization(
             FROM employee_master_pro p
             JOIN employee_master em ON p.employee_id = em.employee_id
         """
-        where_clauses_b = []
+        where_clauses_b = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
         params_b = []
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
@@ -411,7 +415,7 @@ def department_allocation_breakdown(
     cur = conn.cursor()
 
     try:
-        where_clauses = ["em.date_of_resign IS NULL"]
+        where_clauses = ["em.date_of_resign IS NULL", "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
         params = []
         
         if location and location != 'All Locations':
@@ -497,6 +501,7 @@ def get_forecast_bench(
             JOIN employee_master em ON pa.employee_id = em.employee_id
             JOIN projects p ON pa.project_id = p.project_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+              AND (em.is_deleted IS FALSE OR em.is_deleted IS NULL)
         """
         params = []
         if department and department != 'All Departments':
@@ -638,6 +643,152 @@ def get_possible_projects(employee_id: str):
         print("Possible projects matching error:", e)
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+@router.post("/import")
+def import_allocations(payload: ImportAllocationsRequest = Body(...)):
+    """
+    Handles bulk/monthly allocation imports.
+    Supports dry_run to validate data before committing.
+    """
+    records = payload.records
+    dry_run = payload.dry_run
+    import_mode = payload.import_mode
+    import_scope = payload.import_scope
+    selected_month = payload.selected_month
+    scope_value = payload.scope_value
+
+    # Monthly date range logic
+    month_start = None
+    month_end = None
+    if import_mode == "monthly" and selected_month:
+        try:
+            y_str, m_str = selected_month.split('-')
+            year, month = int(y_str), int(m_str)
+            month_start = date(year, month, 1)
+            last_day = calendar.monthrange(year, month)[1]
+            month_end = date(year, month, last_day)
+        except Exception:
+            raise HTTPException(status_code=422, detail=f"Invalid selected_month format: {selected_month}")
+
+    summary = {
+        "total": len(records),
+        "new": 0,
+        "updated": 0,
+        "over": 0,    # over-allocated (warning/error)
+        "invalid": 0, # not found in DB
+        "details": []
+    }
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        if not dry_run:
+            # Transaction starts
+            # If project scope, we wipe existing project allocations first (as per agreed plan)
+            if import_scope == "project" and scope_value:
+                # Resolve project billability for tag derivation
+                cur.execute("SELECT billable FROM projects WHERE project_id = %s", (scope_value,))
+                proj_row = cur.fetchone()
+                if not proj_row:
+                    raise HTTPException(status_code=404, detail=f"Project {scope_value} not found")
+                
+                # Delete existing
+                cur.execute("""
+                    DELETE FROM weekly_allocations
+                    WHERE allocation_id IN (
+                        SELECT allocation_id FROM projects_allocation WHERE project_id = %s
+                    )
+                """, (scope_value,))
+                cur.execute("DELETE FROM projects_allocation WHERE project_id = %s", (scope_value,))
+
+        for idx, rec in enumerate(records):
+            try:
+                # Prepare TeamMemberCreate payload
+                # Map frontend fields to model fields if different
+                tm_data = {
+                    "employee_id": str(rec.get("employee_id", "")),
+                    "name": rec.get("employee_name", rec.get("name", "Unknown")),
+                    "role": rec.get("role_in_project", rec.get("role", "Developer")),
+                    "allocation_pct": rec.get("allocation_percentage"),
+                    "allocation_start_date": rec.get("allocation_start_date") or (month_start.isoformat() if month_start else None),
+                    "allocation_end_date": rec.get("allocation_end_date") or (month_end.isoformat() if month_end else None),
+                    "location": rec.get("location", "Remote"),
+                    "billable_shadow": rec.get("project_tags", "Billable").capitalize(),
+                    "department": rec.get("department"),
+                    "project_count": rec.get("project_count"),
+                }
+                tm = TeamMemberCreate(**tm_data)
+                
+                p_id = rec.get("project_id") or (scope_value if import_scope == "project" else None)
+                if not p_id:
+                    summary["invalid"] += 1
+                    summary["details"].append({"row": idx+1, "status": "error", "message": "Project ID missing"})
+                    continue
+
+                # Resolve employee
+                emp_id = _resolve_employee_id(cur, tm)
+                if not emp_id:
+                    summary["invalid"] += 1
+                    summary["details"].append({"row": idx+1, "status": "error", "message": f"Employee {tm.name} ({tm.employee_id}) not found"})
+                    continue
+
+                # Check Project & Billability
+                cur.execute("SELECT billable, start_date, end_date FROM projects WHERE project_id = %s", (p_id,))
+                proj_row = cur.fetchone()
+                if not proj_row:
+                    summary["invalid"] += 1
+                    summary["details"].append({"row": idx+1, "status": "error", "message": f"Project {p_id} not found"})
+                    continue
+                
+                project_billable = proj_row[0] or "Billable"
+                p_start, p_end = proj_row[1], proj_row[2]
+
+                # Capacity Check (Dry Run)
+                a_start = month_start or p_start or date.today()
+                a_end = month_end or p_end
+                
+                load = _fetch_existing_weekly_load(cur, emp_id, a_start, a_end)
+                available = _available_capacity_pct(load)
+                
+                status_msg = "new"
+                # Check if already exists in this project
+                cur.execute("SELECT allocation_id FROM projects_allocation WHERE employee_id = %s AND project_id = %s", (emp_id, p_id))
+                exist_alloc = cur.fetchone()
+                if exist_alloc:
+                    status_msg = "updated"
+
+                if not dry_run:
+                    _save_single_resource(
+                        cur, p_id, tm, project_billable,
+                        replace_allocation_id=exist_alloc[0] if exist_alloc else None,
+                        project_start=p_start, project_end=p_end,
+                        validate_capacity=True # Still validate!
+                    )
+                
+                summary[status_msg] += 1
+                if available < tm.allocation_pct:
+                    summary["over"] += 1
+                    summary["details"].append({"row": idx+1, "status": "warning", "message": f"Over-allocation: {emp_id} has only {available}% capacity."})
+                else:
+                    summary["details"].append({"row": idx+1, "status": "success", "message": f"{status_msg.capitalize()} allocation for {emp_id}"})
+
+            except Exception as e:
+                summary["invalid"] += 1
+                summary["details"].append({"row": idx+1, "status": "error", "message": str(e)})
+
+        if not dry_run:
+            conn.commit()
+            
+        return summary
+
+    except Exception as e:
+        if not dry_run:
+            conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()

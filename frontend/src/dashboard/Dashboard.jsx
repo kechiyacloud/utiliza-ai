@@ -220,19 +220,19 @@ function Dashboard() {
     if (!loading) {
       setTimeout(() => {
         let elId = null;
-        if (sessionStorage.getItem('returnToTopPerformers') === 'true') {
+        if (localStorage.getItem('returnToTopPerformers') === 'true') {
           elId = 'dashboard-top-performers';
-          sessionStorage.removeItem('returnToTopPerformers');
-        } else if (sessionStorage.getItem('returnToDashboardCards') === 'true') {
+          localStorage.removeItem('returnToTopPerformers');
+        } else if (localStorage.getItem('returnToDashboardCards') === 'true') {
           elId = 'dashboard-cards';
-          sessionStorage.removeItem('returnToDashboardCards');
-        } else if (sessionStorage.getItem('returnToHighAllocation') === 'true') {
+          localStorage.removeItem('returnToDashboardCards');
+        } else if (localStorage.getItem('returnToHighAllocation') === 'true') {
           elId = 'dashboard-high-allocation';
-          sessionStorage.removeItem('returnToHighAllocation');
-        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true' || sessionStorage.getItem('returnToDashboardOperational') === 'true') {
+          localStorage.removeItem('returnToHighAllocation');
+        } else if (localStorage.getItem('returnToResourceAvailability') === 'true' || localStorage.getItem('returnToDashboardOperational') === 'true') {
           elId = 'dashboard-operational-insights';
-          sessionStorage.removeItem('returnToResourceAvailability');
-          sessionStorage.removeItem('returnToDashboardOperational');
+          localStorage.removeItem('returnToResourceAvailability');
+          localStorage.removeItem('returnToDashboardOperational');
         }
 
         if (elId) {
@@ -292,7 +292,7 @@ function Dashboard() {
   const dynamicKpiData = [
     { 
       title: "Total Employee", 
-      value: _metrics?.total_employees || 0, 
+      value: _metrics?.totalEmployees || 0, 
       subtext: "Across all departments", 
       icon: UsersIcon, 
       color: "text-slate-500", 
@@ -303,8 +303,8 @@ function Dashboard() {
     },
     { 
       title: "Billable Headcount", 
-      value: _metrics?.billable_headcount || 0, 
-      subtext: `out of ${String(_metrics?.total_employees || 0)} total`, 
+      value: _metrics?.billableHeadcount || 0, 
+      subtext: `out of ${String(_metrics?.totalEmployees || 0)} total`, 
       icon: UserCheck, 
       color: "text-blue-500", 
       bg: "bg-blue-50", 
@@ -314,7 +314,7 @@ function Dashboard() {
     },
     { 
       title: "Non-Billable Headcount", 
-      value: _metrics?.internal_headcount || 0, 
+      value: _metrics?.internalHeadcount || 0, 
       subtext: "Internal & Shared services", 
       icon: Activity, 
       color: "text-emerald-500", 
@@ -325,7 +325,7 @@ function Dashboard() {
     },
     { 
       title: "Bench Headcount", 
-      value: _metrics?.bench_headcount || 0, 
+      value: _metrics?.benchHeadcount || 0, 
       subtext: "resources currently idle", 
       icon: UserMinus, 
       color: "text-rose-500", 
@@ -336,7 +336,7 @@ function Dashboard() {
     },
     { 
       title: `${String(contextLabel)} Utilization`, 
-      value: `${_metrics?.company_utilization || 0}%`, 
+      value: `${_metrics?.companyUtilization || 0}%`, 
       subtext: "Target 85%", 
       icon: TrendingUp, 
       color: "text-emerald-500", 
@@ -369,7 +369,7 @@ function Dashboard() {
     },
     { 
       title: "Upcoming Bench (30days)", 
-      value: _metrics?.upcoming_bench || 0, 
+      value: _metrics?.upcomingBench || 0, 
       subtext: "Resources roll-off", 
       icon: Clock, 
       color: "text-amber-500", 
@@ -383,10 +383,10 @@ function Dashboard() {
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
 
   const dynamicAllocationData = [
-    { name: 'Billable', value: _metrics.billable_headcount || 0, color: '#3b82f6' },
-    { name: 'Non-billable', value: _metrics.internal_headcount || 0, color: '#10b981' },
-    { name: 'Bench', value: _metrics.bench_headcount || 0, color: '#f59e0b' },
-    { name: 'Notice Period', value: _metrics.notice_period || 0, color: '#ef4444' },
+    { name: 'Billable', value: _metrics.billableHeadcount || 0, color: '#3b82f6' },
+    { name: 'Non-billable', value: _metrics.internalHeadcount || 0, color: '#10b981' },
+    { name: 'Bench', value: _metrics.benchHeadcount || 0, color: '#f59e0b' },
+    { name: 'Notice Period', value: _metrics.noticePeriod || 0, color: '#ef4444' },
   ].filter(item => item.value > 0);
 
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
@@ -627,7 +627,7 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
-              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
+              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilizationPrediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
               onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
@@ -675,15 +675,15 @@ function Dashboard() {
               </div>
 
               {/* Strategic Predictor Tip */}
-              {data?.executiveMetrics?.utilization_prediction && (
-                <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                  <div className={`mt-0.5 ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+              {data?.executiveMetrics?.utilizationPrediction && (
+                <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                  <div className={`mt-0.5 ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
                     <Trophy size={14} />
                   </div>
                   <div className="flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-tight ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
-                    <p className={`text-[10px] font-bold leading-tight ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-600/80' : 'text-emerald-600/80'}`}>
-                      {data.executiveMetrics.utilization_prediction.tip}
+                    <p className={`text-[10px] font-bold uppercase tracking-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
+                    <p className={`text-[10px] font-bold leading-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-600/80' : 'text-emerald-600/80'}`}>
+                      {data.executiveMetrics.utilizationPrediction.tip}
                     </p>
                   </div>
                   <ChevronRight size={14} className="mt-2 text-slate-400" />
@@ -756,10 +756,10 @@ function Dashboard() {
               skillsGap={data?.skillsGap || []}
               transitions={data?.recentTransitions || []}
               certifications={data?.certificationExpiry || []}
-              benchAging={data?.executiveMetrics?.bench_aging || []}
+              benchAging={data?.executiveMetrics?.benchAging || []}
               highUtilizationEmployee={data?.topPerformers || []}
               highUtilizationProject={data?.highAllocationProjects || []}
-              trends={data?.executiveMetrics?.utilization_trends || []}
+              trends={data?.executiveMetrics?.utilizationTrends || []}
               forcedTab={forcedTab}
             />
           </div>
