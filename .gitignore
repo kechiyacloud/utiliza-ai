@@ -31,6 +31,14 @@ my_book.md
 CLAUDE.md
 env.md
 
+# Debug & test files
+backend/debug_*.py
+backend/test_*.py
+backend/full_test_run.py
+backend/check_db_dates.py
 
+# Scratch folders
+backend/scratch/
+scratch/
 
 

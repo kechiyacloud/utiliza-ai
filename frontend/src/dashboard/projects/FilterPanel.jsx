@@ -69,18 +69,6 @@ const FilterPanel = ({
                 status: value,
                 sowStatus: value === 'In Progress' ? filters.sowStatus : '',
             };
-        } else if (name === 'startDate') {
-            let updatedEndDate = filters.endDate;
-            if (value && updatedEndDate && new Date(value) > new Date(updatedEndDate)) {
-                updatedEndDate = value; // Auto-adjust to prevent invalid overlap
-            }
-            newFilters = { ...filters, startDate: value, endDate: updatedEndDate };
-        } else if (name === 'endDate') {
-            let newEndDate = value;
-            if (filters.startDate && newEndDate && new Date(filters.startDate) > new Date(newEndDate)) {
-                newEndDate = filters.startDate; // Auto-adjust
-            }
-            newFilters = { ...filters, endDate: newEndDate };
         } else {
             newFilters = { ...filters, [name]: value };
         }
@@ -243,9 +231,9 @@ const FilterPanel = ({
                                     <input
                                         type="date"
                                         name="startDate"
-                                        value={filters.startDate}
+                                        value={filters.startDate || ''}
                                         onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
                                     />
                                 </div>
 
@@ -255,10 +243,9 @@ const FilterPanel = ({
                                     <input
                                         type="date"
                                         name="endDate"
-                                        value={filters.endDate}
-                                        min={filters.startDate || undefined}
+                                        value={filters.endDate || ''}
                                         onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
                                     />
                                 </div>
                             </div>
@@ -281,8 +268,8 @@ const FilterPanel = ({
                                         startDate: '',
                                         endDate: ''
                                     });
-                                    onClearFilters?.();
-                                    onClose();
+                                    // Removed onClearFilters?() and onClose() to keep panel open 
+                                    // and prevent unwanted navigation/reload per user request
                                 }}
                                 className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
                                 type="button"

@@ -1,34 +1,34 @@
 import React from 'react';
-import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers, AlertTriangle } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Briefcase, Radio, Globe, ArrowLeft, CheckCircle, CalendarClock, ChevronDown, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const StatCard = ({ label, value, icon: IconComponent, onClick, active, indicators = [] }) => {
     return (
         <div
             onClick={onClick}
-            className={`rounded-xl p-3.5 border transition-all duration-500 flex flex-col justify-between min-h-[96px] shadow-sm relative group ${
-                onClick ? 'cursor-pointer hover:border-blue-200 hover:shadow-md' : 'cursor-default'
+            className={`rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between min-h-[100px] shadow-sm relative group ${
+                onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30' : 'cursor-default'
             } ${active
-                    ? 'bg-blue-50/30 border-blue-500 ring-2 ring-blue-100 ring-offset-0'
-                    : 'bg-white border-slate-100'
+                    ? 'bg-blue-50/80 border-blue-400 shadow-sm ring-2 ring-blue-100'
+                    : 'bg-white border-slate-200'
                 }`}
         >
-            <div className="flex justify-between items-start flex-row-reverse w-full">
-                <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${active ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-opacity'}`}>
-                    <IconComponent size={16} />
+            <div className="flex items-center justify-between w-full mb-3">
+                <p className={`text-2xl font-bold transition-colors ${active ? 'text-blue-700' : 'text-slate-900 group-hover:text-blue-700'}`}>
+                    {value}
+                </p>
+                <div className={`p-2 rounded-xl transition-all ${active ? 'bg-blue-100 text-blue-700' : 'bg-slate-50 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-700'}`}>
+                    <IconComponent size={20} strokeWidth={2.5} />
                 </div>
-                {active && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse absolute top-4 left-4"></div>
-                )}
             </div>
 
-            <div className="flex flex-col mt-auto">
-                <div className="flex items-baseline gap-2">
-                    <p className={`text-xl font-semibold transition-colors ${active ? 'text-blue-700' : 'text-gray-800'}`}>
-                        {value}
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                    <p className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${active ? 'text-blue-600/80' : 'text-slate-500 group-hover:text-blue-600/80'}`}>
+                        {label}
                     </p>
                     {indicators.length > 0 && (
-                        <div className="flex items-center gap-1.5 ml-1">
+                        <div className="flex items-center gap-1.5">
                             {indicators.map((ind, i) => (
                                 <button
                                     key={i}
@@ -46,9 +46,6 @@ const StatCard = ({ label, value, icon: IconComponent, onClick, active, indicato
                         </div>
                     )}
                 </div>
-                <p className="text-sm font-medium text-slate-500">
-                    {label}
-                </p>
             </div>
         </div>
     );
@@ -63,30 +60,27 @@ const ProjectsOverview = ({
     departments = []
 }) => {
     const navigate = useNavigate();
-    const location = useLocation();
 
     if (!stats) return null;
 
-
     return (
         <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Header with Title and Actions */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                    {location.state?.showBack && (
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
-                            title="Go Back"
-                        >
-                            <ArrowLeft size={20} className="text-gray-600" />
-                        </button>
-                    )}
-                    <div>
-                        <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">Projects Overview</h1>
-                        <p className="text-slate-500 text-sm mt-1 font-normal">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2.5 hover:bg-slate-200 bg-white shadow-md border border-slate-100 rounded-full transition-all hover:scale-110 active:scale-95 flex-shrink-0"
+                        title="Go Back"
+                    >
+                        <ArrowLeft size={22} className="text-slate-700" />
+                    </button>
+                    <div className="flex flex-col gap-0.5">
+                        <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">Projects Overview</h1>
+                        <p className="text-slate-500 text-sm font-medium">
                             {(() => {
                                 if (!selectedDepartment || selectedDepartment === 'All Departments' || selectedDepartment === '') {
-                                    return 'All Organization Projects';
+                                    return 'Complete Organizational Project Insights';
                                 }
                                 const deptObj = departments.find(d => String(d.id) === String(selectedDepartment) || d.name === selectedDepartment);
                                 return `${deptObj ? deptObj.name : selectedDepartment} Department`;
@@ -95,7 +89,7 @@ const ProjectsOverview = ({
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     {/* Department Filter Dropdown */}
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
@@ -118,19 +112,21 @@ const ProjectsOverview = ({
 
                     <button
                         onClick={() => navigate('/info/projects/add')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5 ml-1"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-100 hover:-translate-y-0.5"
                     >
                         <span>+</span> Add New Project
                     </button>
                 </div>
             </div>
 
-            {/* Metric Cards Grid - Responsive wrapping, no scroll */}
+            {/* Metric Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
                 <StatCard
                     label="Total Projects"
                     value={stats.totalProjects}
                     icon={Briefcase}
+                    active={activeFilter === null}
+                    onClick={() => onFilterChange(null)}
                 />
                 <StatCard
                     label="External Projects"

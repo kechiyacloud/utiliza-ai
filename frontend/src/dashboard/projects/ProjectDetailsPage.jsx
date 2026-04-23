@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDataRefresh } from '../../context';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, Edit2, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
 import { clearDashboardCache } from '../../api/dashboardApi';
@@ -903,10 +903,20 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
 
     const handleAdd = () => {
         if (!selectedEmps.length) return;
+        const todayStr = new Date().toISOString().split('T')[0];
         selectedEmps.forEach(({ emp, role, allocationPct: pct }) => {
             const safePct = Math.min(100, Math.max(2.5, Number(pct) || 2.5));
             const hrs = Math.max(1, Math.round((safePct * 40) / 100));
-            onAdd({ employee_id: emp.employee_id, name: emp.employee_name || emp.name || '', role: role || 'No role assigned', allocation_pct: safePct, w1: hrs, w2: hrs, w3: hrs, w4: hrs });
+            onAdd({ 
+                employee_id: emp.employee_id, 
+                name: emp.employee_name || emp.name || '', 
+                role: role || 'No role assigned', 
+                allocation_pct: safePct, 
+                allocation_start_date: todayStr,
+                allocation_end_date: '',
+                isNew: true,
+                w1: hrs, w2: hrs, w3: hrs, w4: hrs 
+            });
         });
         setConfirmed(true);
         confirmTimerRef.current = setTimeout(onClose, 2200);
@@ -1116,9 +1126,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     }, [localRows]);
 
     const handleAddRow = () => {
+        const todayStr = new Date().toISOString().split('T')[0];
         const nextRows = [...localRows, normalizeAllocationRow({ 
             name: '', 
             role: '', 
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
             w1: '', 
             w2: '', 
             w3: '', 
@@ -1130,10 +1143,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     };
 
     const handleInsertRowAfter = (index) => {
+        const todayStr = new Date().toISOString().split('T')[0];
         const newRows = [...localRows];
         newRows.splice(index + 1, 0, normalizeAllocationRow({ 
             name: '', 
             role: '', 
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
             w1: '', 
             w2: '', 
             w3: '', 
@@ -1213,6 +1229,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     const handleEmployeeSelect = (employee, rowIndex) => {
         const empId = employee.employee_id || employee.id;
         const empName = employee.employee_name || employee.name;
+        const empRole = employee.role || employee.role_designation || 'No role assigned';
         const allocationPct = 100;
         const hours = Math.round((allocationPct / 100) * WEEK_DEFAULT_HOURS);
 
@@ -1220,6 +1237,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         const currentRow = { ...(newRows[rowIndex] || {}) };
         currentRow.employee_id = empId;
         currentRow.name = empName;
+        currentRow.role = empRole;
+        
+        // Default Start Date to today if not set
+        if (!currentRow.allocation_start_date) {
+            currentRow.allocation_start_date = new Date().toISOString().split('T')[0];
+        }
+
         currentRow.allocation_pct = allocationPct;
         currentRow.weekly_hours = {
             ...currentRow.weekly_hours,
@@ -1387,11 +1411,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     };
 
     const handleBulkConfirm = (selectedEmployees, bulkHours) => {
-        const newResources = selectedEmployees.map(emp => ({
+        const todayStr = new Date().toISOString().split('T')[0];
+        const newResources = selectedEmployees.map(emp => normalizeAllocationRow({
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            role: emp.role_designation,
-            ...normalizeAllocationRow(bulkHours)
+            role: emp.role_designation || emp.role || 'No role assigned',
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
+            isNew: true,
+            ...bulkHours
         }));
         const nextRows = [...localRows, ...newResources];
         setLocalRows(nextRows);
@@ -1740,8 +1768,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. Start</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. End</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[100px]">
-                                        Allocation
-                                        <span className="ml-1 font-normal text-slate-400 normal-case">(100%=40h)</span>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span>Allocation</span>
+                                            <span className="font-normal text-slate-400 normal-case text-[10px] leading-tight">(100% = 40h)</span>
+                                        </div>
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
                                     {visibleWeeks.map((wk) => (
@@ -1844,12 +1874,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     </td>
                                     <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
                                         {isEditing ? (
-                                            <SearchableDropdown 
-                                                items={rolesList.map(r => ({ id: r, name: r }))}
-                                                selectedId={row.role || ''} 
-                                                onSelect={(roleObj) => handleRowChange(ridx, 'role', roleObj.name || 'No role assigned')}
-                                                placeholder="Select Role"
-                                                label="Role"
+                                            <input 
+                                                type="text" 
+                                                value={row.role || 'No role assigned'} 
+                                                readOnly 
+                                                title="Role is auto-assigned based on resource"
+                                                className="w-full px-2 py-1.5 text-[11px] border rounded border-gray-200 outline-none bg-slate-50 text-slate-500 font-bold cursor-not-allowed shadow-sm" 
                                             />
                                         ) : (
                                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
@@ -1859,7 +1889,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
                                         {canEditStartDate ? (
-                                            <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                            <input 
+                                                type="date" 
+                                                value={row.allocation_start_date || ''} 
+                                                min={row.isNew ? new Date().toISOString().split('T')[0] : undefined}
+                                                onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} 
+                                                className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" 
+                                            />
                                         ) : (
                                             row.allocation_start_date || '-'
                                         )}
@@ -1871,7 +1907,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                             row.allocation_end_date || '-'
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-slate-600 text-xs min-w-[100px]">
+                                    <td className="px-4 py-2 text-slate-600 text-xs min-w-[100px]">
                                         {isEditing ? (
                                             <div className="flex items-center gap-1 justify-center">
                                                 <input
@@ -2047,7 +2083,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={5}>
                                 Total
                             </td>
-                            <td></td> { /* Resource Type placeholder */ }
+                            <td></td>{ /* Resource Type placeholder */ }
                             {columnTotals.map((total, idx) => (
                                 <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${
                                     viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' : 
@@ -2152,7 +2188,7 @@ const getStatusBadgeClasses = (status, pct) => {
     return 'bg-rose-50 text-rose-700 border-rose-100';
 };
 
-const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
+const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate }) => {
     const headcount = resources.length;
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeRaw = project?.type || project?.project_type || '';
@@ -2161,16 +2197,42 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     
+    const [isEditingDept, setIsEditingDept] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    
     const progressPct = calculateProjectProgress(project);
     const statusClasses = getStatusBadgeClasses(projectStatus, progressPct);
+    
+    const currentDept = departments.find(d => String(d.id) === String(project.department_id));
+    const deptDisplayName = currentDept ? currentDept.name : (project.department_name || 'No Department');
+
+    const handleDeptChange = async (newDeptId) => {
+        if (!newDeptId || String(newDeptId) === String(project.department_id)) {
+            setIsEditingDept(false);
+            return;
+        }
+        
+        setIsSaving(true);
+        try {
+            await axios.put(`/projects/${project.project_id || project.id}/details`, {
+                department_id: newDeptId
+            });
+            if (onUpdate) await onUpdate();
+        } catch (err) {
+            console.error("Failed to update department:", err);
+        } finally {
+            setIsSaving(false);
+            setIsEditingDept(false);
+        }
+    };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card">
-            <div className="flex items-start gap-4 w-full md:w-auto min-w-0">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-start gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card flex-1 w-full">
+            <div className="flex items-start gap-4 flex-1 min-w-0 w-full">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
                     {avatarLetter}
                 </div>
-                <div className="min-w-0">
+                <div className="flex-1 min-w-0">
                     <h1 className="text-2xl font-black text-slate-800 leading-tight truncate">{projectName}</h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="px-2 py-1 rounded-full text-[11px] font-bold border bg-slate-50 text-slate-700 border-slate-200">
@@ -2183,13 +2245,43 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
                             <Briefcase size={14} className="text-slate-400" />
                             {project.client_name || project.client || 'No client selected'}
                         </span>
-                        <div className="ml-2 flex items-center gap-3">
-
+                        
+                        <div className="flex items-center gap-2 ml-1">
                             {headcount > 0 && (
-                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 flex items-center gap-1.5">
+                                    <Users size={12} />
                                     {headcount} Team Members
                                 </span>
                             )}
+
+                            {/* DEPARTMENT TAG - EDITABLE */}
+                            <div className="relative group/dept">
+                                {isEditingDept ? (
+                                    <select
+                                        autoFocus
+                                        className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-300 transition-all cursor-pointer"
+                                        value={project.department_id || ''}
+                                        onChange={(e) => handleDeptChange(e.target.value)}
+                                        onBlur={() => setIsEditingDept(false)}
+                                        disabled={isSaving}
+                                    >
+                                        <option value="">Select Department</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <button
+                                        onClick={() => setIsEditingDept(true)}
+                                        className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-100 transition-all flex items-center gap-1.5"
+                                        title="Click to edit department"
+                                    >
+                                        <Activity size={12} className="text-indigo-400" />
+                                        {deptDisplayName}
+                                        <Edit2 size={10} className="ml-0.5 opacity-0 group-hover/dept:opacity-100 transition-opacity" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                     {/* PROJECT SKILLS DISPLAY */}
@@ -2203,15 +2295,6 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
                         </div>
                     )}
                 </div>
-            </div>
-
-            <div className="flex flex-col items-end gap-2">
-                <button 
-                    onClick={onEdit}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 group-hover/card:border-blue-100"
-                >
-                    <Pencil size={14} /> Edit Project Details
-                </button>
             </div>
         </div>
     );
@@ -2631,6 +2714,7 @@ const ProjectDetailsPage = () => {
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
     const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
+    const [departments, setDepartments] = useState([]);
 
     const allocationStartBoundary = useMemo(() => {
         const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
@@ -2653,12 +2737,13 @@ const ProjectDetailsPage = () => {
     const loadProjectData = async () => {
         setError(null);
         try {
-            const [detailsResult, resourcesResult, employeesResult, rolesResult, globalAllocResult] = await Promise.allSettled([
+            const [detailsResult, resourcesResult, employeesResult, rolesResult, globalAllocResult, deptsResult] = await Promise.allSettled([
                 axios.get(`/projects/${id}/details`),
                 axios.get(`/projects/${id}/resources`),
                 axios.get('/employees/list'),
                 axios.get('/employees/departments/roles-mapping'),
-                axios.get('/employees/allocations/weekly')
+                axios.get('/employees/allocations/weekly'),
+                axios.get('/projects/departments')
             ]);
 
             if (detailsResult.status === 'fulfilled') {
@@ -2713,6 +2798,10 @@ const ProjectDetailsPage = () => {
             } else {
                 console.error("Failed to load global allocations:", globalAllocResult.reason);
                 setGlobalAllocations({});
+            }
+
+            if (deptsResult.status === 'fulfilled') {
+                setDepartments(deptsResult.value.data || []);
             }
         } catch (err) {
             console.error("Failed to load project details:", err);
@@ -2777,16 +2866,21 @@ const ProjectDetailsPage = () => {
 
     return (
         <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
-            <div className="mb-5 flex items-center gap-4">
+            <div className="mb-5 flex items-center gap-4 w-full">
                 <button
-                    onClick={() => navigate('/info/projects')}
+                    onClick={() => navigate(-1)}
                     className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                     title="Go Back"
                 >
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
 
-                <OngoingProjectInfoCard project={project} resources={resources} onEdit={() => setIsEditPanelOpen(true)} />
+                <OngoingProjectInfoCard 
+                    project={project} 
+                    resources={resources} 
+                    departments={departments}
+                    onUpdate={loadProjectData}
+                />
             </div>
 
             <div className="flex flex-col gap-5">

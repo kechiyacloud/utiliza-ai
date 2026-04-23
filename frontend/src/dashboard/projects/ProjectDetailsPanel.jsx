@@ -235,7 +235,12 @@ const AllocationTable = ({ projectId }) => {
                             <tr className="bg-slate-50 border-b border-slate-100">
                                 {['S. No', 'Name', 'Role', 'Alloc. Start', 'Alloc. End', 'Allocation', 'W1', 'W2', 'W3', 'W4', 'Total', isEditing ? 'Actions' : null].filter(Boolean).map((col) => (
                                     <th key={col} className={`px-3 py-3 text-left text-[10px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap ${['W1', 'W2', 'W3', 'W4', 'Total'].includes(col) ? 'text-center' : ''}`}>
-                                        {col}
+                                        {col === 'Allocation' ? (
+                                            <div className="flex flex-col gap-0.5">
+                                                <span>Allocation</span>
+                                                <span className="font-normal text-slate-400 normal-case text-[9px] leading-tight">(100% = 40h)</span>
+                                            </div>
+                                        ) : col}
                                     </th>
                                 ))}
                             </tr>
@@ -247,9 +252,9 @@ const AllocationTable = ({ projectId }) => {
 
                                 return (
                                     <tr key={idx} className={`border-b border-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} ${!isEditing && 'hover:bg-blue-50/40'}`}>
-                                        <td className="px-3 py-3 text-center text-slate-400 font-medium">{idx + 1}</td>
+                                        <td className="px-3 py-2 text-center text-slate-400 font-medium">{idx + 1}</td>
 
-                                        <td className="px-3 py-3 font-semibold text-slate-800 whitespace-nowrap min-w-[180px]">
+                                        <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap min-w-[180px]">
                                             {isEditing ? (
                                                 <select 
                                                     value={row.employee_id || ''} 
@@ -278,7 +283,7 @@ const AllocationTable = ({ projectId }) => {
                                             )}
                                         </td>
 
-                                        <td className="px-3 py-3 text-slate-600 whitespace-nowrap min-w-[150px]">
+                                        <td className="px-3 py-2 text-slate-600 whitespace-nowrap min-w-[150px]">
                                             {isEditing ? (
                                                 <select 
                                                     value={row.role || ''} 
@@ -296,7 +301,7 @@ const AllocationTable = ({ projectId }) => {
                                             ) : row.role}
                                         </td>
 
-                                        <td className="px-3 py-3 whitespace-nowrap min-w-[100px]">
+                                        <td className="px-3 py-2 whitespace-nowrap min-w-[100px]">
                                             {isEditing ? (
                                                 <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(idx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                             ) : (
@@ -304,7 +309,7 @@ const AllocationTable = ({ projectId }) => {
                                             )}
                                         </td>
 
-                                        <td className="px-3 py-3 whitespace-nowrap min-w-[100px]">
+                                        <td className="px-3 py-2 whitespace-nowrap min-w-[100px]">
                                             {isEditing ? (
                                                 <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(idx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                             ) : (
@@ -312,7 +317,7 @@ const AllocationTable = ({ projectId }) => {
                                             )}
                                         </td>
 
-                                        <td className="px-3 py-3 text-slate-600 whitespace-nowrap min-w-[90px]">
+                                        <td className="px-3 py-2 text-slate-600 whitespace-nowrap min-w-[90px]">
                                             {!isEditing && row.employee_id ? (
                                                 <button
                                                     type="button"
@@ -339,7 +344,7 @@ const AllocationTable = ({ projectId }) => {
                                                 'bg-slate-300';
 
                                             return (
-                                                <td key={wCol} className="px-2 py-3 text-center min-w-[100px]">
+                                                <td key={wCol} className="px-2 py-2 text-center min-w-[100px]">
                                                     {isEditing ? (
                                                         <input type="number" min="0" max="168" value={row[wCol]} onChange={(e) => handleRowChange(idx, wCol, e.target.value)} className="w-12 px-1 py-1 text-xs text-center border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                                     ) : (
@@ -359,10 +364,10 @@ const AllocationTable = ({ projectId }) => {
                                             );
                                         })}
 
-                                        <td className="px-3 py-3 text-center font-bold text-blue-600 text-sm whitespace-nowrap min-w-[70px]">{rowTotal}h</td>
+                                        <td className="px-3 py-2 text-center font-bold text-blue-600 text-sm whitespace-nowrap min-w-[70px]">{rowTotal}h</td>
 
                                         {isEditing && (
-                                            <td className="px-3 py-3 text-center">
+                                            <td className="px-3 py-2 text-center">
                                                 <button onClick={() => handleRemoveRow(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Remove Resource">
                                                     <Trash2 size={14} />
                                                 </button>
@@ -374,12 +379,12 @@ const AllocationTable = ({ projectId }) => {
 
                             {rows.length > 0 && (
                                 <tr className="bg-slate-100 border-t-2 border-slate-200">
-                                    <td className="px-3 py-3 font-extrabold text-slate-700 text-right" colSpan={6}>TOTAL HOURS</td>
-                                    <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w1}h</td>
-                                    <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w2}h</td>
-                                    <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w3}h</td>
-                                    <td className="px-3 py-3 text-center font-bold text-slate-700">{totals.w4}h</td>
-                                    <td className="px-3 py-3 text-center font-extrabold text-blue-700">{totalHours}h</td>
+                                    <td className="px-3 py-2 font-extrabold text-slate-700 text-right" colSpan={6}>TOTAL HOURS</td>
+                                    <td className="px-3 py-2 text-center font-bold text-slate-700">{totals.w1}h</td>
+                                    <td className="px-3 py-2 text-center font-bold text-slate-700">{totals.w2}h</td>
+                                    <td className="px-3 py-2 text-center font-bold text-slate-700">{totals.w3}h</td>
+                                    <td className="px-3 py-2 text-center font-bold text-slate-700">{totals.w4}h</td>
+                                    <td className="px-3 py-2 text-center font-extrabold text-blue-700">{totalHours}h</td>
                                     {isEditing && <td></td>}
                                 </tr>
                             )}

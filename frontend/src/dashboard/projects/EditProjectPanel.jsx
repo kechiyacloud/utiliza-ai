@@ -870,19 +870,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Resource Estimate</label>
-                                <input
-                                    type="number"
-                                    name="resources"
-                                    min="0"
-                                    placeholder="0"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                    value={formData.resources}
-                                    onChange={handleChange}
-                                    disabled
-                                />
-                            </div>
                         </form>
                     </div>
 

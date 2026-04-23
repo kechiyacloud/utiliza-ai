@@ -127,6 +127,7 @@ class ProjectDetailsUpdate(BaseModel):
     end_date: Optional[str] = None
     milestones: Optional[str] = None
     timeline_notes: Optional[str] = None
+    department_id: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -441,7 +442,7 @@ def projects_overview(
 
         if status and status.lower() not in ('all status', ''):
             # Resolve all keys that map to this canonical status for robust SQL filtering
-            status_keys = [k for k, v in PROJECT_STATUS_ALIASES.items() if v == status]
+            status_keys = [k.lower() for k, v in PROJECT_STATUS_ALIASES.items() if v.lower() == status.lower()]
             if not status_keys:
                 status_keys = [status.lower()]
             
@@ -452,14 +453,24 @@ def projects_overview(
             where_clause += " AND p.sub_status = %s "
             params.append(sow_status)
 
-        # Date Range Filter (Overlap Logic: show if active during range)
+        # Date Range Filter (Consistent with UI logic: uses allocation dates if present)
         if final_start and final_start.strip():
-            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
-            params.append(final_start)
+            where_clause += """
+                AND COALESCE(
+                    p.start_date,
+                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date >= %s::date
+            """
+            params.append(final_start.strip())
         
         if final_end and final_end.strip():
-            where_clause += " AND p.start_date <= %s "
-            params.append(final_end)
+            where_clause += """
+                AND COALESCE(
+                    p.end_date,
+                    (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date <= %s::date
+            """
+            params.append(final_end.strip())
 
         # Fetch projects to count them in Python using the centralized normalization logic
         # This ensures dashboard metrics ALWAYS match the list view.
@@ -578,14 +589,24 @@ def projects_list(
             """
             params.append(f"%{resource_name}%")
 
-        # Date Range Filter (Overlap Logic: show if active during range)
+        # Date Range Filter (Consistent with UI logic: uses allocation dates if present)
         if final_start and final_start.strip():
-            where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
-            params.append(final_start)
+            where_clause += """
+                AND COALESCE(
+                    p.start_date,
+                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date >= %s::date
+            """
+            params.append(final_start.strip())
         
         if final_end and final_end.strip():
-            where_clause += " AND p.start_date <= %s "
-            params.append(final_end)
+            where_clause += """
+                AND COALESCE(
+                    p.end_date,
+                    (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date <= %s::date
+            """
+            params.append(final_end.strip())
 
         if project_name:
             where_clause += " AND p.project_name ILIKE %s "
@@ -619,6 +640,8 @@ def projects_list(
                 p.project_type,
                 p.start_date,
                 p.end_date,
+                COALESCE(p.start_date, (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)) as effective_start,
+                COALESCE(p.end_date, (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)) as effective_end,
                 (
                     SELECT COUNT(DISTINCT pa_all.employee_id)
                     FROM projects_allocation pa_all
@@ -658,7 +681,7 @@ def projects_list(
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
         results = cur.fetchall()
-
+        
         return [
             {
                 "project_id": r[0],
@@ -668,17 +691,19 @@ def projects_list(
                 "type": _normalize_project_type(r[3], strict=False) if r[3] else "Unknown",
                 "start_date": r[4],
                 "end_date": r[5],
-                "resource_count": r[6],
-                "team_members": r[7] if r[7] else [],
-                "resource_names": r[8] or "None",
-                "client_name": r[9],
-                "partner_name": r[10],
-                "billable": r[11] if r[11] else "Unknown",
-                "client_id": r[12],
-                "partner_id": r[13],
-                "uuid": str(r[14]) if r[14] else None,
-                "department_id": r[15],
-                "department_name": r[16]
+                "effective_start": r[6],
+                "effective_end": r[7],
+                "resource_count": r[8],
+                "team_members": r[9] if r[9] else [],
+                "resource_names": r[10] or "None",
+                "client_name": r[11],
+                "partner_name": r[12],
+                "billable": r[13] if r[13] else "Unknown",
+                "client_id": r[14],
+                "partner_id": r[15],
+                "uuid": str(r[16]) if r[16] else None,
+                "department_id": r[17],
+                "department_name": r[18]
             }
             for r in results
         ]
@@ -718,12 +743,14 @@ def get_project_details(project_id: str, _user: dict = Depends(get_current_user)
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
-                p.client_id, p.partner_id, p.project_type, p.uuid
+                p.client_id, p.partner_id, p.project_type, p.uuid,
+                p.department_id, d.department_name
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
             LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
             LEFT JOIN project_scopes ps ON p.project_id = ps.project_id
+            LEFT JOIN departments d ON p.department_id = d.department_id
             WHERE p.project_id = %s
         """, (project_id,))
         row = cur.fetchone()
@@ -752,7 +779,9 @@ def get_project_details(project_id: str, _user: dict = Depends(get_current_user)
             "client_id": row[17],
             "partner_id": row[18],
             "type": row[19],
-            "uuid": str(row[20]) if row[20] else None
+            "uuid": str(row[20]) if row[20] else None,
+            "department_id": str(row[21]) if row[21] else None,
+            "department_name": row[22] or "No Department"
         }
     finally:
         cur.close()
@@ -764,16 +793,11 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-<<<<<<< HEAD
+        project_id = _resolve_project_id(project_id, cur)
         # 1. Fetch current (old) project dates to check for extensions
         cur.execute("SELECT start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
         old_proj = cur.fetchone()
         if not old_proj:
-=======
-        project_id = _resolve_project_id(project_id, cur)
-        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
-        if not cur.fetchone():
->>>>>>> cb21a24 (Project module: update panels, filters, and project views)
             raise HTTPException(status_code=404, detail="Project not found")
         
         old_start_proj, old_end_proj = old_proj
@@ -792,9 +816,10 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user
         cur.execute("""
             UPDATE projects SET
                 start_date = COALESCE(%s, start_date),
-                end_date = COALESCE(%s, end_date)
+                end_date = COALESCE(%s, end_date),
+                department_id = COALESCE(%s, department_id)
             WHERE project_id = %s
-        """, (start_date_val, end_date_val, project_id))
+        """, (start_date_val, end_date_val, details.department_id, project_id))
 
         # 3. Synchronize Allocations if extended (Synchronize dates + hours)
         _sync_project_extensions(cur, project_id, old_end_proj, new_end_proj)
@@ -1191,12 +1216,8 @@ def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depend
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-<<<<<<< HEAD
-        cur.execute("SELECT project_status, end_date FROM projects WHERE project_id = %s", (project_id,))
-=======
         project_id = _resolve_project_id(project_id, cur)
-        cur.execute("SELECT project_status FROM projects WHERE project_id = %s", (project_id,))
->>>>>>> cb21a24 (Project module: update panels, filters, and project views)
+        cur.execute("SELECT project_status, end_date FROM projects WHERE project_id = %s", (project_id,))
         current_row = cur.fetchone()
         if not current_row:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -1258,16 +1279,13 @@ def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depend
         if "partner_id" in payload:
             updates_map["partner_id"] = _normalize_fk_id(payload["partner_id"])
 
-<<<<<<< HEAD
-        # Handle sub_status column removed from projects table logic to fix crash
-        # tracking sub_status in memory but not saving to DB
-        ignore_sub_status = None
-=======
         if "department_id" in payload:
             updates_map["department_id"] = _normalize_fk_id(payload["department_id"]) or None
 
+        # Handle sub_status column removed from projects table logic to fix crash
+        # tracking sub_status in memory but not saving to DB
+        ignore_sub_status = None
         # Handle sub_status once
->>>>>>> cb21a24 (Project module: update panels, filters, and project views)
         if sub_status_value is not None or ("project_status" in payload):
             if (normalized_status or "").lower() == "in progress":
                 ignore_sub_status = normalized_sub_status

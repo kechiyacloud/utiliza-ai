@@ -105,28 +105,36 @@ const getStatusBadgeStyle = (status, pct) => {
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     const progress = calculateProjectProgress(project);
     return (
-        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300">
-            <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        {project.icon || project.name?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors line-clamp-1 truncate max-w-[160px]" title={project.name}>
-                            {project.name}
-                        </h3>
-                        <p className="text-sm text-slate-500 tracking-tight">
-                            {project.project_id || project.id}
-                        </p>
-                    </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full">
+            {/* Action Buttons - Absolute positioned to avoid title overlap */}
+            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onEdit(project); }} 
+                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-emerald-100 shadow-sm"
+                    title="Edit Project"
+                >
+                    <Pencil size={14} />
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(project); }} 
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-rose-100 shadow-sm"
+                    title="Delete Project"
+                >
+                    <Trash2 size={14} />
+                </button>
+            </div>
+
+            <div className="flex items-center gap-3 mb-5 pr-12">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+                    {project.icon || (project.name?.[0]?.toUpperCase() || '?')}
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onEdit(project)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                        <Pencil size={14} />
-                    </button>
-                    <button onClick={() => onDelete(project)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} />
-                    </button>
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate" title={project.name}>
+                        {project.name}
+                    </h3>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">
+                        {project.project_id || project.id}
+                    </p>
                 </div>
             </div>
 
@@ -193,7 +201,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
 
                 <button
                     onClick={() => onView(project)}
-                    className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600"
+                    className="w-full py-2.5 mt-auto bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600 shadow-sm hover:shadow-md active:scale-[0.98]"
                 >
                     View Details
                     <ExternalLink size={14} />
@@ -203,32 +211,33 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     );
 };
 
-const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, filters, onFilterChange, departments = [] }) => {
+const ProjectList = ({ 
+    projects, 
+    activeCardFilter, 
+    onRefresh, 
+    allEmployeeNames, 
+    filters, 
+    onFilterChange,
+    departments = [],
+    sortBy,
+    onSortChange,
+    searchTerm,
+    onSearchChange,
+    activeView,
+    onViewChange,
+    activeDepartment = ''
+}) => {
     const { triggerRefresh } = useDataRefresh();
-    const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('table');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-    const [sortBy, setSortBy] = useState('newest');
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
-
-    useEffect(() => {
-        if (location.state?.search && projects && projects.length > 0) {
-            setSearchTerm(location.state.search);
-            const foundProj = projects.find(p => p.name.toLowerCase() === location.state.search.toLowerCase());
-            if (foundProj) {
-                setSelectedProject(foundProj);
-            }
-            navigate(location.pathname, { replace: true, state: {} });
-        }
-    }, [location.state, projects, navigate]);
 
     // Handle filter application by passing to parent
     const handleApplyFilters = (newFilters) => {
@@ -256,6 +265,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
     const filteredProjects = useMemo(() => {
         // Robust normalization for status comparison
         const normalizeStatus = (s) => (s || '').toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ').trim();
+        const isCompletedStatus = (s) => {
+            const norm = normalizeStatus(s);
+            return ['closed', 'completed', 'done', 'ended', 'finished'].some(opt => norm.includes(opt));
+        };
 
         const filtered = projects.filter(project => {
             if (!project || !project.name) return false;
@@ -324,40 +337,29 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
             if (filters?.sowStatus) {
                 matchesSowStatus = project.sub_status === filters.sowStatus || project.subStatus === filters.sowStatus;
             }
+            // Date filtering is now handled strictly by the backend using "Effective Dates"
+            // (COALESCE of resource allocation and project dates). 
+            // We rely on the API to return the correct set of projects.
+            const matchesDateFilter = true;
 
-            // Date Range Filter (Overlap Logic)
-            let matchesDateFilter = true;
-            if (filters?.startDate || filters?.endDate) {
-                const pStartStr = project.startDate || project.start_date;
-                const pEndStr = project.endDate || project.end_date;
-
-                if (pStartStr) {
-                    // Convert all values to Date objects (no string comparison)
-                    const pStart = new Date(pStartStr);
-                    const pEnd = pEndStr ? new Date(pEndStr) : null;
-                    
-                    const fStart = filters.startDate ? new Date(filters.startDate) : null;
-                    const fEnd = filters.endDate ? new Date(filters.endDate) : null;
-
-                    // Normalize all to midnight for accurate day-only comparison
-                    pStart.setHours(0, 0, 0, 0);
-                    if (pEnd) pEnd.setHours(0, 0, 0, 0);
-                    if (fStart) fStart.setHours(0, 0, 0, 0);
-                    if (fEnd) fEnd.setHours(0, 0, 0, 0);
-
-                    // Logic: Project is active during range if:
-                    // 1. It starts before or on the filter end date
-                    // 2. It ends after or on the filter start date (or is ongoing)
-                    const overlapsStart = !fEnd || pStart <= fEnd;
-                    const overlapsEnd = !fStart || !pEnd || pEnd >= fStart;
-
-                    matchesDateFilter = overlapsStart && overlapsEnd;
-                } else {
-                    // If filter is active but project has no start date, hide it
-                    matchesDateFilter = false;
-                }
+            // 4. Sort-based Filtering (requested by user)
+            let matchesSortFilter = true;
+            if (sortBy === 'finishing-soon' || sortBy === 'finishing-last') {
+                matchesSortFilter = !isCompletedStatus(project.status || project.project_status);
+            } else if (sortBy === 'internal') {
+                matchesSortFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
             }
 
+            // 5. Department Filter (Header or Sidebar)
+            let matchesDepartment = true;
+            const deptFilter = filters?.department || activeDepartment;
+            if (deptFilter && deptFilter !== 'All Department' && deptFilter !== 'All Departments') {
+                const pDeptId = project.department_id || project.department;
+                const pDeptName = project.department_name || project.department;
+                matchesDepartment = String(pDeptId) === String(deptFilter) || 
+                                    String(pDeptName).toLowerCase() === String(deptFilter).toLowerCase();
+            }
+            
             return matchesSearchTerm && 
                    matchesSidebarStatus && 
                    matchesCardFilter && 
@@ -365,7 +367,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                    matchesProjectName && 
                    matchesResourceName && 
                    matchesSowStatus && 
-                   matchesDateFilter;
+                   matchesDateFilter &&
+                   matchesSortFilter &&
+                   matchesDepartment;
         });
 
         // Debug logging for filter verification as requested
@@ -385,15 +389,29 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
             if (effectiveSort === 'alphabetical') {
                 return (a.name || '').localeCompare(b.name || '');
             }
-            if (effectiveSort === 'finishing-soon') {
+            if (effectiveSort === 'finishing-soon' || effectiveSort === 'finishing-last') {
+                const getStatusPriority = (project) => {
+                    const s = (project.status || '').toLowerCase();
+                    if (s === 'completed') return 3;
+                    if (s === 'not started') return 2;
+                    return 1; // Active (In Progress, On Hold, Overdue, etc.)
+                };
+
+                const priorityA = getStatusPriority(a);
+                const priorityB = getStatusPriority(b);
+
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                }
+
                 const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
                 const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
-                return dateA - dateB;
-            }
-            if (effectiveSort === 'finishing-last') {
-                const dateA = new Date(a.endDate || a.end_date || 0).getTime();
-                const dateB = new Date(b.endDate || b.end_date || 0).getTime();
-                return dateB - dateA;
+
+                if (effectiveSort === 'finishing-soon') {
+                    return dateA - dateB;
+                } else {
+                    return dateB - dateA;
+                }
             }
             if (effectiveSort === 'billable') {
                 const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
@@ -412,7 +430,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
             }
             return 0;
         });
-    }, [projects, searchTerm, filters, activeCardFilter, sortBy]);
+    }, [projects, searchTerm, filters, activeCardFilter, sortBy, activeDepartment]);
 
     const tableTitle = (() => {
         if (!activeCardFilter) return 'All Projects';
@@ -537,7 +555,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                     {/* Left Side: View Toggles */}
                     <div className="flex items-center gap-5 shrink-0">
                         <button
-                            onClick={() => setActiveView('table')}
+                            onClick={() => onViewChange('table')}
                             className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tableTitle} ({filteredProjects.length})
@@ -546,7 +564,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                         <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
-                            onClick={() => setActiveView('chart')}
+                            onClick={() => onViewChange('chart')}
                             className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Project Status Bar
@@ -555,7 +573,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                         <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
-                            onClick={() => setActiveView('grid')}
+                            onClick={() => onViewChange('grid')}
                             className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Grid
@@ -597,10 +615,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
                             <input
                                 type="text"
-                                placeholder="Search projects..."
-                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all text-gray-700 placeholder:text-slate-400"
+                                placeholder="Search projects by name, client or description..."
+                                className="w-full pl-10 pr-4 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all"
                                 value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onChange={(e) => onSearchChange(e.target.value)}
                             />
                         </div>
 
@@ -637,8 +655,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                                         ].map((opt) => (
                                             <button
                                                 key={opt.id}
-                                                onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }}
-                                                className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                                onClick={() => { onSortChange(opt.id); setIsSortMenuOpen(false); }}
+                                                className={`w-full px-4 py-2.5 text-left text-xs transition-all flex items-center justify-between group
+                                                    ${sortBy === opt.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'}`}
                                             >
                                                 {opt.label}
                                                 {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
