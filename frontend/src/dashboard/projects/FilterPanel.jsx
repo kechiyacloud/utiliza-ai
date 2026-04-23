@@ -7,9 +7,11 @@ const FilterPanel = ({
     onClose,
     onApplyFilters,
     onClearFilters,
-    currentFilters
+    currentFilters,
+    departments = []
 }) => {
     const [filters, setFilters] = useState({
+        department: '',
         projectName: '',
         resourceName: '',
         status: 'All Status',
@@ -23,6 +25,7 @@ const FilterPanel = ({
     useEffect(() => {
         if (isOpen && currentFilters) {
             setFilters({
+                department: currentFilters.department || '',
                 projectName: currentFilters.projectName || '',
                 resourceName: currentFilters.resourceName || '',
                 status: currentFilters.status || 'All Status',
@@ -131,6 +134,24 @@ const FilterPanel = ({
                     {/* Form Content */}
                     <div className="flex-1 overflow-y-auto p-6">
                         <div className="flex flex-col gap-6">
+
+                            {/* Department */}
+                            {departments.length > 0 && (
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Department</label>
+                                    <select
+                                        name="department"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                        value={filters.department}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">All Departments</option>
+                                        {departments.map((d) => (
+                                            <option key={d.id || d} value={d.id || d}>{d.name || d}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Project Name */}
                             <div className="flex flex-col gap-1.5">
@@ -251,6 +272,7 @@ const FilterPanel = ({
                             <button
                                 onClick={() => {
                                     setFilters({
+                                        department: '',
                                         projectName: '',
                                         resourceName: '',
                                         status: 'All Status',

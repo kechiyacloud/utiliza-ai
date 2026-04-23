@@ -84,7 +84,13 @@ const ProjectsOverview = ({
                     <div>
                         <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">Projects Overview</h1>
                         <p className="text-slate-500 text-sm mt-1 font-normal">
-                            {selectedDepartment === '' || selectedDepartment === 'All Departments' ? 'All Organization Projects' : `${selectedDepartment} Department`}
+                            {(() => {
+                                if (!selectedDepartment || selectedDepartment === 'All Departments' || selectedDepartment === '') {
+                                    return 'All Organization Projects';
+                                }
+                                const deptObj = departments.find(d => String(d.id) === String(selectedDepartment) || d.name === selectedDepartment);
+                                return `${deptObj ? deptObj.name : selectedDepartment} Department`;
+                            })()}
                         </p>
                     </div>
                 </div>
@@ -101,10 +107,9 @@ const ProjectsOverview = ({
                             className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
                         >
                             <option value="">All Department</option>
-                            {departments.map((dept) => {
-                                const deptName = typeof dept === 'object' ? (dept.label || dept.value || String(dept)) : dept;
-                                return <option key={deptName} value={deptName}>{deptName}</option>;
-                            })}
+                            {departments.map((dept) => (
+                                <option key={dept.id || dept} value={dept.id || dept}>{dept.name || dept}</option>
+                            ))}
                         </select>
                         <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
                             <ChevronDown size={14} className="text-gray-400 group-hover:text-slate-600 transition-colors" />

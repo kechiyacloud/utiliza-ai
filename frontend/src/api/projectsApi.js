@@ -1,5 +1,15 @@
 import api from "./axios";
 
+export const fetchProjectDepartments = async () => {
+    try {
+        const response = await api.get('/projects/departments');
+        return response.data || [];
+    } catch (error) {
+        console.error("Fetch Project Departments Error:", error);
+        return [];
+    }
+};
+
 /**
  * Fetch projects overview and list data.
  * @param {Object} filters - Optional filters (e.g. { department: '...' })
@@ -59,6 +69,8 @@ export const fetchProjectsData = async (filters = {}) => {
 
                 return {
                     id: p.project_id,
+                    project_id: p.project_id,
+                    uuid: p.uuid || null,
                     name: p.project_name,
                     statusText: "Active",
                     statusColor: "text-green-500",

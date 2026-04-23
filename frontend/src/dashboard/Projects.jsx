@@ -1,19 +1,21 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { fetchProjectsData } from '../api/projectsApi';
+import { fetchProjectsData, fetchProjectDepartments } from '../api/projectsApi';
 import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
 
 function Projects() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCardFilter, setActiveCardFilter] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [filters, setFilters] = useState({
+      department: '',
       projectName: '',
       status: 'All Status',
       sowStatus: '',
@@ -29,8 +31,10 @@ function Projects() {
     setLoading(true);
     setError(null);
     try {
+      // filters.department (from FilterPanel) takes precedence over the dept param (from dashboard cards)
+      const effectiveDept = currentFilters.department || dept;
       const res = await fetchProjectsData({ 
-          department: dept, 
+          department: (effectiveDept === 'All Department' || effectiveDept === 'All Departments') ? '' : effectiveDept, 
           ...currentFilters 
       });
       setData(res.data);
@@ -45,15 +49,17 @@ function Projects() {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const res = await axios.get('/employees/filter-options');
-        if (res.data) {
-          if (res.data.departments) {
-            const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
-            setDepartments(filtered);
+        const [filterRes, deptRes] = await Promise.allSettled([
+          axios.get('/employees/filter-options'),
+          fetchProjectDepartments(),
+        ]);
+        if (filterRes.status === 'fulfilled' && filterRes.value.data) {
+          if (filterRes.value.data.employee_names) {
+            setAllEmployeeNames(filterRes.value.data.employee_names);
           }
-          if (res.data.employee_names) {
-            setAllEmployeeNames(res.data.employee_names);
-          }
+        }
+        if (deptRes.status === 'fulfilled') {
+          setDepartments(deptRes.value || []);
         }
       } catch (err) {
         console.error("Failed to fetch filter options", err);
@@ -65,6 +71,31 @@ function Projects() {
   useEffect(() => {
     loadData(selectedDepartment);
   }, [selectedDepartment, loadData]);
+
+  // Handle successful project creation - Clear filters to ensure new project visibility
+  useEffect(() => {
+    if (location.state?.projectAdded) {
+      const defaultFilters = {
+        projectName: '',
+        status: 'All Status',
+        sowStatus: '',
+        startDate: '',
+        endDate: '',
+        resourceName: '',
+        resourceType: ''
+      };
+      
+      // Reset all UI filter states
+      setActiveCardFilter(null);
+      setFilters(defaultFilters);
+      
+      // Force reload data with no filters
+      loadData(selectedDepartment, defaultFilters);
+      
+      // Clean up navigation state to prevent infinite reset loop
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, navigate, location.pathname, loadData, selectedDepartment]);
 
   if (loading && !data) {
     return (
@@ -143,9 +174,11 @@ function Projects() {
           onRefresh={() => loadData(selectedDepartment, filters)}
           allEmployeeNames={allEmployeeNames}
           filters={filters}
+          departments={departments}
           onFilterChange={(newFilters) => {
               setFilters(newFilters);
-              loadData(selectedDepartment, newFilters);
+              // department filter from FilterPanel overrides selectedDepartment for API call
+              loadData(newFilters.department || selectedDepartment, newFilters);
           }}
         />
       </div>

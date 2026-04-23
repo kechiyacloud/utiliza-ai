@@ -2624,6 +2624,7 @@ const ProjectDetailsPage = () => {
     const { refreshKey } = useDataRefresh();
     const [project, setProject] = useState(() => location.state?.project || null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null); // null | { status: number, message: string }
     const [resources, setResources] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [rolesList, setRolesList] = useState([]);
@@ -2650,6 +2651,7 @@ const ProjectDetailsPage = () => {
     }, [viewMode, allocationStartBoundary, allocationEndBoundary]);
 
     const loadProjectData = async () => {
+        setError(null);
         try {
             const [detailsResult, resourcesResult, employeesResult, rolesResult, globalAllocResult] = await Promise.allSettled([
                 axios.get(`/projects/${id}/details`),
@@ -2662,6 +2664,16 @@ const ProjectDetailsPage = () => {
             if (detailsResult.status === 'fulfilled') {
                 setProject(detailsResult.value.data);
             } else {
+                const status = detailsResult.reason?.response?.status;
+                if (status === 404) {
+                    setError({ status: 404, message: 'This project does not exist or the link is invalid.' });
+                    setLoading(false);
+                    return;
+                } else if (status === 401) {
+                    setError({ status: 401, message: 'You are not authorised to view this project.' });
+                    setLoading(false);
+                    return;
+                }
                 console.error("Failed to load project details:", detailsResult.reason);
                 setProject((current) => current || location.state?.project || null);
             }
@@ -2733,6 +2745,25 @@ const ProjectDetailsPage = () => {
 
     if (loading) {
         return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-full">Loading Project Details...</div>;
+    }
+
+    if (error) {
+        return (
+            <div className="p-8 flex flex-col items-center justify-center h-full gap-5">
+                <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-400"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div className="text-center">
+                    <p className="text-slate-800 font-bold text-lg">
+                        {error.status === 404 ? 'Project Not Found' : 'Access Denied'}
+                    </p>
+                    <p className="text-slate-500 text-sm mt-1">{error.message}</p>
+                </div>
+                <button onClick={() => navigate('/info/projects')} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm">
+                    Back to Projects
+                </button>
+            </div>
+        );
     }
 
     if (!project) {

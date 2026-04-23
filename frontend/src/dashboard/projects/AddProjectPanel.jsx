@@ -1,23 +1,21 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info, ArrowLeft } from 'lucide-react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, Info, ArrowLeft, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
 import { clearDashboardCache } from '../../api/dashboardApi';
-import {
-    fetchSimpleClients,
-    fetchAutocompleteClients,
-    fetchClientsByPartner,
-    createSimpleClient,
-    createFullClient,
-    updateSimpleClient,
-    deleteSimpleClient,
-    fetchPartnerClients,
-    createPartnerClient,
-    updatePartnerClient,
-    deletePartnerClient,
+import { createProject, fetchProjectDepartments } from '../../api/projectsApi';
+import { fetchClientsList } from '../../api/clientApi';
+import { 
+    fetchPartnerClients, 
+    createFullClient, 
+    createPartnerClient, 
+    updateSimpleClient, 
+    updatePartnerClient, 
+    deleteSimpleClient, 
+    deletePartnerClient 
 } from '../../api/entitiesApi';
-import { DEPARTMENTS, PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
+import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 /* —————————————————————————————————————————————
    HELPERS — for Last 4 Weeks visualization
@@ -209,8 +207,8 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
                             {isDelete ? <Trash2 size={18} className={`text-${accentColor}-500`} /> :
-                             mode === 'edit' ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
-                             <Plus size={18} className={`text-${accentColor}-500`} />}
+                                mode === 'edit' ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
+                                    <Plus size={18} className={`text-${accentColor}-500`} />}
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-gray-800">{title}</h3>
@@ -263,8 +261,8 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                                     : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
                             }`}>
                         {isDelete ? <><Trash2 size={14} /> Delete</> :
-                         mode === 'edit' ? <><Check size={14} /> Update</> :
-                         <><Plus size={14} /> Add</>}
+                            mode === 'edit' ? <><Check size={14} /> Update</> :
+                                <><Plus size={14} /> Add</>}
                     </button>
                 </div>
             </div>
@@ -299,8 +297,8 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl bg-${accentColor}-50 flex items-center justify-center`}>
                             {isDelete ? <Trash2 size={18} className={`text-${accentColor}-500`} /> :
-                             isEdit ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
-                             <Plus size={18} className={`text-${accentColor}-500`} />}
+                                isEdit ? <Pencil size={18} className={`text-${accentColor}-500`} /> :
+                                    <Plus size={18} className={`text-${accentColor}-500`} />}
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-gray-800">{title}</h3>
@@ -394,15 +392,15 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                         onClick={() => onConfirm(isDelete ? initialName : formData)}
                         className={`px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all shadow-lg flex items-center gap-2
                             ${isDelete
-                              ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
-                              : isEdit
-                                  ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-200'
-                                  : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
+                                ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
+                                : isEdit
+                                    ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-200'
+                                    : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
                             }`}
                     >
                         {isDelete ? <><Trash2 size={14} /> Delete</> :
-                         isEdit ? <><Check size={14} /> Update</> :
-                         <><Plus size={14} /> Add</>}
+                            isEdit ? <><Check size={14} /> Update</> :
+                                <><Plus size={14} /> Add</>}
                     </button>
                 </div>
             </div>
@@ -579,13 +577,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // --- Form State ---
     const [formData, setFormData] = useState({
         name: '',
-        type: 'Client',
+        type: 'External',
         clientType: DIRECT_CLIENT_TYPE,
         clientId: '',
         clientName: '',
         partnerId: '',
         partnerName: CLOUD_DESTINATION_PARTNER,
-        department: '',
+        department_id: '',
         billable: 'Billable',
         status: 'Not Started',
         sowStatus: '',
@@ -597,6 +595,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
     const [clients, setClients] = useState([]);
     const [partnerClients, setPartnerClients] = useState([]);
+    const [departments, setDepartments] = useState([]);
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
     const [availableSkills, setAvailableSkills] = useState([]);
@@ -631,53 +630,34 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         setEntityError('');
         setIsDirectoryLoading(true);
         try {
-            const [clientResult, partnerResult, employeesResult, rolesResult, filterResult] = await Promise.allSettled([
-                fetchSimpleClients(),
+            const [clientsData, partnerData, employeesResult, rolesResult, filterRes, deptRes] = await Promise.allSettled([
+                fetchClientsList(),
                 fetchPartnerClients(),
                 axios.get('/employees/list'),
                 axios.get('/employees/departments/roles-mapping'),
                 axios.get('/employees/filter-options'),
+                fetchProjectDepartments(),
             ]);
 
-            if (clientResult.status === 'fulfilled') {
-                setClients(clientResult.value);
-            } else {
-                console.error('[AddProjectPanel] Failed to load clients', clientResult.reason);
-            }
-
-            if (partnerResult.status === 'fulfilled') {
-                setPartnerClients(partnerResult.value);
-            } else {
-                console.error('[AddProjectPanel] Failed to load partner clients', partnerResult.reason);
-            }
+            setClients(clientsData.status === 'fulfilled' ? clientsData.value : []);
+            setPartnerClients(partnerData.status === 'fulfilled' ? partnerData.value : []);
+            setAvailableSkills(filterRes.status === 'fulfilled' ? (filterRes.value.data?.skills || []) : []);
+            setDepartments(deptRes.status === 'fulfilled' ? deptRes.value : []);
 
             if (employeesResult.status === 'fulfilled') {
                 const employeesFromApi = employeesResult.value?.data || [];
                 setEmployees(employeesFromApi);
-                console.log('[AddProjectPanel] employees/list count:', employeesFromApi.length);
-                console.log('[AddProjectPanel] employees/list sample:', employeesFromApi.slice(0, 3).map((e) => ({
-                    employee_id: e?.employee_id,
-                    employee_name: e?.employee_name,
-                    role_designation: e?.role_designation
-                })));
             } else {
                 console.error('[AddProjectPanel] Failed to load employees', employeesResult.reason);
             }
 
             if (rolesResult.status === 'fulfilled') {
-                // roles API returns { department: [roles] }; flatten into unique sorted list
                 const allRoles = new Set();
                 Object.values(rolesResult.value?.data || {}).forEach(arr => arr.forEach(r => allRoles.add(r)));
                 const flattenedRoles = Array.from(allRoles).sort();
                 setRolesList(flattenedRoles);
-                console.log('[AddProjectPanel] employees/roles count:', flattenedRoles.length);
-                console.log('[AddProjectPanel] employees/roles sample:', flattenedRoles.slice(0, 10));
             } else {
                 console.error('[AddProjectPanel] Failed to load roles mapping', rolesResult.reason);
-            }
-
-            if (filterResult.status === 'fulfilled') {
-                setAvailableSkills(filterResult.value?.data?.skills || []);
             }
 
         } catch (error) {
@@ -700,13 +680,13 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setIsAddingSkill(false);
             setFormData({
                 name: '',
-                type: 'Client',
+                type: 'External',
                 clientType: DIRECT_CLIENT_TYPE,
                 clientId: '',
                 clientName: '',
                 partnerId: '',
                 partnerName: CLOUD_DESTINATION_PARTNER,
-                department: '',
+                department_id: '',
                 billable: 'Billable',
                 status: 'Not Started',
                 sowStatus: DEFAULT_SOW_STATUS,
@@ -721,7 +701,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     /* eslint-enable react-hooks/set-state-in-effect */
 
     useEffect(() => {
-        const isPartnerFlow = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const isPartnerFlow = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
         if (isPartnerFlow && !formData.partnerId) {
             setFormData(prev => ({ ...prev, clientId: '', clientName: '' }));
         }
@@ -731,7 +711,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const handleChange = (e) => {
         const { name, value } = e.target;
         if (name === 'type') {
-            const isClientType = value === 'Client';
+            const isClientType = value === 'External';
             setFormData(prev => ({
                 ...prev,
                 type: value,
@@ -740,7 +720,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 clientName: '',
                 partnerId: '',
                 partnerName: isClientType ? CLOUD_DESTINATION_PARTNER : '',
-                department: value === 'Internal' ? prev.department : '',
+                department_id: value === 'Internal' ? prev.department_id : '',
                 billable: value === 'Internal' ? 'Non-Billable' : prev.billable,
                 sowStatus: isClientType ? (prev.sowStatus || DEFAULT_SOW_STATUS) : '',
             }));
@@ -882,7 +862,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     );
 
     const filteredClients = useMemo(() => {
-        const isPartnerClientFlow = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const isPartnerClientFlow = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
         if (!isPartnerClientFlow || !formData.partnerId) {
             return clients;
         }
@@ -1019,7 +999,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         try {
             if (modal.mode === 'add') {
                 if (isClient) {
-                    const isPartnerClientProject = formData.type === 'Client' && formData.clientType === 'Partner Client';
+                    const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
                     const clientData = {
                         id: `CL-${Date.now()}`, // simple random ID logic
                         name: trimmedName,
@@ -1224,12 +1204,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             if (field === 'allocation_pct') {
                 const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
                 updated.allocation_pct = pct;
-                
+
                 // Dynamic Proportional Allocation (100% = 40h)
                 if (pct !== '') {
                     const hours = Math.round((pct / 100) * 40);
                     const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
-                    
+
                     let targetWeeks = projectWeeks;
                     if (updated.allocation_start_date || updated.allocation_end_date) {
                         targetWeeks = getProjectWeeks(
@@ -1295,8 +1275,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
-        const isClientProject = formData.type === 'Client';
-        const isPartnerClientProject = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
+        const isClientProject = formData.type === 'External';
+        const isPartnerClientProject = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
         const projectHoursValidationError = validateProjectWeeklyHours(formData.teamMembers);
         if (projectHoursValidationError) {
             setTeamHoursError(projectHoursValidationError);
@@ -1327,20 +1307,20 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 return;
             }
         }
-        if (formData.type === 'Client' && !formData.clientType) {
+        if (formData.type === 'External' && !formData.clientType) {
             setSubmitError('Please select a client type.');
             return;
         }
-        if (formData.type === 'Client' && formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
+        if (formData.type === 'External' && formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
             setSubmitError('Please select a client.');
             return;
         }
-        if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
+        if (formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
             setSubmitError('Please select a partner.');
             return;
         }
-        if (formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.clientId) {
-            setSubmitError('Please select a client.');
+        if (!(formData.department_id || '').trim()) {
+            setSubmitError('Department is required.');
             return;
         }
         // SOW Status validation removed - it is now optional
@@ -1375,28 +1355,46 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             sub_status: isClientProject ? (formData.sowStatus || null) : null,
             type: effectiveType,
             billable: formData.billable,
+            client_id: isClientProject ? (formData.clientId || null) : null,
+            partner_id: (effectiveType === 'Partner' || isPartnerClient) ? (formData.partnerId || null) : null,
+            department_id: formData.department_id,
             start_date: normalizedStart,
             end_date: normalizedEnd || null,
             skills: normalizedSelectedSkills,
             team_members: (formData.teamMembers || []).map(normalizeTeamMember)
         };
 
+        setIsSubmitting(true);
+        console.log('[API Request] POST /projects - Payload:', payload);
+
         try {
-            await onAdd(payload);
+            const response = await createProject(payload);
+            console.log('[API Response] POST /projects - Success:', response);
+
+            showToast(`Project "${formData.name}" created successfully!`, 'success');
             clearDashboardCache(); // Sync dashboard
-            onClose();
+
+            // Give the user time to see the success toast before closing/navigating
+            setTimeout(() => {
+                if (onAdd) onAdd(response); // Notify parent (e.g. to navigate or refresh)
+                if (onClose && !pageMode) onClose(); // Close if it's a sidebar
+            }, 1500);
+
         } catch (error) {
-            setSubmitError(toMessage(error));
+            console.error('[API Response] POST /projects - Error:', error);
+            const errorMsg = error.response?.data?.detail || toMessage(error) || 'Failed to create project';
+            setSubmitError(errorMsg);
+            showToast(errorMsg, 'error');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const isDirectClient = formData.type === 'Client' && formData.clientType === DIRECT_CLIENT_TYPE;
-    const isPartnerClient = formData.type === 'Client' && formData.clientType === PARTNER_CLIENT_TYPE;
-    const isClientProject = formData.type === 'Client';
+    const isDirectClient = formData.type === 'External' && formData.clientType === DIRECT_CLIENT_TYPE;
+    const isPartnerClient = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
+    const isClientProject = formData.type === 'External';
     const entityLabel = modal.entityType === 'client' ? 'Client' : 'Partner';
-    
+
     // --- Visibility Guard ---
     if (!isOpen && !pageMode) return null;
 
@@ -1405,11 +1403,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             {/* Toast Notification */}
             {toast.show && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${
-                        toast.type === 'error' 
-                            ? 'bg-red-500 border-red-400 text-white shadow-red-200' 
+                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${toast.type === 'error'
+                            ? 'bg-red-500 border-red-400 text-white shadow-red-200'
                             : 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-200'
-                    }`}>
+                        }`}>
                         {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
                         <span className="text-xs font-bold whitespace-nowrap">{toast.message}</span>
                     </div>
@@ -1483,7 +1480,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <label className="text-xs font-bold text-gray-600 uppercase">Project Type</label>
                                     <select name="type" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.type} onChange={handleChange}>
-                                        <option value="Client">Client</option>
+                                        <option value="External">External</option>
                                         <option value="Internal">Internal</option>
                                     </select>
                                 </div>
@@ -1572,19 +1569,22 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     </div>
                                 )}
 
-                                {/* INTERNAL — Department dropdown */}
-                                {formData.type === 'Internal' && (
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Department (Optional)</label>
-                                        <select name="department" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
-                                            value={formData.department} onChange={handleChange}>
-                                            <option value="">Select Department</option>
-                                            {DEPARTMENTS.map((dept) => (
-                                                <option key={dept} value={dept}>{dept}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                {/* DEPARTMENT DROPDOWN — for all project types */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-gray-600 uppercase">Department <span className="text-red-500">*</span></label>
+                                    <select
+                                        name="department_id"
+                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                        value={formData.department_id}
+                                        onChange={handleChange}
+                                        required
+                                    >
+                                        <option value="">Select Department</option>
+                                        {departments.map((dept) => (
+                                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Status</label>
@@ -1616,7 +1616,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <select name="billable"
                                         className={`p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium 
                                             ${formData.type === 'Internal' ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700 cursor-pointer focus:bg-white'}`}
-                                        value={formData.billable} 
+                                        value={formData.billable}
                                         onChange={handleChange}
                                         disabled={formData.type === 'Internal'}>
                                         <option value="Billable">Billable</option>
@@ -1677,11 +1677,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 type="button"
                                                 onClick={() => { void handleAddSkillClick(); }}
                                                 disabled={isAddingSkill}
-                                                className={`h-10 px-4 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${
-                                                    isAddingSkill
+                                                className={`h-10 px-4 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${isAddingSkill
                                                         ? 'bg-emerald-50 text-emerald-400 border-emerald-100 cursor-not-allowed'
                                                         : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
-                                                }`}
+                                                    }`}
                                             >
                                                 {isAddingSkill ? 'Adding...' : '+ Add Skill'}
                                             </button>
@@ -1737,181 +1736,181 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     No team members allocated to this project yet.
                                 </div>
                             ) : (
-                                    <div
-                                        ref={teamTableRef}
-                                        onFocusCapture={() => setIsTeamInputsActive(true)}
-                                        onBlurCapture={handleTeamBlur}
-                                        className="rounded-xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible"
-                                    >
-                                        <table className="w-full text-sm min-w-[1200px]">
-                                            <thead>
-                                                <tr className="bg-blue-50/70 border-b border-slate-200">
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[220px]">Name</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
-                                                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
-                                                    {visibleWeeks.map((wk, wIdx) => {
-                                                        const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
-                                                        return (
+                                <div
+                                    ref={teamTableRef}
+                                    onFocusCapture={() => setIsTeamInputsActive(true)}
+                                    onBlurCapture={handleTeamBlur}
+                                    className="rounded-xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible"
+                                >
+                                    <table className="w-full text-sm min-w-[1200px]">
+                                        <thead>
+                                            <tr className="bg-blue-50/70 border-b border-slate-200">
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[220px]">Name</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
+                                                {visibleWeeks.map((wk, wIdx) => {
+                                                    const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                    return (
                                                         <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50 border-l border-slate-200">
                                                             <div className="text-[11px] font-semibold text-blue-800 uppercase tracking-tight">{weekLabel}</div>
                                                             <div className="text-[9px] font-medium text-slate-500 whitespace-nowrap">{wk.dateRange}</div>
                                                         </th>
-                                                        );
-                                                    })}
-                                                    {hasMoreWeeks && (
-                                                        <th className="px-2 py-3 text-center min-w-[80px]">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setShowAllWeeks(v => !v)}
-                                                                className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
-                                                            >
-                                                                {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
-                                                            </button>
-                                                        </th>
-                                                    )}
-                                                    <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 uppercase tracking-wider w-8"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {formData.teamMembers.map((member, idx) => {
-                                                    const isLastMember = idx === formData.teamMembers.length - 1;
-                                                    return (
-                                                    <React.Fragment key={idx}>
-                                                    <tr className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
-                                                        <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
-                                                        <td className="px-2 py-2 min-w-[220px]">
-                                                            <SearchableDropdown
-                                                                items={employeeOptions}
-                                                                selectedId={member.employee_id}
-                                                                onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
-                                                                placeholder="Select Employee"
-                                                                label="employees"
-                                                                isLoading={isDirectoryLoading}
-                                                                onBeforeOpen={ensureTeamDropdownData}
-                                                                onOpenChange={(open) => setActiveDropdown(open ? `employee-${idx}` : '')}
-                                                            />
-                                                        </td>
-                                                        <td className="px-2 py-2 min-w-[140px]">
-                                                            <SearchableDropdown
-                                                                items={roleOptions}
-                                                                selectedId={member.role}
-                                                                onSelect={(item) => handleRoleSelect(idx, item.name)}
-                                                                placeholder="Select Role"
-                                                                label="roles"
-                                                                isLoading={isDirectoryLoading}
-                                                                onBeforeOpen={ensureTeamDropdownData}
-                                                                onOpenChange={(open) => setActiveDropdown(open ? `role-${idx}` : '')}
-                                                            />
-                                                        </td>
-                                                        <td className="px-2 py-2 min-w-[90px]">
-                                                            <select
-                                                                value={member.location}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
-                                                                className="w-full h-10 px-2 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
-                                                            >
-                                                                <option value="Remote">Remote</option>
-                                                                <option value="On-Site">On-Site</option>
-                                                                <option value="Hybrid">Hybrid</option>
-                                                            </select>
-                                                        </td>
-                                                        {/* Start Date */}
-                                                        <td className="px-2 py-2 min-w-[130px]">
-                                                            <input
-                                                                type="date"
-                                                                value={member.allocation_start_date || ''}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
-                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
-                                                            />
-                                                        </td>
-                                                        {/* End Date */}
-                                                        <td className="px-2 py-2 min-w-[130px]">
-                                                            <input
-                                                                type="date"
-                                                                value={member.allocation_end_date || ''}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
-                                                                className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
-                                                            />
-                                                        </td>
-                                                        {/* Allocation % */}
-                                                        <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
-                                                            <input
-                                                                type="number" min="0" max="100"
-                                                                placeholder="0"
-                                                                value={member.allocation_pct}
-                                                                onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
-                                                                className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                            />
-                                                        </td>
-                                                        {/* Resource Type column */}
-                                                        <td className="px-2 py-2 min-w-[110px]">
-                                                            <div className="relative group">
-                                                                <select
-                                                                    value={member.billable_shadow}
-                                                                    onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
-                                                                    className={`w-full h-10 pl-2 pr-8 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
-                                                                        ${member.billable_shadow === 'Billable'
-                                                                            ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
-                                                                            : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
-                                                                        }`}
-                                                                >
-                                                                    <option value="Billable">Billable</option>
-                                                                    <option value="Non-billable">Non-billable</option>
-                                                                </select>
-                                                                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-                                                                    <ChevronDown size={14} className={`${member.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        {/* Dynamic week columns — Excel-style */}
-                                                        {visibleWeeks.map((wk, wIdx) => {
-                                                            const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
-                                                            return (
-                                                            <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/40">
-                                                                <input
-                                                                    type="number" min="0" max="40"
-                                                                    placeholder="0h"
-                                                                    value={(member.weekly_hours || {})[wk.weekNum] ?? ''}
-                                                                    onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
-                                                                    title={weekLabel}
-                                                                    className="w-full px-1.5 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
-                                                                />
-                                                            </td>
-                                                            );
-                                                        })}
-                                                        {/* Empty cell under "See more" header */}
-                                                        {hasMoreWeeks && <td />}
-                                                        <td className="px-3 py-2 text-center">
-                                                            <button type="button" onClick={() => handleRemoveTeamMember(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Remove">
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                    {isLastMember && (
-                                                    <tr className="border-0 bg-transparent">
-                                                        <td className="px-3 py-2 text-center text-slate-300 text-xs">{formData.teamMembers.length + 1}</td>
-                                                        <td className="px-2 py-2 min-w-[220px]">
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleAddTeamMember}
-                                                                className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold hover:text-emerald-800 transition-colors"
-                                                            >
-                                                                <Plus size={18} /> Add Team Member
-                                                            </button>
-                                                        </td>
-                                                        <td colSpan={7 + visibleWeeks.length + (hasMoreWeeks ? 1 : 0)}></td>
-                                                    </tr>
-                                                    )}
-                                                    </React.Fragment>
                                                     );
                                                 })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                {hasMoreWeeks && (
+                                                    <th className="px-2 py-3 text-center min-w-[80px]">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowAllWeeks(v => !v)}
+                                                            className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
+                                                        >
+                                                            {showAllWeeks ? '← Less' : `+${projectWeeks.length - VISIBLE_WEEKS} more`}
+                                                        </button>
+                                                    </th>
+                                                )}
+                                                <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 uppercase tracking-wider w-8"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {formData.teamMembers.map((member, idx) => {
+                                                const isLastMember = idx === formData.teamMembers.length - 1;
+                                                return (
+                                                    <React.Fragment key={idx}>
+                                                        <tr className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
+                                                            <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
+                                                            <td className="px-2 py-2 min-w-[220px]">
+                                                                <SearchableDropdown
+                                                                    items={employeeOptions}
+                                                                    selectedId={member.employee_id}
+                                                                    onSelect={(item) => handleEmployeeSelect(idx, item._raw)}
+                                                                    placeholder="Select Employee"
+                                                                    label="employees"
+                                                                    isLoading={isDirectoryLoading}
+                                                                    onBeforeOpen={ensureTeamDropdownData}
+                                                                    onOpenChange={(open) => setActiveDropdown(open ? `employee-${idx}` : '')}
+                                                                />
+                                                            </td>
+                                                            <td className="px-2 py-2 min-w-[140px]">
+                                                                <SearchableDropdown
+                                                                    items={roleOptions}
+                                                                    selectedId={member.role}
+                                                                    onSelect={(item) => handleRoleSelect(idx, item.name)}
+                                                                    placeholder="Select Role"
+                                                                    label="roles"
+                                                                    isLoading={isDirectoryLoading}
+                                                                    onBeforeOpen={ensureTeamDropdownData}
+                                                                    onOpenChange={(open) => setActiveDropdown(open ? `role-${idx}` : '')}
+                                                                />
+                                                            </td>
+                                                            <td className="px-2 py-2 min-w-[90px]">
+                                                                <select
+                                                                    value={member.location}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
+                                                                    className="w-full h-10 px-2 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
+                                                                >
+                                                                    <option value="Remote">Remote</option>
+                                                                    <option value="On-Site">On-Site</option>
+                                                                    <option value="Hybrid">Hybrid</option>
+                                                                </select>
+                                                            </td>
+                                                            {/* Start Date */}
+                                                            <td className="px-2 py-2 min-w-[130px]">
+                                                                <input
+                                                                    type="date"
+                                                                    value={member.allocation_start_date || ''}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
+                                                                    className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                />
+                                                            </td>
+                                                            {/* End Date */}
+                                                            <td className="px-2 py-2 min-w-[130px]">
+                                                                <input
+                                                                    type="date"
+                                                                    value={member.allocation_end_date || ''}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
+                                                                    className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                />
+                                                            </td>
+                                                            {/* Allocation % */}
+                                                            <td className="px-2 py-2 min-w-[110px] bg-blue-50/50">
+                                                                <input
+                                                                    type="number" min="0" max="100"
+                                                                    placeholder="0"
+                                                                    value={member.allocation_pct}
+                                                                    onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
+                                                                    className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                />
+                                                            </td>
+                                                            {/* Resource Type column */}
+                                                            <td className="px-2 py-2 min-w-[110px]">
+                                                                <div className="relative group">
+                                                                    <select
+                                                                        value={member.billable_shadow}
+                                                                        onChange={(e) => handleTeamMemberChange(idx, 'billable_shadow', e.target.value)}
+                                                                        className={`w-full h-10 pl-2 pr-8 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
+                                                                        ${member.billable_shadow === 'Billable'
+                                                                                ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                                                : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                                            }`}
+                                                                    >
+                                                                        <option value="Billable">Billable</option>
+                                                                        <option value="Non-billable">Non-billable</option>
+                                                                    </select>
+                                                                    <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                                        <ChevronDown size={14} className={`${member.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            {/* Dynamic week columns — Excel-style */}
+                                                            {visibleWeeks.map((wk, wIdx) => {
+                                                                const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
+                                                                return (
+                                                                    <td key={`${wk.year}-${wk.weekNum}`} className="px-1 py-2 min-w-[64px] border-l border-slate-100 bg-blue-50/40">
+                                                                        <input
+                                                                            type="number" min="0" max="40"
+                                                                            placeholder="0h"
+                                                                            value={(member.weekly_hours || {})[wk.weekNum] ?? ''}
+                                                                            onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
+                                                                            title={weekLabel}
+                                                                            className="w-full px-1.5 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
+                                                                        />
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                            {/* Empty cell under "See more" header */}
+                                                            {hasMoreWeeks && <td />}
+                                                            <td className="px-3 py-2 text-center">
+                                                                <button type="button" onClick={() => handleRemoveTeamMember(idx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Remove">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {isLastMember && (
+                                                            <tr className="border-0 bg-transparent">
+                                                                <td className="px-3 py-2 text-center text-slate-300 text-xs">{formData.teamMembers.length + 1}</td>
+                                                                <td className="px-2 py-2 min-w-[220px]">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleAddTeamMember}
+                                                                        className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold hover:text-emerald-800 transition-colors"
+                                                                    >
+                                                                        <Plus size={18} /> Add Team Member
+                                                                    </button>
+                                                                </td>
+                                                                <td colSpan={7 + visibleWeeks.length + (hasMoreWeeks ? 1 : 0)}></td>
+                                                            </tr>
+                                                        )}
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
                             )}
                         </div>
                     </form>

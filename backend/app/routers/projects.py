@@ -4,13 +4,62 @@ import json
 from typing import Dict, List, Optional
 
 import psycopg2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
 from app.database import get_db_connection, release_db_connection
+from app.auth_utils import get_current_user
+
+def ensure_uuid_column():
+    """Ensure the projects table has a UUID column for secure public indexing."""
+    conn = get_db_connection()
+    if not conn:
+        return
+    cur = conn.cursor()
+    try:
+        # gen_random_uuid() is built-in for PG 13+
+        cur.execute("""
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='uuid') THEN
+                    ALTER TABLE public.projects ADD COLUMN uuid UUID DEFAULT gen_random_uuid();
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_uuid ON public.projects(uuid);
+                END IF;
+                -- Backfill if any NULLs found (though DEFAULT should handle it)
+                UPDATE public.projects SET uuid = gen_random_uuid() WHERE uuid IS NULL;
+            END $$;
+        """)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"[Migration] UUID check failed: {e}")
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+# Run migration check on module import
+ensure_uuid_column()
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+def _resolve_project_id(identifier: str, cur):
+    """
+    Securely resolve a project_id from either a legacy sequential ID or a UUID.
+    Returns the raw project_id if found, else raises 404.
+    """
+    try:
+        # Check if it's a valid UUID
+        uuid_obj = uuid.UUID(identifier)
+        cur.execute("SELECT project_id FROM projects WHERE uuid = %s", (str(uuid_obj),))
+    except (ValueError, AttributeError):
+        # Fallback to direct ID for backward compatibility
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (identifier,))
+    
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return row[0]
 
 HOURS_PER_FTE = 40  # 100% allocation per week
 
@@ -122,6 +171,7 @@ class ProjectCreate(BaseModel):
     type: str
     client_id: Optional[str] = None
     partner_id: Optional[str] = None
+    department_id: Optional[str] = None
     billable: Optional[str] = None
     start_date: date
     end_date: Optional[date] = None
@@ -134,14 +184,20 @@ VALID_PROJECT_TYPES = {"client", "internal", "partner", "poc"}
 VALID_BILLABLE_VALUES = {"billable", "non-billable", "non billable", "non - billable"}
 PROJECT_STATUS_ALIASES = {
     "not started": "Not Started",
+    "not-started": "Not Started",
+    "not_started": "Not Started",
     "planned": "Not Started",
     "upcoming": "Not Started",
     "in progress": "In Progress",
+    "in-progress": "In Progress",
+    "in_progress": "In Progress",
     "running": "In Progress",
     "live": "In Progress",
     "active": "In Progress",
     "ongoing": "In Progress",
     "on hold": "On Hold",
+    "on-hold": "On Hold",
+    "on_hold": "On Hold",
     "delayed": "On Hold",
     "blocked": "On Hold",
     "closed": "Completed",
@@ -351,13 +407,23 @@ def projects_overview(
         join_clause = ""
         params = []
         
-        if department and department.lower() != 'all':
+        # Robust check for "all" variations and null/undefined strings
+        is_all_dept = not department or str(department).lower() in ('all', 'all department', 'all departments', 'null', 'undefined', '')
+        
+        if not is_all_dept:
             join_clause = """
-                JOIN projects_allocation pa ON p.project_id = pa.project_id
-                JOIN employee_master em ON pa.employee_id = em.employee_id
+                LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
+                LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
+                LEFT JOIN departments d ON p.department_id = d.department_id
             """
-            where_clause += " AND em.department = %s "
-            params.append(department)
+            where_clause += """
+                AND (
+                    em.department = %s 
+                    OR d.department_name = %s 
+                    OR d.department_id = %s
+                )
+            """
+            params.extend([department, department, department])
 
         if resource_name:
             if not join_clause:
@@ -386,13 +452,13 @@ def projects_overview(
             where_clause += " AND p.sub_status = %s "
             params.append(sow_status)
 
-        # Date Range Filter (Overlap Logic)
+        # Date Range Filter (Overlap Logic: show if active during range)
         if final_start and final_start.strip():
             where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
             params.append(final_start)
         
         if final_end and final_end.strip():
-            where_clause += " AND (p.start_date <= %s) "
+            where_clause += " AND p.start_date <= %s "
             params.append(final_end)
 
         # Fetch projects to count them in Python using the centralized normalization logic
@@ -478,17 +544,27 @@ def projects_list(
         where_clause = " WHERE 1=1 "
         params = []
         
-        # Department Filter
-        if department and department.lower() != 'all':
+        # Department Filter — match on project.department_id (name match) OR resources' department
+        # Robust check for "all" variations and null/undefined strings
+        is_all_dept = not department or str(department).lower() in ('all', 'all department', 'all departments', 'null', 'undefined', '')
+        
+        if not is_all_dept:
             where_clause += """
-                AND EXISTS (
-                    SELECT 1 FROM projects_allocation pa_dept
-                    JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
-                    WHERE pa_dept.project_id = p.project_id
-                      AND em_dept.department = %s
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM departments d_dept
+                        WHERE d_dept.department_id = p.department_id
+                          AND (d_dept.department_name = %s OR d_dept.department_id = %s)
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM projects_allocation pa_dept
+                        JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
+                        WHERE pa_dept.project_id = p.project_id
+                          AND em_dept.department = %s
+                    )
                 )
             """
-            params.append(department)
+            params.extend([department, department, department])
 
         # Resource Name Filter
         if resource_name:
@@ -502,13 +578,13 @@ def projects_list(
             """
             params.append(f"%{resource_name}%")
 
-        # Date Range Filter (Overlap Logic)
+        # Date Range Filter (Overlap Logic: show if active during range)
         if final_start and final_start.strip():
             where_clause += " AND (p.end_date >= %s OR p.end_date IS NULL) "
             params.append(final_start)
         
         if final_end and final_end.strip():
-            where_clause += " AND (p.start_date <= %s) "
+            where_clause += " AND p.start_date <= %s "
             params.append(final_end)
 
         if project_name:
@@ -517,12 +593,19 @@ def projects_list(
         
         if status and status.lower() not in ('all status', ''):
             # Resolve all keys that map to this canonical status for robust SQL filtering
-            status_keys = [k for k, v in PROJECT_STATUS_ALIASES.items() if v == status]
+            # Sidebar filter usually sends the display name (e.g., "In Progress")
+            status_keys = [k for k, v in PROJECT_STATUS_ALIASES.items() if v.lower() == status.lower()]
             if not status_keys:
                 status_keys = [status.lower()]
             
-            where_clause += " AND LOWER(p.project_status) = ANY(%s) "
-            params.append(status_keys)
+            # Robust mapping: check against literal column AND normalized version (stripping underscores/hyphens)
+            where_clause += """ 
+                AND (
+                    LOWER(p.project_status) = ANY(%s) 
+                    OR LOWER(REPLACE(REPLACE(p.project_status, '_', ' '), '-', ' ')) = ANY(%s)
+                )
+            """
+            params.extend([status_keys, [s.replace('_', ' ').replace('-', ' ') for s in status_keys]])
         
         if sow_status:
             where_clause += " AND p.sub_status = %s "
@@ -562,12 +645,16 @@ def projects_list(
                 pr.partner_name,
                 p.billable,
                 p.client_id,
-                p.partner_id
+                p.partner_id,
+                p.uuid,
+                p.department_id,
+                d.department_name
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
+            LEFT JOIN departments d ON p.department_id = d.department_id
             {where_clause}
-            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id
+            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id, p.uuid, p.department_id, d.department_name
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
         results = cur.fetchall()
@@ -589,6 +676,9 @@ def projects_list(
                 "billable": r[11] if r[11] else "Unknown",
                 "client_id": r[12],
                 "partner_id": r[13],
+                "uuid": str(r[14]) if r[14] else None,
+                "department_id": r[15],
+                "department_name": r[16]
             }
             for r in results
         ]
@@ -600,18 +690,35 @@ def projects_list(
         release_db_connection(conn)
 
 
-@router.get("/{project_id}/details")
-def get_project_details(project_id: str):
+@router.get("/departments")
+def list_departments():
+    """Return all departments for use in dropdowns."""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        cur.execute("SELECT department_id, department_name FROM departments ORDER BY department_name")
+        rows = cur.fetchall()
+        return [{"id": r[0], "name": r[1]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.get("/{project_id}/details")
+def get_project_details(project_id: str, _user: dict = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute("""
             SELECT 
                 p.project_id, p.project_name, p.project_status, p.billable, p.start_date, p.end_date,
                 c.client_name, pr.partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
-                p.client_id, p.partner_id, p.project_type
+                p.client_id, p.partner_id, p.project_type, p.uuid
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
@@ -644,7 +751,8 @@ def get_project_details(project_id: str):
             "timeline_notes": row[16] or "No timeline notes.",
             "client_id": row[17],
             "partner_id": row[18],
-            "type": row[19]
+            "type": row[19],
+            "uuid": str(row[20]) if row[20] else None
         }
     finally:
         cur.close()
@@ -652,14 +760,20 @@ def get_project_details(project_id: str):
 
 
 @router.put("/{project_id}/details")
-def update_project_details(project_id: str, details: ProjectDetailsUpdate):
+def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user: dict = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+<<<<<<< HEAD
         # 1. Fetch current (old) project dates to check for extensions
         cur.execute("SELECT start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
         old_proj = cur.fetchone()
         if not old_proj:
+=======
+        project_id = _resolve_project_id(project_id, cur)
+        cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
+        if not cur.fetchone():
+>>>>>>> cb21a24 (Project module: update panels, filters, and project views)
             raise HTTPException(status_code=404, detail="Project not found")
         
         old_start_proj, old_end_proj = old_proj
@@ -723,10 +837,11 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate):
 
 
 @router.get("/{project_id}/resources")
-def project_resources(project_id: str):
+def project_resources(project_id: str, _user: dict = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         # Fetch all resources and their weekly allocations in one go
         cur.execute("""
             SELECT
@@ -863,6 +978,7 @@ def create_project_resource(project_id: str, payload: TeamMemberCreate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute("SELECT billable, start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
         project_row = cur.fetchone()
         if not project_row:
@@ -894,6 +1010,7 @@ def update_project_resource(project_id: str, allocation_id: str, payload: TeamMe
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute("SELECT billable, start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
         project_row = cur.fetchone()
         if not project_row:
@@ -933,6 +1050,7 @@ def delete_project_resource(project_id: str, allocation_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute(
             "SELECT 1 FROM projects_allocation WHERE allocation_id = %s AND project_id = %s",
             (allocation_id, project_id)
@@ -960,57 +1078,68 @@ def delete_project_resource(project_id: str, allocation_id: str):
 
 @router.post("/{project_id}/resources/export/pdf")
 def export_project_resources_pdf(project_id: str, payload: ProjectResourcesPdfExportRequest):
-    resources = payload.resources or []
-    title = _normalize_text(payload.title) or f"Resource Allocation - {project_id}"
-    generated_on = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        resolved_project_id = _resolve_project_id(project_id, cur)
+        resources = payload.resources or []
+        title = _normalize_text(payload.title) or f"Resource Allocation - {resolved_project_id}"
+        generated_on = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    lines = [
-        title,
-        f"Generated on: {generated_on}",
-        "",
-        "Resource | Role | Start | End | Allocation | W1 | W2 | W3 | W4 | Total",
-    ]
+        lines = [
+            title,
+            f"Generated on: {generated_on}",
+            "",
+            "Resource | Role | Start | End | Allocation | W1 | W2 | W3 | W4 | Total",
+        ]
 
-    for row in resources[:38]:
-        project_count = row.model_dump().get("project_count") if hasattr(row, "model_dump") else None
-        if project_count is None:
-            project_count = getattr(row, "project_count", None)
-        try:
-            project_count_num = float(project_count) if project_count is not None else 0
-        except Exception:
-            project_count_num = 0
-        allocation_pct = 0 if project_count_num <= 0 else round(100 / project_count_num)
+        for row in resources[:38]:
+            project_count = row.model_dump().get("project_count") if hasattr(row, "model_dump") else None
+            if project_count is None:
+                project_count = getattr(row, "project_count", None)
+            try:
+                project_count_num = float(project_count) if project_count is not None else 0
+            except Exception:
+                project_count_num = 0
+            allocation_pct = 0 if project_count_num <= 0 else round(100 / project_count_num)
 
-        total = (row.w1 or 0) + (row.w2 or 0) + (row.w3 or 0) + (row.w4 or 0)
-        line = (
-            f"{(row.name or '-')} | {(row.role or '-')} | "
-            f"{(row.allocation_start_date or '-') } | {(row.allocation_end_date or '-')} | "
-            f"{allocation_pct}% | {row.w1 or 0}h | {row.w2 or 0}h | {row.w3 or 0}h | {row.w4 or 0}h | {total}h"
+            total = (row.w1 or 0) + (row.w2 or 0) + (row.w3 or 0) + (row.w4 or 0)
+            line = (
+                f"{(row.name or '-')} | {(row.role or '-')} | "
+                f"{(row.allocation_start_date or '-') } | {(row.allocation_end_date or '-')} | "
+                f"{allocation_pct}% | {row.w1 or 0}h | {row.w2 or 0}h | {row.w3 or 0}h | {row.w4 or 0}h | {total}h"
+            )
+            lines.append(line)
+
+        if len(resources) > 38:
+            lines.append(f"... and {len(resources) - 38} more rows")
+
+        pdf_bytes = _build_simple_pdf(lines)
+        if not pdf_bytes:
+            raise HTTPException(status_code=500, detail="Failed to generate PDF.")
+
+        filename = f"Allocation_{resolved_project_id}_{date.today().isoformat()}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-        lines.append(line)
-
-    if len(resources) > 38:
-        lines.append(f"... and {len(resources) - 38} more rows")
-
-    pdf_bytes = _build_simple_pdf(lines)
-    if not pdf_bytes:
-        raise HTTPException(status_code=500, detail="Failed to generate PDF.")
-
-    filename = f"Allocation_{project_id}_{date.today().isoformat()}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    except Exception as e:
+        print(f"PDF Export Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
 
 
 @router.put("/{project_id}/resources")
-def update_project_resources(project_id: str, payload: ResourceAllocationUpdate):
+def update_project_resources(project_id: str, payload: ResourceAllocationUpdate, _user: dict = Depends(get_current_user)):
     import datetime
 
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute("SELECT billable, start_date, end_date FROM projects WHERE project_id = %s", (project_id,))
         project_row = cur.fetchone()
         if not project_row:
@@ -1058,11 +1187,16 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
 
 
 @router.put("/{project_id}")
-def update_project(project_id: str, updates: ProjectUpdate):
+def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+<<<<<<< HEAD
         cur.execute("SELECT project_status, end_date FROM projects WHERE project_id = %s", (project_id,))
+=======
+        project_id = _resolve_project_id(project_id, cur)
+        cur.execute("SELECT project_status FROM projects WHERE project_id = %s", (project_id,))
+>>>>>>> cb21a24 (Project module: update panels, filters, and project views)
         current_row = cur.fetchone()
         if not current_row:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -1124,9 +1258,16 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "partner_id" in payload:
             updates_map["partner_id"] = _normalize_fk_id(payload["partner_id"])
 
+<<<<<<< HEAD
         # Handle sub_status column removed from projects table logic to fix crash
         # tracking sub_status in memory but not saving to DB
         ignore_sub_status = None
+=======
+        if "department_id" in payload:
+            updates_map["department_id"] = _normalize_fk_id(payload["department_id"]) or None
+
+        # Handle sub_status once
+>>>>>>> cb21a24 (Project module: update panels, filters, and project views)
         if sub_status_value is not None or ("project_status" in payload):
             if (normalized_status or "").lower() == "in progress":
                 ignore_sub_status = normalized_sub_status
@@ -1209,6 +1350,10 @@ def create_project(project: ProjectCreate):
         if partner_id_value is not None:
             insert_fields.insert(5, "partner_id")
             insert_values.insert(5, partner_id_value)
+        department_id_value = _normalize_fk_id(project.department_id)
+        if department_id_value is not None:
+            insert_fields.append("department_id")
+            insert_values.append(department_id_value)
 
         placeholders = ", ".join(["%s"] * len(insert_fields))
         cur.execute(f"INSERT INTO projects ({', '.join(insert_fields)}) VALUES ({placeholders})", tuple(insert_values))
@@ -1254,6 +1399,7 @@ def delete_project(project_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
+        project_id = _resolve_project_id(project_id, cur)
         cur.execute("SELECT 1 FROM projects WHERE project_id = %s", (project_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Project not found")

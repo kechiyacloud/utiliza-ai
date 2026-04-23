@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check } from 'lucide-react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
+import { fetchProjectDepartments } from '../../api/projectsApi';
 import {
     fetchSimpleClients,
     createSimpleClient,
@@ -241,14 +242,15 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         setEntityError('');
         setIsEntitiesLoading(true);
         try {
-            const [clientData, partnerData, filterRes] = await Promise.all([
+            const [clientData, partnerData, filterRes, deptRes] = await Promise.all([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
-                axios.get('/employees/filter-options')
+                axios.get('/employees/filter-options'),
+                fetchProjectDepartments(),
             ]);
             setClients(clientData);
             setPartnerClients(partnerData);
-            setDepartments(filterRes.data?.departments || []);
+            setDepartments(deptRes);
             setAvailableSkills(filterRes.data?.skills || []);
         } catch {
             setEntityError('Failed to load clients/partners.');
@@ -456,10 +458,13 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             return;
         }
 
+        if (!(formData.departmentId || '').trim()) {
+            setSaveError('Department is required.');
+            return;
+        }
+
         const isInternal = formData.type === 'Internal';
         
-        // SOW Validation removed as requested - subStatus is now optional
-
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
         const isDirectClientProject = formData.type === 'External' && formData.clientType === 'Direct Client';
         
@@ -484,10 +489,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         if ('partnerId' in changedFields || 'type' in changedFields) {
             payload.partner_id = isPartnerClientProject ? (formData.partnerId || null) : null;
         }
-        if ('departmentId' in changedFields || 'type' in changedFields) {
-            const deptValue = formData.type === 'Internal' ? (formData.departmentId || null) : null;
-            payload.department = deptValue;
-            payload.department_id = deptValue;
+        // Always send department_id if changed
+        if ('departmentId' in changedFields) {
+            payload.department_id = formData.departmentId || null;
         }
         if ('billable' in changedFields) payload.billable = formData.billable;
         if ('startDate' in changedFields) payload.start_date = formData.startDate;
@@ -729,22 +733,22 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             )}
 
-                            {formData.type === 'Internal' && (
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Department</label>
-                                    <select
-                                        name="departmentId"
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-800"
-                                        value={formData.departmentId}
-                                        onChange={handleChange}
-                                    >
-                                        <option value="">Select Department</option>
-                                        {departments.map(dep => (
-                                            <option key={dep} value={dep}>{dep}</option>
-                                        ))}
-                                    </select>
+                            {/* Department — for ALL project types */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
+                                    Department <span className="text-red-500">*</span>
+                                </label>
+                                <div className="flex gap-2">
+                                    <SearchableDropdown
+                                        items={departments}
+                                        selectedId={formData.departmentId}
+                                        onSelect={(item) => handleChange({ target: { name: 'departmentId', value: item.id } })}
+                                        placeholder="Select Department"
+                                        label="Department"
+                                        isLoading={isEntitiesLoading}
+                                    />
                                 </div>
-                            )}
+                            </div>
 
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Status</label>

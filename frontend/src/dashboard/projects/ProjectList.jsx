@@ -203,7 +203,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     );
 };
 
-const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, filters, onFilterChange }) => {
+const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, filters, onFilterChange, departments = [] }) => {
     const { triggerRefresh } = useDataRefresh();
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
@@ -237,6 +237,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
 
     const handleClearFilters = () => {
         const cleared = {
+            department: '',
             projectName: '',
             status: 'All Status',
             sowStatus: '',
@@ -253,30 +254,41 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
     if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = useMemo(() => {
-        // Debug logging for filter verification
-        if (filters?.startDate || filters?.endDate || searchTerm) {
-            console.log("Applying Project Filters:", {
-                count: projects.length,
-                searchTerm,
-                selectedStart: filters?.startDate,
-                selectedEnd: filters?.endDate
-            });
-        }
+        // Robust normalization for status comparison
+        const normalizeStatus = (s) => (s || '').toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ').trim();
 
-        return projects.filter(project => {
+        const filtered = projects.filter(project => {
             if (!project || !project.name) return false;
 
             const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
+            // 1. Sidebar Status Filter
+            let matchesSidebarStatus = true;
+            if (filters?.status && filters.status !== 'All Status') {
+                const pStatus = normalizeStatus(project.status || project.project_status);
+                const fStatus = normalizeStatus(filters.status);
+                
+                if (fStatus === 'in progress') {
+                    matchesSidebarStatus = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => pStatus.includes(s));
+                } else if (fStatus === 'completed') {
+                    matchesSidebarStatus = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => pStatus.includes(s));
+                } else if (fStatus === 'not started') {
+                    matchesSidebarStatus = ['not started', 'planned', 'upcoming'].some(s => pStatus.includes(s));
+                } else {
+                    matchesSidebarStatus = pStatus.includes(fStatus);
+                }
+            }
+
+            // 2. Dashboard Card Filter override/combination
             let matchesCardFilter = true;
-            const projectStatus = (project.status || '').toLowerCase();
+            const projectStatus = normalizeStatus(project.status || project.project_status);
             if (activeCardFilter === 'Internal') {
                 matchesCardFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
             } else if (activeCardFilter === 'External') {
                 matchesCardFilter = ['external', 'client'].includes((project.type || '').toLowerCase());
             } else if (activeCardFilter === 'Active' || activeCardFilter === 'Ongoing') {
-                matchesCardFilter = ['live', 'in progress', 'in progress - overdue', 'in progress - ending soon', 'running', 'active', 'ongoing'].includes(projectStatus);
+                matchesCardFilter = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => projectStatus.includes(s));
             } else if (activeCardFilter === 'Overdue') {
                 matchesCardFilter = projectStatus.includes('overdue');
             } else if (activeCardFilter === 'Ending Soon') {
@@ -287,52 +299,81 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                 const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
                 matchesCardFilter = projectStatus === 'not started' || isFutureDate;
             } else if (activeCardFilter === 'Completed') {
-                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes(projectStatus);
+                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => projectStatus.includes(s));
             }
 
-            // Date Overlap Filter Logic
+            // 3. Additional Sidebar Filters
+            let matchesResourceType = true;
+            if (filters?.resourceType) {
+                matchesResourceType = (project.type || '').toLowerCase() === filters.resourceType.toLowerCase();
+            }
+
+            let matchesProjectName = true;
+            if (filters?.projectName) {
+                matchesProjectName = (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
+            }
+
+            let matchesResourceName = true;
+            if (filters?.resourceName) {
+                const rQuery = filters.resourceName.toLowerCase();
+                const members = project.team_members || project.resources || [];
+                matchesResourceName = members.some(m => (m.name || '').toLowerCase().includes(rQuery));
+            }
+
+            let matchesSowStatus = true;
+            if (filters?.sowStatus) {
+                matchesSowStatus = project.sub_status === filters.sowStatus || project.subStatus === filters.sowStatus;
+            }
+
+            // Date Range Filter (Overlap Logic)
             let matchesDateFilter = true;
             if (filters?.startDate || filters?.endDate) {
                 const pStartStr = project.startDate || project.start_date;
                 const pEndStr = project.endDate || project.end_date;
 
                 if (pStartStr) {
+                    // Convert all values to Date objects (no string comparison)
                     const pStart = new Date(pStartStr);
-                    const pEnd = pEndStr ? new Date(pEndStr) : new Date('9999-12-31');
+                    const pEnd = pEndStr ? new Date(pEndStr) : null;
                     
-                    // Normalize to midnight to avoid time-of-day mismatches
-                    pStart.setHours(0, 0, 0, 0);
-                    pEnd.setHours(0, 0, 0, 0);
+                    const fStart = filters.startDate ? new Date(filters.startDate) : null;
+                    const fEnd = filters.endDate ? new Date(filters.endDate) : null;
 
-                    if (filters.startDate && filters.endDate) {
-                        const fStart = new Date(filters.startDate);
-                        const fEnd = new Date(filters.endDate);
-                        fStart.setHours(0, 0, 0, 0);
-                        fEnd.setHours(0, 0, 0, 0);
-                        
-                        // Overlap: project.startDate <= selectedEndDate && project.endDate >= selectedStartDate
-                        matchesDateFilter = (pStart <= fEnd) && (pEnd >= fStart);
-                    } else if (filters.startDate) {
-                        const fStart = new Date(filters.startDate);
-                        fStart.setHours(0, 0, 0, 0);
-                        matchesDateFilter = (pEnd >= fStart);
-                    } else if (filters.endDate) {
-                        const fEnd = new Date(filters.endDate);
-                        fEnd.setHours(0, 0, 0, 0);
-                        matchesDateFilter = (pStart <= fEnd);
-                    }
-                } else if (filters.startDate || filters.endDate) {
-                    // Filter applied but project has no start date
+                    // Normalize all to midnight for accurate day-only comparison
+                    pStart.setHours(0, 0, 0, 0);
+                    if (pEnd) pEnd.setHours(0, 0, 0, 0);
+                    if (fStart) fStart.setHours(0, 0, 0, 0);
+                    if (fEnd) fEnd.setHours(0, 0, 0, 0);
+
+                    // Logic: Project is active during range if:
+                    // 1. It starts before or on the filter end date
+                    // 2. It ends after or on the filter start date (or is ongoing)
+                    const overlapsStart = !fEnd || pStart <= fEnd;
+                    const overlapsEnd = !fStart || !pEnd || pEnd >= fStart;
+
+                    matchesDateFilter = overlapsStart && overlapsEnd;
+                } else {
+                    // If filter is active but project has no start date, hide it
                     matchesDateFilter = false;
                 }
             }
 
-            const isFinishingSoonSort = sortBy === 'finishing-soon';
-            const hideCompleted = isFinishingSoonSort || activeCardFilter === 'Ending Soon';
-            if (hideCompleted && projectStatus === 'completed') return false;
+            return matchesSearchTerm && 
+                   matchesSidebarStatus && 
+                   matchesCardFilter && 
+                   matchesResourceType && 
+                   matchesProjectName && 
+                   matchesResourceName && 
+                   matchesSowStatus && 
+                   matchesDateFilter;
+        });
 
-            return matchesSearchTerm && matchesCardFilter && matchesDateFilter;
-        }).sort((a, b) => {
+        // Debug logging for filter verification as requested
+        if (filtered.length !== projects.length || hasActiveFilters || searchTerm) {
+            console.log(`[ProjectFilter] Total: ${projects.length} | Filtered: ${filtered.length} | Card: ${activeCardFilter || 'None'} | Sidebar Status: ${filters?.status || 'All'}`);
+        }
+
+        return filtered.sort((a, b) => {
             // Force finishing-soon sort if Ending Soon filter is applied
             const effectiveSort = activeCardFilter === 'Ending Soon' ? 'finishing-soon' : sortBy;
 
@@ -388,7 +429,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
         if (!projectToDelete) return;
         setIsDeleting(true);
         try {
-            await axios.delete(`/projects/${projectToDelete.project_id || projectToDelete.id}`);
+            await axios.delete(`/projects/${projectToDelete.uuid || projectToDelete.project_id || projectToDelete.id}`);
             clearDashboardCache(); // Sync dashboard
             triggerRefresh();
             if (onRefresh) onRefresh();
@@ -420,7 +461,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
 
 
     const handleViewClick = (project) => {
-        navigate(`/info/projects/${project.id}`, { state: { project } });
+        const identifier = project.uuid || project.project_id || project.id;
+        navigate(`/info/projects/${identifier}`, { state: { project } });
     };
 
     const handleEditClick = (project) => {
@@ -430,7 +472,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
 
     const handleSaveProject = async (payload) => {
         try {
-            await axios.put(`/projects/${payload.project_id || payload.id}`, payload);
+            const identifier = payload.uuid || payload.project_id || payload.id;
+            await axios.put(`/projects/${identifier}`, payload);
             clearDashboardCache(); // Sync dashboard
             if (onRefresh) onRefresh();
             setIsEditFormOpen(false);
@@ -756,8 +799,14 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                                 <div className="p-4 bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 text-slate-300">
                                     <List size={40} />
                                 </div>
-                                <h3 className="text-lg font-black text-slate-800">No Projects Found</h3>
-                                <p className="text-slate-500 text-sm mt-1">Try adjusting your filters or search term</p>
+                                <h3 className="text-lg font-black text-slate-800">
+                                    {filters?.department || activeCardFilter ? 'No projects found for this filter' : 'No Projects Found'}
+                                </h3>
+                                <p className="text-slate-500 text-sm mt-1">
+                                    {filters?.department 
+                                        ? `No projects found for the selected department. Try a different one or "All Departments".` 
+                                        : 'Try adjusting your filters or search term'}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -784,6 +833,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh, allEmployeeNames, 
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
                 onClearFilters={handleClearFilters}
+                departments={departments}
                 currentFilters={{
                     ...filters,
                     allResourceNames: allEmployeeNames && allEmployeeNames.length > 0 
