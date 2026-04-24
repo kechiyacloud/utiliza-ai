@@ -7,7 +7,7 @@ import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, 
 const Navbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(true);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
@@ -36,16 +36,12 @@ const Navbar = () => {
     };
 
     return (
-        <div className={`h-screen pr-1 transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-44'}`}>
+        <div 
+            className={`h-screen pr-1 transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-44'}`}
+            onMouseEnter={() => setIsCollapsed(false)}
+            onMouseLeave={() => setIsCollapsed(true)}
+        >
             <div className="h-full flex flex-col py-6 bg-mainTheme text-white relative">
-
-                {/* Toggle Button */}
-                <button
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="absolute -right-3 top-8 bg-white text-mainTheme p-1.5 rounded-full shadow-md z-10 hover:bg-gray-100 transition-colors flex items-center justify-center"
-                >
-                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </button>
 
                 <div
                     onClick={() => navigate('/info/dashboard')}

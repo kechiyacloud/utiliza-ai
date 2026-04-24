@@ -14,25 +14,25 @@ import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className={`bg-white p-3 rounded-xl shadow-md border flex items-center justify-between transition-all hover:shadow-lg cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+    className={`bg-white p-4 rounded-2xl shadow-sm border flex items-center justify-between transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${isActive ? 'border-blue-500 ring-4 ring-blue-50 ring-offset-0' : 'border-slate-100 hover:border-slate-200'}`}
     onClick={onClick}
   >
     <div className="flex-1">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <div className="flex items-center justify-between">
-        <h3 className={`font-extrabold text-gray-800 ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-xl'}`}>
+      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <div className="flex items-center">
+        <h3 className={`font-semibold text-slate-800 tracking-tight ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-3xl'}`}>
           {loading ? (
-            <span className="text-gray-400">...</span>
+            <span className="text-slate-300 animate-pulse">...</span>
           ) : error ? (
-            <span className="text-red-500">—</span>
+            <span className="text-rose-500">—</span>
           ) : (
             <span>{value ?? '—'}</span>
           )}
         </h3>
       </div>
     </div>
-    <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
-      <Icon size={20} className={colorClass.replace('bg-', 'text-').replace('10', '500')} />
+    <div className={`p-3 rounded-xl ${colorClass} bg-opacity-10 transition-colors`}>
+      <Icon size={24} className={colorClass.replace('bg-', 'text-').replace('500', '600')} />
     </div>
   </div>
 )
@@ -261,7 +261,7 @@ function EmployeeMasterList() {
 
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
           label="TOTAL EMPLOYEES"
           value={totalEmployeesCount}
