@@ -52,8 +52,8 @@ function Login() {
         throw new Error("Login failed: no token received from server")
       }
 
-      sessionStorage.setItem("token", response.data.token);
-      sessionStorage.setItem("userEmail", formData.email.trim());
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("userEmail", formData.email.trim());
       navigate("/info")
 
     } catch (err) {

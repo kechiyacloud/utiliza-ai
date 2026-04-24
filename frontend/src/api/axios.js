@@ -20,8 +20,8 @@ api.interceptors.request.use((config) => {
 });
 
 function clearSessionAndRedirect() {
-  sessionStorage.removeItem("token");
-  sessionStorage.removeItem("userEmail");
+  localStorage.removeItem("token");
+  localStorage.removeItem("userEmail");
   window.location.replace("/");
 }
 

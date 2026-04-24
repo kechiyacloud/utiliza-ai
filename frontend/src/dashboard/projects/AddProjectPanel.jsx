@@ -952,13 +952,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }, 0);
     };
 
-    useEffect(() => {
-        console.log('[AddProjectPanel] employee options length:', employeeOptions.length);
-    }, [employeeOptions]);
 
-    useEffect(() => {
-        console.log('[AddProjectPanel] role options length:', roleOptions.length);
-    }, [roleOptions]);
+
 
     const isDropdownOpen = Boolean(activeDropdown);
     const hideTeamHorizontalScroll = isDropdownOpen || isTeamInputsActive;
