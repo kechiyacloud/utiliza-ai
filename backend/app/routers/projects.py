@@ -11,35 +11,55 @@ from pydantic import BaseModel, Field, field_validator
 from app.database import get_db_connection, release_db_connection
 from app.auth_utils import get_current_user
 
-def ensure_uuid_column():
-    """Ensure the projects table has a UUID column for secure public indexing."""
+def ensure_project_columns():
+    """Ensures necessary columns exist in the projects table."""
     conn = get_db_connection()
     if not conn:
         return
     cur = conn.cursor()
     try:
-        # gen_random_uuid() is built-in for PG 13+
         cur.execute("""
             DO $$ 
             BEGIN 
+                -- uuid column
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='uuid') THEN
                     ALTER TABLE public.projects ADD COLUMN uuid UUID DEFAULT gen_random_uuid();
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_uuid ON public.projects(uuid);
                 END IF;
-                -- Backfill if any NULLs found (though DEFAULT should handle it)
+
+                -- department_id column
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='department_id') THEN
+                    ALTER TABLE public.projects ADD COLUMN department_id VARCHAR(50);
+                ELSE
+                    -- If it was created as INTEGER by previous attempt, cast it
+                    BEGIN
+                        ALTER TABLE public.projects ALTER COLUMN department_id TYPE VARCHAR(50);
+                    EXCEPTION WHEN others THEN
+                        -- if cast fails, drop and recreate
+                        ALTER TABLE public.projects DROP COLUMN department_id;
+                        ALTER TABLE public.projects ADD COLUMN department_id VARCHAR(50);
+                    END;
+                END IF;
+
+                -- sub_status column
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='sub_status') THEN
+                    ALTER TABLE public.projects ADD COLUMN sub_status VARCHAR(100);
+                END IF;
+                
+                -- Backfill if any NULLs found for UUID
                 UPDATE public.projects SET uuid = gen_random_uuid() WHERE uuid IS NULL;
             END $$;
         """)
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"[Migration] UUID check failed: {e}")
+        print(f"[Migration] Projects schema check failed: {e}")
     finally:
         cur.close()
         release_db_connection(conn)
 
 # Run migration check on module import
-ensure_uuid_column()
+ensure_project_columns()
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 

@@ -828,6 +828,27 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
     has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
     has_address = _table_has_column(cur, "employee_master", "address")
 
+    # Department transition validation: SRE <-> CSE/Cloud Solutions Engineering is not allowed.
+    cur.execute("SELECT department FROM employee_master WHERE employee_id = %s", (employee_id,))
+    old_dept_row = cur.fetchone()
+    if old_dept_row:
+        old_dept = old_dept_row[0]
+        new_dept = emp.department
+        
+        sre_names = ['SRE']
+        cse_names = ['CSE', 'Cloud Solutions Engineering']
+        
+        is_old_sre = old_dept in sre_names
+        is_new_sre = new_dept in sre_names
+        is_old_cse = old_dept in cse_names
+        is_new_cse = new_dept in cse_names
+        
+        if (is_old_sre and is_new_cse) or (is_old_cse and is_new_sre):
+             raise HTTPException(
+                 status_code=400, 
+                 detail=f"Department transition between '{old_dept}' and '{new_dept}' is not allowed."
+             )
+
     # 1. Update employee_master
     phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
     phone_numeric = int(phone_digits) if phone_digits else None

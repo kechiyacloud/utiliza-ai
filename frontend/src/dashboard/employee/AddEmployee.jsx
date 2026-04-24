@@ -622,12 +622,30 @@ const AddEmployee = () => {
         const isProfessionalValid = validateProfessionalSection();
 
         if (!isPersonalValid || !isProfessionalValid) {
-            // Find which section has errors and jump to it
             if (!isPersonalValid) setCurrentSection('personal');
             else if (!isProfessionalValid) setCurrentSection('professional');
-            
             alert('Please fix the validation errors before submitting.');
             return;
+        }
+
+        // Department transition validation: SRE <-> CSE/Cloud Solutions Engineering is not allowed.
+        if (isEditMode) {
+            const oldDept = editData?.department || '';
+            const newDept = formData.department;
+            
+            const sreNames = ['SRE'];
+            const cseNames = ['CSE', 'Cloud Solutions Engineering'];
+            
+            const isOldSre = sreNames.includes(oldDept);
+            const isNewSre = sreNames.includes(newDept);
+            const isOldCse = cseNames.includes(oldDept);
+            const isNewCse = cseNames.includes(newDept);
+            
+            if ((isOldSre && isNewCse) || (isOldCse && isNewSre)) {
+                alert(`Department transition between '${oldDept}' and '${newDept}' is not allowed.`);
+                setLoading(false);
+                return;
+            }
         }
 
         setLoading(true);
