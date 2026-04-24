@@ -628,26 +628,6 @@ const AddEmployee = () => {
             return;
         }
 
-        // Department transition validation: SRE <-> CSE/Cloud Solutions Engineering is not allowed.
-        if (isEditMode) {
-            const oldDept = editData?.department || '';
-            const newDept = formData.department;
-            
-            const sreNames = ['SRE'];
-            const cseNames = ['CSE', 'Cloud Solutions Engineering'];
-            
-            const isOldSre = sreNames.includes(oldDept);
-            const isNewSre = sreNames.includes(newDept);
-            const isOldCse = cseNames.includes(oldDept);
-            const isNewCse = cseNames.includes(newDept);
-            
-            if ((isOldSre && isNewCse) || (isOldCse && isNewSre)) {
-                alert(`Department transition between '${oldDept}' and '${newDept}' is not allowed.`);
-                setLoading(false);
-                return;
-            }
-        }
-
         setLoading(true);
         try {
             const payload = {
@@ -681,6 +661,7 @@ const AddEmployee = () => {
                 }))
             };
 
+            console.log('Saving employee with payload:', payload);
             if (isEditMode) {
                 await updateEmployee(editEmployeeId || formData.employee_id, payload);
             } else {
