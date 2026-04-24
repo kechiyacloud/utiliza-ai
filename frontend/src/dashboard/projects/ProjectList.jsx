@@ -90,7 +90,12 @@ const getProgressColorClasses = (pct) => {
     return 'bg-red-500';
 };
 
-const getStatusBadgeStyle = (pct) => {
+const getStatusBadgeStyle = (status, pct) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('overdue')) return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
+    if (s.includes('ending soon')) return { backgroundColor: '#FFF7ED', color: '#C2410C' }; // Orange
+    if (s === 'completed') return { backgroundColor: '#F0FDF4', color: '#166534' }; // Green
+    
     if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' };
     if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' };
     return { backgroundColor: '#FEF2F2', color: '#991B1B' };
@@ -100,28 +105,36 @@ const getStatusBadgeStyle = (pct) => {
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     const progress = calculateProjectProgress(project);
     return (
-        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300">
-            <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        {project.icon || project.name?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors line-clamp-1 truncate max-w-[160px]" title={project.name}>
-                            {project.name}
-                        </h3>
-                        <p className="text-sm text-slate-500 tracking-tight">
-                            {project.project_id || project.id}
-                        </p>
-                    </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full">
+            {/* Action Buttons - Absolute positioned to avoid title overlap */}
+            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onEdit(project); }} 
+                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-emerald-100 shadow-sm"
+                    title="Edit Project"
+                >
+                    <Pencil size={14} />
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(project); }} 
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-rose-100 shadow-sm"
+                    title="Delete Project"
+                >
+                    <Trash2 size={14} />
+                </button>
+            </div>
+
+            <div className="flex items-center gap-3 mb-5 pr-12">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+                    {project.icon || (project.name?.[0]?.toUpperCase() || '?')}
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onEdit(project)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                        <Pencil size={14} />
-                    </button>
-                    <button onClick={() => onDelete(project)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} />
-                    </button>
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate" title={project.name}>
+                        {project.name}
+                    </h3>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">
+                        {project.project_id || project.id}
+                    </p>
                 </div>
             </div>
 
@@ -130,7 +143,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                     <span className="text-sm font-normal text-slate-500">Status</span>
                     <span
                         className="px-3 py-1 rounded-full text-xs font-normal uppercase tracking-wider whitespace-nowrap"
-                        style={getStatusBadgeStyle(progress.pct)}
+                        style={getStatusBadgeStyle(project.status, progress.pct)}
                     >
                         {formatStatus(project)}
                     </span>
@@ -188,7 +201,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
 
                 <button
                     onClick={() => onView(project)}
-                    className="w-full py-2.5 mt-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600"
+                    className="w-full py-2.5 mt-auto bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600 shadow-sm hover:shadow-md active:scale-[0.98]"
                 >
                     View Details
                     <ExternalLink size={14} />
@@ -198,135 +211,226 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     );
 };
 
-const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
+const ProjectList = ({ 
+    projects, 
+    activeCardFilter, 
+    onRefresh, 
+    allEmployeeNames, 
+    filters, 
+    onFilterChange,
+    departments = [],
+    sortBy,
+    onSortChange,
+    searchTerm,
+    onSearchChange,
+    activeView,
+    onViewChange,
+    activeDepartment = ''
+}) => {
     const { triggerRefresh } = useDataRefresh();
-    const [searchTerm, setSearchTerm] = useState('');
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [isEditFormOpen, setIsEditFormOpen] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeView, setActiveView] = useState('table');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-    const [sortBy, setSortBy] = useState('newest');
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
     const location = useLocation();
     const navigate = useNavigate();
 
-    useEffect(() => {
-        if (location.state?.search && projects && projects.length > 0) {
-            setSearchTerm(location.state.search);
-            const foundProj = projects.find(p => p.name.toLowerCase() === location.state.search.toLowerCase());
-            if (foundProj) {
-                setSelectedProject(foundProj);
-            }
-            navigate(location.pathname, { replace: true, state: {} });
-        }
-    }, [location.state, projects, navigate]);
-
-    // Filter States
-    const initialFilters = {
-        projectName: '',
-        status: 'All Status',
-        sowStatus: '',
-        startDate: '',
-        endDate: '',
-        resourceName: '',
-        resourceType: ''
+    // Handle filter application by passing to parent
+    const handleApplyFilters = (newFilters) => {
+        onFilterChange(newFilters);
     };
 
-    const [filters, setFilters] = useState(initialFilters);
+    const handleClearFilters = () => {
+        const cleared = {
+            department: '',
+            projectName: '',
+            status: 'All Status',
+            sowStatus: '',
+            startDate: '',
+            endDate: '',
+            resourceName: '',
+            resourceType: ''
+        };
+        onFilterChange(cleared);
+    };
+
+    const hasActiveFilters = Object.values(filters || {}).some(v => v !== '' && v !== 'All Status');
 
     if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = useMemo(() => {
-        return projects.filter(project => {
+        // Robust normalization for status comparison
+        const normalizeStatus = (s) => (s || '').toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ').trim();
+        const isCompletedStatus = (s) => {
+            const norm = normalizeStatus(s);
+            return ['closed', 'completed', 'done', 'ended', 'finished'].some(opt => norm.includes(opt));
+        };
+
+        const filtered = projects.filter(project => {
             if (!project || !project.name) return false;
 
             const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesName = !filters.projectName || (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
-            const matchesResource = !filters.resourceName || (project.resourceNames || '').toLowerCase().includes(filters.resourceName.toLowerCase());
-
-            const isAllStatus = !filters.status || filters.status === 'All Status';
-            const statusValue = (project.status || '').trim();
-            const statusMatches = isAllStatus || statusValue === filters.status;
-            const subStatusFilterActive = filters.status === 'In Progress' && Boolean(filters.sowStatus);
-            const subStatusMatches = !subStatusFilterActive || (project.sub_status || project.subStatus || '') === filters.sowStatus;
-            const matchesStatus = statusMatches && subStatusMatches;
-
-            const matchesResourceType = !filters.resourceType || (project.billable || '').toLowerCase() === filters.resourceType.toLowerCase();
-
-            const projectStart = new Date(project.startDate || project.start_date);
-            const projectEnd = new Date(project.endDate || project.end_date || project.startDate || project.start_date);
-            const hasProjectDates = !Number.isNaN(projectStart.getTime());
-            const filterStart = filters.startDate ? new Date(filters.startDate) : null;
-            const filterEnd = filters.endDate ? new Date(filters.endDate) : null;
-            const matchesDate = (() => {
-                if (!filterStart && !filterEnd) return true;
-                if (!hasProjectDates) return false;
-                if (filterStart && projectEnd < filterStart) return false;
-                if (filterEnd && projectStart > filterStart) return false;
-                return true;
-            })();
-
-            let matchesCardFilter = true;
-            if (activeCardFilter === 'Internal') {
-                matchesCardFilter = ['Internal', 'POC'].includes(project.type);
-            } else if (activeCardFilter === 'External') {
-                matchesCardFilter = ['External', 'Client'].includes(project.type);
-            } else if (activeCardFilter === 'Ongoing') {
-                matchesCardFilter = ['live', 'in progress', 'running', 'active'].includes((project.status || '').toLowerCase());
-            } else if (activeCardFilter === 'Partner') {
-                matchesCardFilter = project.type === 'Partner';
-            } else if (activeCardFilter === 'Upcoming') {
-                const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
-                matchesCardFilter = (project.status || '').toLowerCase() === 'not started' || isFutureDate;
-            } else if (activeCardFilter === 'Completed') {
-                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'end', 'finished'].includes((project.status || '').toLowerCase());
+            // 1. Sidebar Status Filter
+            let matchesSidebarStatus = true;
+            if (filters?.status && filters.status !== 'All Status') {
+                const pStatus = normalizeStatus(project.status || project.project_status);
+                const fStatus = normalizeStatus(filters.status);
+                
+                if (fStatus === 'in progress') {
+                    matchesSidebarStatus = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => pStatus.includes(s));
+                } else if (fStatus === 'completed') {
+                    matchesSidebarStatus = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => pStatus.includes(s));
+                } else if (fStatus === 'not started') {
+                    matchesSidebarStatus = ['not started', 'planned', 'upcoming'].some(s => pStatus.includes(s));
+                } else {
+                    matchesSidebarStatus = pStatus.includes(fStatus);
+                }
             }
 
-            return matchesSearchTerm && matchesName && matchesResource && matchesStatus &&
-                matchesResourceType && matchesDate && matchesCardFilter;
-        }).sort((a, b) => {
-            if (sortBy === 'newest') {
+            // 2. Dashboard Card Filter override/combination
+            let matchesCardFilter = true;
+            const projectStatus = normalizeStatus(project.status || project.project_status);
+            if (activeCardFilter === 'Internal') {
+                matchesCardFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
+            } else if (activeCardFilter === 'External') {
+                matchesCardFilter = ['external', 'client'].includes((project.type || '').toLowerCase());
+            } else if (activeCardFilter === 'Active' || activeCardFilter === 'Ongoing') {
+                matchesCardFilter = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => projectStatus.includes(s));
+            } else if (activeCardFilter === 'Overdue') {
+                matchesCardFilter = projectStatus.includes('overdue');
+            } else if (activeCardFilter === 'Ending Soon') {
+                matchesCardFilter = projectStatus.includes('ending soon') && projectStatus !== 'completed';
+            } else if (activeCardFilter === 'Partner') {
+                matchesCardFilter = (project.type || '').toLowerCase() === 'partner';
+            } else if (activeCardFilter === 'Upcoming') {
+                const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
+                matchesCardFilter = projectStatus === 'not started' || isFutureDate;
+            } else if (activeCardFilter === 'Completed') {
+                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => projectStatus.includes(s));
+            }
+
+            // 3. Additional Sidebar Filters
+            let matchesResourceType = true;
+            if (filters?.resourceType) {
+                matchesResourceType = (project.type || '').toLowerCase() === filters.resourceType.toLowerCase();
+            }
+
+            let matchesProjectName = true;
+            if (filters?.projectName) {
+                matchesProjectName = (project.name || '').toLowerCase().includes(filters.projectName.toLowerCase());
+            }
+
+            let matchesResourceName = true;
+            if (filters?.resourceName) {
+                const rQuery = filters.resourceName.toLowerCase();
+                const members = project.team_members || project.resources || [];
+                matchesResourceName = members.some(m => (m.name || '').toLowerCase().includes(rQuery));
+            }
+
+            let matchesSowStatus = true;
+            if (filters?.sowStatus) {
+                matchesSowStatus = project.sub_status === filters.sowStatus || project.subStatus === filters.sowStatus;
+            }
+            // Date filtering is now handled strictly by the backend using "Effective Dates"
+            // (COALESCE of resource allocation and project dates). 
+            // We rely on the API to return the correct set of projects.
+            const matchesDateFilter = true;
+
+            // 4. Sort-based Filtering (requested by user)
+            let matchesSortFilter = true;
+            if (sortBy === 'finishing-soon' || sortBy === 'finishing-last') {
+                matchesSortFilter = !isCompletedStatus(project.status || project.project_status);
+            } else if (sortBy === 'internal') {
+                matchesSortFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
+            }
+
+            // 5. Department Filter (Header or Sidebar)
+            let matchesDepartment = true;
+            const deptFilter = filters?.department || activeDepartment;
+            if (deptFilter && deptFilter !== 'All Department' && deptFilter !== 'All Departments') {
+                const pDeptId = project.department_id || project.department;
+                const pDeptName = project.department_name || project.department;
+                matchesDepartment = String(pDeptId) === String(deptFilter) || 
+                                    String(pDeptName).toLowerCase() === String(deptFilter).toLowerCase();
+            }
+            
+            return matchesSearchTerm && 
+                   matchesSidebarStatus && 
+                   matchesCardFilter && 
+                   matchesResourceType && 
+                   matchesProjectName && 
+                   matchesResourceName && 
+                   matchesSowStatus && 
+                   matchesDateFilter &&
+                   matchesSortFilter &&
+                   matchesDepartment;
+        });
+
+        // Debug logging for filter verification as requested
+        if (filtered.length !== projects.length || hasActiveFilters || searchTerm) {
+            console.log(`[ProjectFilter] Total: ${projects.length} | Filtered: ${filtered.length} | Card: ${activeCardFilter || 'None'} | Sidebar Status: ${filters?.status || 'All'}`);
+        }
+
+        return filtered.sort((a, b) => {
+            // Force finishing-soon sort if Ending Soon filter is applied
+            const effectiveSort = activeCardFilter === 'Ending Soon' ? 'finishing-soon' : sortBy;
+
+            if (effectiveSort === 'newest') {
                 const dateA = new Date(a.startDate || a.start_date || 0);
                 const dateB = new Date(b.startDate || b.start_date || 0);
                 return dateB - dateA;
             }
-            if (sortBy === 'alphabetical') {
+            if (effectiveSort === 'alphabetical') {
                 return (a.name || '').localeCompare(b.name || '');
             }
-            if (sortBy === 'finishing-soon') {
+            if (effectiveSort === 'finishing-soon' || effectiveSort === 'finishing-last') {
+                const getStatusPriority = (project) => {
+                    const s = (project.status || '').toLowerCase();
+                    if (s === 'completed') return 3;
+                    if (s === 'not started') return 2;
+                    return 1; // Active (In Progress, On Hold, Overdue, etc.)
+                };
+
+                const priorityA = getStatusPriority(a);
+                const priorityB = getStatusPriority(b);
+
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                }
+
                 const dateA = new Date(a.endDate || a.end_date || '9999-12-31').getTime();
                 const dateB = new Date(b.endDate || b.end_date || '9999-12-31').getTime();
-                return dateA - dateB;
+
+                if (effectiveSort === 'finishing-soon') {
+                    return dateA - dateB;
+                } else {
+                    return dateB - dateA;
+                }
             }
-            if (sortBy === 'finishing-last') {
-                const dateA = new Date(a.endDate || a.end_date || 0).getTime();
-                const dateB = new Date(b.endDate || b.end_date || 0).getTime();
-                return dateB - dateA;
-            }
-            if (sortBy === 'billable') {
+            if (effectiveSort === 'billable') {
                 const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
                 const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
                 return aVal - bVal;
             }
-            if (sortBy === 'non-billable') {
+            if (effectiveSort === 'non-billable') {
                 const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
                 const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
                 return aVal - bVal;
             }
-            if (sortBy === 'internal') {
+            if (effectiveSort === 'internal') {
                 const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
                 const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
                 return aVal - bVal;
             }
             return 0;
         });
-    }, [projects, searchTerm, filters, activeCardFilter, sortBy]);
+    }, [projects, searchTerm, filters, activeCardFilter, sortBy, activeDepartment]);
 
     const tableTitle = (() => {
         if (!activeCardFilter) return 'All Projects';
@@ -343,7 +447,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         if (!projectToDelete) return;
         setIsDeleting(true);
         try {
-            await axios.delete(`/projects/${projectToDelete.project_id || projectToDelete.id}`);
+            await axios.delete(`/projects/${projectToDelete.uuid || projectToDelete.project_id || projectToDelete.id}`);
             clearDashboardCache(); // Sync dashboard
             triggerRefresh();
             if (onRefresh) onRefresh();
@@ -357,13 +461,6 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         }
     };
 
-    const handleApplyFilters = (newFilters) => {
-        setFilters(newFilters);
-    };
-
-    const handleClearFilters = () => {
-        setFilters(initialFilters);
-    };
 
     const SUB_STATUS_LABELS = PROJECT_SUB_STATUS_OPTIONS.reduce((acc, cur) => {
         acc[cur.value] = cur.label;
@@ -380,18 +477,10 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
         return base;
     };
 
-    const isFilterActive = Boolean(
-        filters.projectName ||
-        (filters.status && filters.status !== 'All Status') ||
-        filters.sowStatus ||
-        filters.startDate ||
-        filters.endDate ||
-        filters.resourceName ||
-        filters.resourceType
-    );
 
     const handleViewClick = (project) => {
-        navigate(`/info/projects/${project.id}`, { state: { project } });
+        const identifier = project.uuid || project.project_id || project.id;
+        navigate(`/info/projects/${identifier}`, { state: { project } });
     };
 
     const handleEditClick = (project) => {
@@ -401,7 +490,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
 
     const handleSaveProject = async (payload) => {
         try {
-            await axios.put(`/projects/${payload.project_id || payload.id}`, payload);
+            const identifier = payload.uuid || payload.project_id || payload.id;
+            await axios.put(`/projects/${identifier}`, payload);
             clearDashboardCache(); // Sync dashboard
             if (onRefresh) onRefresh();
             setIsEditFormOpen(false);
@@ -465,6 +555,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                     {/* Left Side: View Toggles */}
                     <div className="flex items-center gap-5 shrink-0">
                         <button
+                            onClick={() => onViewChange('table')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                             onClick={() => setActiveView('table')}
                             className={`text-base font-bold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
@@ -474,8 +566,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
-                            onClick={() => setActiveView('chart')}
-                            className={`text-base font-bold tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={() => onViewChange('chart')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Project Status Bar
                         </button>
@@ -483,8 +575,8 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
-                            onClick={() => setActiveView('grid')}
-                            className={`text-base font-bold tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={() => onViewChange('grid')}
+                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Grid
                         </button>
@@ -525,20 +617,20 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
                             <input
                                 type="text"
-                                placeholder="Search Project"
-                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all text-gray-700 placeholder:text-slate-400"
+                                placeholder="Search projects by name, client or description..."
+                                className="w-full pl-10 pr-4 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all"
                                 value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onChange={(e) => onSearchChange(e.target.value)}
                             />
                         </div>
 
                         {/* Filter */}
                         <button
                             onClick={() => setIsFilterPanelOpen(true)}
-                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || isFilterActive ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || hasActiveFilters ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
                         >
                             <Filter size={18} />
-                            {isFilterActive && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
+                            {hasActiveFilters && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
                         </button>
 
                         {/* Sort */}
@@ -565,8 +657,9 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                         ].map((opt) => (
                                             <button
                                                 key={opt.id}
-                                                onClick={() => { setSortBy(opt.id); setIsSortMenuOpen(false); }}
-                                                className={`w-full px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest flex items-center justify-between transition-colors ${sortBy === opt.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                                onClick={() => { onSortChange(opt.id); setIsSortMenuOpen(false); }}
+                                                className={`w-full px-4 py-2.5 text-left text-xs transition-all flex items-center justify-between group
+                                                    ${sortBy === opt.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'}`}
                                             >
                                                 {opt.label}
                                                 {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
@@ -578,7 +671,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                         </div>
 
                         {/* Reset */}
-                        {isFilterActive && (
+                        {hasActiveFilters && (
                             <button
                                 onClick={handleClearFilters}
                                 className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
@@ -629,7 +722,7 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                         <td className="py-5 text-center">
                                             <span
                                                 className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
-                                                style={getStatusBadgeStyle(calculateProjectProgress(project).pct)}
+                                                style={getStatusBadgeStyle(project.status, calculateProjectProgress(project).pct)}
                                             >
                                                 {formatStatus(project)}
                                             </span>
@@ -727,8 +820,14 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                                 <div className="p-4 bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 text-slate-300">
                                     <List size={40} />
                                 </div>
-                                <h3 className="text-lg font-black text-slate-800">No Projects Found</h3>
-                                <p className="text-slate-500 text-sm mt-1">Try adjusting your filters or search term</p>
+                                <h3 className="text-lg font-black text-slate-800">
+                                    {filters?.department || activeCardFilter ? 'No projects found for this filter' : 'No Projects Found'}
+                                </h3>
+                                <p className="text-slate-500 text-sm mt-1">
+                                    {filters?.department 
+                                        ? `No projects found for the selected department. Try a different one or "All Departments".` 
+                                        : 'Try adjusting your filters or search term'}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -755,7 +854,13 @@ const ProjectList = ({ projects, activeCardFilter, onRefresh }) => {
                 onClose={() => setIsFilterPanelOpen(false)}
                 onApplyFilters={handleApplyFilters}
                 onClearFilters={handleClearFilters}
-                currentFilters={filters}
+                departments={departments}
+                currentFilters={{
+                    ...filters,
+                    allResourceNames: allEmployeeNames && allEmployeeNames.length > 0 
+                        ? allEmployeeNames.join(', ') 
+                        : Array.from(new Set(projects.map(p => p.resource_names).filter(Boolean))).join(', ')
+                }}
             />
 
             {/* Delete Confirmation Modal */}

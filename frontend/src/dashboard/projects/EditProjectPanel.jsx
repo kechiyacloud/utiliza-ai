@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check } from 'lucide-react';
+import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
+import { fetchProjectDepartments } from '../../api/projectsApi';
 import {
     fetchSimpleClients,
     createSimpleClient,
@@ -36,7 +37,7 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
 
     return (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 projects-poppins-container">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
             <div className="relative z-[121] w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
                 <div className={`px-6 pt-6 pb-4 border-b border-gray-100`}>
                     <div className="flex items-center gap-3">
@@ -108,7 +109,7 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
 /* ──────────────────────────────────────────────────────────
    SEARCHABLE DROPDOWN  —  scrollable + filterable
    ────────────────────────────────────────────────────────── */
-const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found' }) => {
+const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found', isLoading = false }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
@@ -131,7 +132,11 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
         <div ref={containerRef} className="relative flex-1">
             <button
                 type="button"
-                onClick={() => !disabled && setIsOpen(!isOpen)}
+                onClick={() => {
+                    if (disabled) return;
+                    setSearch('');
+                    setIsOpen(!isOpen);
+                }}
                 disabled={disabled}
                 className={`w-full p-3 bg-gray-50 border rounded-xl text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
@@ -160,29 +165,36 @@ const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, d
                         </div>
                     </div>
                     <div className="max-h-48 overflow-y-auto">
-                        {filtered.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
-                        ) : (
-                            filtered.map((item) => (
-                                <button
-                                    type="button"
-                                    key={item.id}
-                                    onClick={() => {
-                                        onSelect(item);
-                                        setIsOpen(false);
-                                        setSearch('');
-                                    }}
-                                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2
-                                        ${String(item.id) === String(selectedId) || item.name === selectedId
-                                            ? 'bg-blue-50 text-blue-700 font-semibold'
-                                            : 'text-gray-700 hover:bg-gray-50 font-medium'
-                                        }`}
-                                >
-                                    {(String(item.id) === String(selectedId) || item.name === selectedId) && <Check size={14} className="text-blue-500" />}
-                                    {item.name}
-                                </button>
-                            ))
-                        )}
+                        <div className="py-1">
+                            {isLoading && filtered.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
+                            ) : filtered.length === 0 && search.trim().length > 0 ? (
+                                <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
+                            ) : filtered.length === 0 ? (
+                                <div className="px-4 py-4 text-center text-xs text-gray-300">No options available</div>
+                            ) : (
+                                filtered.map((item) => (
+                                    <button
+                                        type="button"
+                                        key={item.id}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            onSelect(item);
+                                            setIsOpen(false);
+                                            setSearch('');
+                                        }}
+                                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2 min-w-0
+                                            ${String(item.id) === String(selectedId) || item.name === selectedId
+                                                ? 'bg-blue-50 text-blue-700 font-semibold'
+                                                : 'text-gray-700 hover:bg-gray-50 font-medium'
+                                            }`}
+                                    >
+                                        {(String(item.id) === String(selectedId) || item.name === selectedId) && <Check size={14} className="text-blue-500 shrink-0" />}
+                                        <span className="truncate min-w-0">{item.name}</span>
+                                    </button>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -217,23 +229,53 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
     const [availableSkills, setAvailableSkills] = useState([]);
+    const [isEntitiesLoading, setIsEntitiesLoading] = useState(false);
+    
+    // ——— Toast State ———
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+    };
 
     async function loadEntities() {
         setEntityError('');
+        setIsEntitiesLoading(true);
         try {
-            const [clientData, partnerData, filterRes] = await Promise.all([
+            const [clientData, partnerData, filterRes, deptRes] = await Promise.all([
                 fetchSimpleClients(),
                 fetchPartnerClients(),
-                axios.get('/employees/filter-options')
+                axios.get('/employees/filter-options'),
+                fetchProjectDepartments(),
             ]);
             setClients(clientData);
             setPartnerClients(partnerData);
-            setDepartments(filterRes.data?.departments || []);
+            setDepartments(deptRes);
             setAvailableSkills(filterRes.data?.skills || []);
         } catch {
             setEntityError('Failed to load clients/partners.');
+        } finally {
+            setIsEntitiesLoading(false);
         }
     }
+
+    const filteredClients = useMemo(() => {
+        const isPartnerClientFlow = formData.type === 'External' && formData.clientType === 'Partner Client';
+        if (!isPartnerClientFlow || !formData.partnerId) return clients;
+        
+        return clients.filter(client => {
+            const linkedPartner = 
+                client.partner_id ?? 
+                client.partnerId ?? 
+                client.partner_client_id ?? 
+                client.partnerClientId;
+            
+            if (linkedPartner === undefined || linkedPartner === null || linkedPartner === '') {
+                return true; 
+            }
+            return String(linkedPartner) === String(formData.partnerId);
+        });
+    }, [clients, formData.type, formData.clientType, formData.partnerId]);
 
     // Map raw/normalized type value → the exact string used in the <select> options
     const normalizeTypeForForm = (t) => {
@@ -306,6 +348,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         return start <= now;
     }, [project]);
 
+    const startedWeeksAgo = useMemo(() => {
+        if (!project || (!project.start_date && !project.startDate)) return 0;
+        const start = new Date(project.start_date || project.startDate);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const diffTime = now - start;
+        const diffDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+        return diffDays / 7;
+    }, [project]);
+
     if (!isOpen) return null;
 
     const handleChange = (e) => {
@@ -334,6 +386,26 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                 partnerId: value === 'Direct Client' ? '' : prev.partnerId,
                 partnerName: value === 'Direct Client' ? 'Cloud Destination' : '',
             }));
+            return;
+        }
+        if (name === 'startDate') {
+            setFormData(prev => {
+                let updatedEndDate = prev.endDate;
+                if (value && updatedEndDate && new Date(value) > new Date(updatedEndDate)) {
+                    updatedEndDate = value;
+                }
+                return { ...prev, startDate: value, endDate: updatedEndDate };
+            });
+            return;
+        }
+        if (name === 'endDate') {
+            setFormData(prev => {
+                let newEndDate = value;
+                if (prev.startDate && newEndDate && new Date(prev.startDate) > new Date(newEndDate)) {
+                    newEndDate = prev.startDate;
+                }
+                return { ...prev, endDate: newEndDate };
+            });
             return;
         }
         if (name === 'status') {
@@ -386,14 +458,13 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             return;
         }
 
-        const isInternal = formData.type === 'Internal';
-        
-        // SOW Validation: required for External projects ONLY if status is 'In Progress'
-        if (!isInternal && formData.status === 'In Progress' && !formData.subStatus) {
-            setSaveError('SOW Status is required for In-Progress External projects.');
+        if (!(formData.departmentId || '').trim()) {
+            setSaveError('Department is required.');
             return;
         }
 
+        const isInternal = formData.type === 'Internal';
+        
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
         const isDirectClientProject = formData.type === 'External' && formData.clientType === 'Direct Client';
         
@@ -418,10 +489,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         if ('partnerId' in changedFields || 'type' in changedFields) {
             payload.partner_id = isPartnerClientProject ? (formData.partnerId || null) : null;
         }
-        if ('departmentId' in changedFields || 'type' in changedFields) {
-            const deptValue = formData.type === 'Internal' ? (formData.departmentId || null) : null;
-            payload.department = deptValue;
-            payload.department_id = deptValue;
+        // Always send department_id if changed
+        if ('departmentId' in changedFields) {
+            payload.department_id = formData.departmentId || null;
         }
         if ('billable' in changedFields) payload.billable = formData.billable;
         if ('startDate' in changedFields) payload.start_date = formData.startDate;
@@ -472,25 +542,27 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
         try {
             if (modal.mode === 'add') {
-                const created = isClient 
-                    ? await createSimpleClient(trimmedName)
-                    : await createPartnerClient(trimmedName);
-                await loadEntities();
                 if (isClient) {
+                    const created = await createSimpleClient(trimmedName);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, clientId: String(created.id), client: created.name }));
                 } else {
+                    const created = await createPartnerClient(trimmedName);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, partnerId: String(created.id), partnerName: created.name }));
                 }
+                showToast && showToast(`${isClient ? 'Client' : 'Partner'} added successfully`, 'success');
             } else if (modal.mode === 'edit') {
-                const updated = isClient
-                    ? await updateSimpleClient(selectedId, trimmedName)
-                    : await updatePartnerClient(selectedId, trimmedName);
-                await loadEntities();
                 if (isClient) {
+                    const updated = await updateSimpleClient(selectedId, trimmedName);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, client: updated.name }));
                 } else {
+                    const updated = await updatePartnerClient(selectedId, trimmedName);
+                    await loadEntities();
                     setFormData(prev => ({ ...prev, partnerName: updated.name }));
                 }
+                showToast && showToast(`${isClient ? 'Client' : 'Partner'} updated successfully`, 'success');
             } else if (modal.mode === 'delete') {
                 if (isClient) {
                     await deleteSimpleClient(selectedId);
@@ -511,6 +583,20 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     return (
         <>
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${
+                        toast.type === 'error' 
+                            ? 'bg-red-500 border-red-400 text-white shadow-red-200' 
+                            : 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-200'
+                    }`}>
+                        {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+                        <span className="text-xs font-bold whitespace-nowrap">{toast.message}</span>
+                    </div>
+                </div>
+            )}
+            
             <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
             <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
@@ -590,24 +676,23 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                                 onSelect={handlePartnerSelect}
                                                 placeholder="Select Partner"
                                                 label="partners"
+                                                isLoading={isEntitiesLoading}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'partner')}
                                                 className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Add Partner">
                                                 <Plus size={20} />
                                             </button>
                                         </div>
-                                        {formData.partnerId && (
-                                            <div className="flex gap-2 justify-end">
-                                                <button type="button" onClick={() => openModal('edit', 'partner')}
-                                                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors flex items-center gap-1">
-                                                    <Pencil size={12} /> Edit
-                                                </button>
-                                                <button type="button" onClick={() => openModal('delete', 'partner')}
-                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors flex items-center gap-1">
-                                                    <Trash2 size={12} /> Delete
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex gap-2 justify-end">
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('edit', 'partner')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -618,49 +703,48 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     <div className="flex flex-col gap-2">
                                         <div className="flex gap-2">
                                             <SearchableDropdown
-                                                items={formData.clientType === 'Partner Client' ? clients.filter(c => String(c.partner_id) === String(formData.partnerId)) : clients}
+                                                items={filteredClients}
                                                 selectedId={formData.clientId}
                                                 onSelect={handleClientSelect}
                                                 placeholder="Select Client"
                                                 label="clients"
+                                                isLoading={isEntitiesLoading}
                                             />
                                             <button type="button" onClick={() => openModal('add')}
                                                 className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Add Client">
                                                 <Plus size={20} />
                                             </button>
                                         </div>
-                                        {formData.clientId && (
-                                            <div className="flex gap-2 justify-end">
-                                                <button type="button" onClick={() => openModal('edit')}
-                                                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors flex items-center gap-1">
-                                                    <Pencil size={12} /> Edit
-                                                </button>
-                                                <button type="button" onClick={() => openModal('delete')}
-                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors flex items-center gap-1">
-                                                    <Trash2 size={12} /> Delete
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex gap-2 justify-end">
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('edit')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
-                            {formData.type === 'Internal' && (
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Department</label>
-                                    <select
-                                        name="departmentId"
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-800"
-                                        value={formData.departmentId}
-                                        onChange={handleChange}
-                                    >
-                                        <option value="">Select Department</option>
-                                        {departments.map(dep => (
-                                            <option key={dep} value={dep}>{dep}</option>
-                                        ))}
-                                    </select>
+                            {/* Department — for ALL project types */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
+                                    Department <span className="text-red-500">*</span>
+                                </label>
+                                <div className="flex gap-2">
+                                    <SearchableDropdown
+                                        items={departments}
+                                        selectedId={formData.departmentId}
+                                        onSelect={(item) => handleChange({ target: { name: 'departmentId', value: item.id } })}
+                                        placeholder="Select Department"
+                                        label="Department"
+                                        isLoading={isEntitiesLoading}
+                                    />
                                 </div>
-                            )}
+                            </div>
 
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
@@ -684,7 +768,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                         value={formData.subStatus}
                                         onChange={handleChange}
-                                        required
                                     >
                                         {PROJECT_SUB_STATUS_OPTIONS.map((opt) => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -716,13 +799,18 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     <input
                                         type="date"
                                         name="startDate"
-                                        className={`p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 
-                                            ${hasProjectStarted ? 'opacity-70 cursor-not-allowed bg-slate-100 border-blue-100 text-blue-700 font-bold' : ''}`}
+                                        className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-700 focus:bg-white"
                                         value={formData.startDate}
                                         onChange={handleChange}
-                                        disabled={hasProjectStarted}
-                                        title={hasProjectStarted ? "Start date cannot be changed once the project has started" : ""}
+                                        title={hasProjectStarted ? "Project has already started. Be careful when updating the start date." : ""}
                                     />
+                                    {hasProjectStarted && (
+                                        <p className={`text-[10px] mt-1 font-semibold ${startedWeeksAgo > 2 ? 'text-red-500' : 'text-blue-500'}`}>
+                                            {startedWeeksAgo > 2 
+                                                ? "⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)" 
+                                                : "ℹ️ Project has started. Any change will affect allocations."}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">End Date</label>
@@ -731,6 +819,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         name="endDate"
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
                                         value={formData.endDate}
+                                        min={formData.startDate || undefined}
                                         onChange={handleChange}
                                     />
                                 </div>
@@ -777,19 +866,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Resource Estimate</label>
-                                <input
-                                    type="number"
-                                    name="resources"
-                                    min="0"
-                                    placeholder="0"
-                                    className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                                    value={formData.resources}
-                                    onChange={handleChange}
-                                    disabled
-                                />
-                            </div>
                         </form>
                     </div>
 

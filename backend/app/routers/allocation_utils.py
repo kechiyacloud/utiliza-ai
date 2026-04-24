@@ -274,12 +274,13 @@ def _validate_resource_rows(resources: List[TeamMemberCreate]):
                 raise HTTPException(status_code=422, detail=f"Resource row {idx}: {week_field} must be between 0 and 168.")
 
 def _derive_project_tag(tm: TeamMemberCreate, project_billable: str) -> str:
-    if tm.billable_shadow == "Shadow":
-        return "Non-Billable"
-    if tm.billable_shadow == "Billable":
+    """Determine Billable/Non-Billable tag. Normalizes 'Shadow' or 'Non-billable' to 'Non-Billable'."""
+    status = (tm.billable_shadow or "").strip().lower()
+    if status == "billable":
         return "Billable"
-    if tm.billable_shadow and "non" in tm.billable_shadow.lower():
+    if "non" in status or status == "shadow":
         return "Non-Billable"
+    # Fallback to project-level flag
     return "Non-Billable" if "non" in (project_billable or "").lower() else "Billable"
 
 def _compute_allocation_pct(tm: TeamMemberCreate) -> int:

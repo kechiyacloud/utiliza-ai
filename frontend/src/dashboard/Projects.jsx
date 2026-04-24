@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { fetchProjectsData } from '../api/projectsApi';
+import { fetchProjectsData, fetchProjectDepartments } from '../api/projectsApi';
 import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
@@ -9,18 +9,61 @@ import ModuleLoader from '../components/ModuleLoader';
 
 function Projects() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeCardFilter, setActiveCardFilter] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState('');
-  const [departments, setDepartments] = useState([]);
 
-  const loadData = useCallback(async (dept = selectedDepartment) => {
+  // Derived state from URL params - Source of Truth
+  const activeCardFilter = searchParams.get('card') || null;
+  const selectedDepartment = searchParams.get('dept') || '';
+  const sortBy = searchParams.get('sort') || 'newest';
+  const searchTerm = searchParams.get('search') || '';
+  const activeView = searchParams.get('view') || 'table';
+
+  const filters = {
+    department: searchParams.get('f_dept') || '',
+    projectName: searchParams.get('f_name') || '',
+    status: searchParams.get('f_status') || 'All Status',
+    sowStatus: searchParams.get('f_sow') || '',
+    startDate: searchParams.get('f_start') || '',
+    endDate: searchParams.get('f_end') || '',
+    resourceName: searchParams.get('f_res_name') || '',
+    resourceType: searchParams.get('f_res_type') || ''
+  };
+
+  const [departments, setDepartments] = useState([]);
+  const [allEmployeeNames, setAllEmployeeNames] = useState([]);
+
+  // Helper to update URL params
+  const updateParams = useCallback((updates) => {
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v === null || v === undefined || v === '' || v === 'All Status') {
+          p.delete(k);
+        } else {
+          p.set(k, v);
+        }
+      });
+      // Handle defaults to keep URL clean
+      if (p.get('sort') === 'newest') p.delete('sort');
+      if (p.get('view') === 'table') p.delete('view');
+      return p;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const loadData = useCallback(async (dept = selectedDepartment, currentFilters = filters) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchProjectsData(dept);
+      const effectiveDept = currentFilters.department || dept;
+      const res = await fetchProjectsData({
+        ...currentFilters,
+        department: (effectiveDept === 'All Department' || effectiveDept === 'All Departments') ? '' : effectiveDept
+      });
       setData(res.data);
     } catch (err) {
       console.error("Failed to load projects data", err);
@@ -28,26 +71,41 @@ function Projects() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDepartment]);
+  }, [selectedDepartment, filters.department, filters.projectName, filters.status, filters.sowStatus, filters.startDate, filters.endDate, filters.resourceName, filters.resourceType]);
 
   useEffect(() => {
-    const fetchDepartments = async () => {
+    const fetchOptions = async () => {
       try {
-        const res = await axios.get('/employees/filter-options');
-        if (res.data && res.data.departments) {
-          const filtered = res.data.departments.filter(d => d !== 'All' && d !== 'All Departments');
-          setDepartments(filtered);
+        const [filterRes, deptRes] = await Promise.allSettled([
+          axios.get('/employees/filter-options'),
+          fetchProjectDepartments(),
+        ]);
+        if (filterRes.status === 'fulfilled' && filterRes.value.data) {
+          if (filterRes.value.data.employee_names) {
+            setAllEmployeeNames(filterRes.value.data.employee_names);
+          }
+        }
+        if (deptRes.status === 'fulfilled') {
+          setDepartments(deptRes.value || []);
         }
       } catch (err) {
-        console.error("Failed to fetch departments", err);
+        console.error("Failed to fetch filter options", err);
       }
     };
-    fetchDepartments();
+    fetchOptions();
   }, []);
 
   useEffect(() => {
-    loadData(selectedDepartment);
-  }, [selectedDepartment, loadData]);
+    loadData();
+  }, [loadData]);
+
+  // Handle successful project creation - Clear filters to ensure new project visibility
+  useEffect(() => {
+    if (location.state?.projectAdded) {
+      setSearchParams(new URLSearchParams(), { replace: true });
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, navigate, location.pathname, setSearchParams]);
 
   if (loading && !data) {
     return <ModuleLoader label="Loading Projects" />;
@@ -70,8 +128,8 @@ function Projects() {
         <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
           {error}
         </div>
-        <button 
-          onClick={() => loadData()} 
+        <button
+          onClick={() => loadData()}
           className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
         >
           Retry Connection
@@ -94,10 +152,10 @@ function Projects() {
         <ProjectsOverview
           stats={data?.stats}
           activeFilter={activeCardFilter}
-          onFilterChange={setActiveCardFilter}
+          onFilterChange={(val) => updateParams({ card: val })}
           onProjectAdded={() => loadData()}
           selectedDepartment={selectedDepartment}
-          onDepartmentChange={setSelectedDepartment}
+          onDepartmentChange={(val) => updateParams({ dept: val })}
           departments={departments}
         />
 
@@ -106,6 +164,28 @@ function Projects() {
           projects={data?.projects || []}
           activeCardFilter={activeCardFilter}
           onRefresh={() => loadData()}
+          allEmployeeNames={allEmployeeNames}
+          filters={filters}
+          departments={departments}
+          activeDepartment={selectedDepartment}
+          onFilterChange={(newFilters) => {
+            updateParams({
+              f_dept: newFilters.department,
+              f_name: newFilters.projectName,
+              f_status: newFilters.status,
+              f_sow: newFilters.sowStatus,
+              f_start: newFilters.startDate,
+              f_end: newFilters.endDate,
+              f_res_name: newFilters.resourceName,
+              f_res_type: newFilters.resourceType
+            });
+          }}
+          sortBy={sortBy}
+          onSortChange={(val) => updateParams({ sort: val })}
+          searchTerm={searchTerm}
+          onSearchChange={(val) => updateParams({ search: val })}
+          activeView={activeView}
+          onViewChange={(val) => updateParams({ view: val })}
         />
       </div>
     </>

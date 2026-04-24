@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDataRefresh } from '../../context';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, Edit2, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
 import { clearDashboardCache } from '../../api/dashboardApi';
@@ -320,7 +320,8 @@ function normalizeAllocationRow(row) {
     const normalized = { 
         ...safeRow,
         weekly_hours: safeRow.weekly_hours || {},
-        allocation_pct: safeRow.allocation_pct ?? safeRow.allocation_percentage ?? 0
+        allocation_pct: safeRow.allocation_pct ?? safeRow.allocation_percentage ?? 0,
+        billable_shadow: safeRow.billable_shadow === 'Shadow' ? 'Non-billable' : (safeRow.billable_shadow || 'Billable')
     };
     return normalized;
 }
@@ -902,10 +903,20 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
 
     const handleAdd = () => {
         if (!selectedEmps.length) return;
+        const todayStr = new Date().toISOString().split('T')[0];
         selectedEmps.forEach(({ emp, role, allocationPct: pct }) => {
             const safePct = Math.min(100, Math.max(2.5, Number(pct) || 2.5));
             const hrs = Math.max(1, Math.round((safePct * 40) / 100));
-            onAdd({ employee_id: emp.employee_id, name: emp.employee_name || emp.name || '', role: role || 'No role assigned', allocation_pct: safePct, w1: hrs, w2: hrs, w3: hrs, w4: hrs });
+            onAdd({ 
+                employee_id: emp.employee_id, 
+                name: emp.employee_name || emp.name || '', 
+                role: role || 'No role assigned', 
+                allocation_pct: safePct, 
+                allocation_start_date: todayStr,
+                allocation_end_date: '',
+                isNew: true,
+                w1: hrs, w2: hrs, w3: hrs, w4: hrs 
+            });
         });
         setConfirmed(true);
         confirmTimerRef.current = setTimeout(onClose, 2200);
@@ -1115,9 +1126,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     }, [localRows]);
 
     const handleAddRow = () => {
+        const todayStr = new Date().toISOString().split('T')[0];
         const nextRows = [...localRows, normalizeAllocationRow({ 
             name: '', 
             role: '', 
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
             w1: '', 
             w2: '', 
             w3: '', 
@@ -1129,10 +1143,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     };
 
     const handleInsertRowAfter = (index) => {
+        const todayStr = new Date().toISOString().split('T')[0];
         const newRows = [...localRows];
         newRows.splice(index + 1, 0, normalizeAllocationRow({ 
             name: '', 
             role: '', 
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
             w1: '', 
             w2: '', 
             w3: '', 
@@ -1212,6 +1229,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     const handleEmployeeSelect = (employee, rowIndex) => {
         const empId = employee.employee_id || employee.id;
         const empName = employee.employee_name || employee.name;
+        const empRole = employee.role || employee.role_designation || 'No role assigned';
         const allocationPct = 100;
         const hours = Math.round((allocationPct / 100) * WEEK_DEFAULT_HOURS);
 
@@ -1219,6 +1237,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         const currentRow = { ...(newRows[rowIndex] || {}) };
         currentRow.employee_id = empId;
         currentRow.name = empName;
+        currentRow.role = empRole;
+        
+        // Default Start Date to today if not set
+        if (!currentRow.allocation_start_date) {
+            currentRow.allocation_start_date = new Date().toISOString().split('T')[0];
+        }
+
         currentRow.allocation_pct = allocationPct;
         currentRow.weekly_hours = {
             ...currentRow.weekly_hours,
@@ -1386,11 +1411,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     };
 
     const handleBulkConfirm = (selectedEmployees, bulkHours) => {
-        const newResources = selectedEmployees.map(emp => ({
+        const todayStr = new Date().toISOString().split('T')[0];
+        const newResources = selectedEmployees.map(emp => normalizeAllocationRow({
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            role: emp.role_designation,
-            ...normalizeAllocationRow(bulkHours)
+            role: emp.role_designation || emp.role || 'No role assigned',
+            allocation_start_date: todayStr,
+            allocation_end_date: '',
+            isNew: true,
+            ...bulkHours
         }));
         const nextRows = [...localRows, ...newResources];
         setLocalRows(nextRows);
@@ -1739,9 +1768,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. Start</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. End</th>
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[100px]">
-                                        Allocation
-                                        <span className="ml-1 font-normal text-slate-400 normal-case">(100%=40h)</span>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span>Allocation</span>
+                                            <span className="font-normal text-slate-400 normal-case text-[10px] leading-tight">(100% = 40h)</span>
+                                        </div>
                                     </th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
                                     {visibleWeeks.map((wk) => (
                                         <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${
                                             viewMode === 'previous' ? 'bg-rose-50/20' : 
@@ -1763,7 +1795,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                         </th>
                                     ))}
                                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Total</th>
-                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
                                     {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Actions</th>}
                                 </tr>
                     </thead>
@@ -1843,12 +1874,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     </td>
                                     <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
                                         {isEditing ? (
-                                            <SearchableDropdown 
-                                                items={rolesList.map(r => ({ id: r, name: r }))}
-                                                selectedId={row.role || ''} 
-                                                onSelect={(roleObj) => handleRowChange(ridx, 'role', roleObj.name || 'No role assigned')}
-                                                placeholder="Select Role"
-                                                label="Role"
+                                            <input 
+                                                type="text" 
+                                                value={row.role || 'No role assigned'} 
+                                                readOnly 
+                                                title="Role is auto-assigned based on resource"
+                                                className="w-full px-2 py-1.5 text-[11px] border rounded border-gray-200 outline-none bg-slate-50 text-slate-500 font-bold cursor-not-allowed shadow-sm" 
                                             />
                                         ) : (
                                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
@@ -1858,7 +1889,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
                                         {canEditStartDate ? (
-                                            <input type="date" value={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                            <input 
+                                                type="date" 
+                                                value={row.allocation_start_date || ''} 
+                                                min={row.isNew ? new Date().toISOString().split('T')[0] : undefined}
+                                                onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)} 
+                                                className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" 
+                                            />
                                         ) : (
                                             row.allocation_start_date || '-'
                                         )}
@@ -1870,7 +1907,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                             row.allocation_end_date || '-'
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-slate-600 text-xs min-w-[100px]">
+                                    <td className="px-4 py-2 text-slate-600 text-xs min-w-[100px]">
                                         {isEditing ? (
                                             <div className="flex items-center gap-1 justify-center">
                                                 <input
@@ -1897,6 +1934,36 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                         ) : (
                                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
                                                 {getAllocationPct(row)}%
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-3 min-w-[120px]">
+                                        {isEditing ? (
+                                            <div className="relative group">
+                                                <select
+                                                    value={row.billable_shadow || 'Billable'}
+                                                    onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
+                                                    className={`w-full pl-2 pr-8 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
+                                                        ${row.billable_shadow === 'Billable'
+                                                            ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                            : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                        }`}
+                                                >
+                                                    <option value="Billable">Billable</option>
+                                                    <option value="Non-billable">Non-billable</option>
+                                                </select>
+                                                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                    <ChevronDown size={14} className={`${row.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
+                                                ${row.billable_shadow === 'Billable'
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                }`}
+                                            >
+                                                {row.billable_shadow || 'Billable'}
                                             </span>
                                         )}
                                     </td>
@@ -1978,36 +2045,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     <td className="px-3 py-3 text-center font-bold text-blue-700 border-l-2 border-slate-200 text-sm">
                                         {rowTotal > 0 ? `${rowTotal}h` : '-'}
                                     </td>
-                                    <td className="px-4 py-3 min-w-[120px]">
-                                        {isEditing ? (
-                                            <select
-                                                value={row.billable_shadow || 'Billable'}
-                                                onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
-                                                className={`w-full px-2 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold
-                                                    ${row.billable_shadow === 'Billable'
-                                                        ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
-                                                        : row.billable_shadow === 'Non-billable'
-                                                        ? 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
-                                                        : 'border-slate-200 text-slate-500 focus:border-slate-400 focus:ring-slate-100'
-                                                    }`}
-                                            >
-                                                <option value="Billable">Billable</option>
-                                                <option value="Non-billable">Non-billable</option>
-                                                <option value="Shadow">Shadow</option>
-                                            </select>
-                                        ) : (
-                                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
-                                                ${row.billable_shadow === 'Billable'
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                    : row.billable_shadow === 'Non-billable'
-                                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                    : 'bg-slate-50 text-slate-600 border-slate-200'
-                                                }`}
-                                            >
-                                                {row.billable_shadow || 'Billable'}
-                                            </span>
-                                        )}
-                                    </td>
+
                                     {isEditing && (
                                         <td className="px-3 py-3 text-center">
                                             <button onClick={() => handleRemoveRow(ridx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Remove Resource">
@@ -2026,7 +2064,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                                 <Plus size={18} /> Add Resource
                                             </button>
                                         </td>
-                                        <td colSpan={9 + visibleWeeks.length}></td>
+                                        <td colSpan={7 + visibleWeeks.length}></td>
                                     </tr>
                                 )}
                                 </React.Fragment>
@@ -2034,7 +2072,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         })}
                         {localRows.length > 0 && displayRows.length === 0 && (
                             <tr>
-                                <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                <td colSpan={8 + visibleWeeks.length + (isEditing ? 1 : 0)} className="px-4 py-8 text-center text-slate-400 text-sm">
                                     No resources match the selected utilization filters.
                                 </td>
                             </tr>
@@ -2045,6 +2083,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={5}>
                                 Total
                             </td>
+                            <td></td>{ /* Resource Type placeholder */ }
                             {columnTotals.map((total, idx) => (
                                 <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${
                                     viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' : 
@@ -2138,31 +2177,62 @@ const calculateProjectProgress = (project, resources = []) => {
     return Math.min(Math.max(pct, 0), 100);
 };
 
-const getStatusBadgeClasses = (pct) => {
+const getStatusBadgeClasses = (status, pct) => {
+    const s = (status || '').toLowerCase();
+    if (s.includes('overdue')) return 'bg-rose-50 text-rose-700 border-rose-100';
+    if (s.includes('ending soon')) return 'bg-amber-50 text-amber-700 border-amber-100';
+    if (s === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    
     if (pct <= 30) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
     if (pct <= 60) return 'bg-amber-50 text-amber-700 border-amber-100';
     return 'bg-rose-50 text-rose-700 border-rose-100';
 };
 
-const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
+const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate }) => {
     const headcount = resources.length;
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeRaw = project?.type || project?.project_type || '';
     const projectTypeLabel = projectTypeRaw.toLowerCase() === 'internal' ? 'Internal' : 'External';
-    const projectStatus = project?.status || project?.project_status || 'Not Set';
+    const projectStatus = project?.display_status || project?.status || project?.project_status || 'Not Set';
     const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
     
-    const progressPct = calculateProjectProgress(project, resources);
-    const statusClasses = getStatusBadgeClasses(progressPct);
+    const [isEditingDept, setIsEditingDept] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const progressPct = calculateProjectProgress(project);
+    const statusClasses = getStatusBadgeClasses(projectStatus, progressPct);
+    
+    const currentDept = departments.find(d => String(d.id) === String(project.department_id));
+    const deptDisplayName = currentDept ? currentDept.name : (project.department_name || 'No Department');
+
+    const handleDeptChange = async (newDeptId) => {
+        if (!newDeptId || String(newDeptId) === String(project.department_id)) {
+            setIsEditingDept(false);
+            return;
+        }
+        
+        setIsSaving(true);
+        try {
+            await axios.put(`/projects/${project.project_id || project.id}/details`, {
+                department_id: newDeptId
+            });
+            if (onUpdate) await onUpdate();
+        } catch (err) {
+            console.error("Failed to update department:", err);
+        } finally {
+            setIsSaving(false);
+            setIsEditingDept(false);
+        }
+    };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card">
-            <div className="flex items-start gap-4 w-full md:w-auto min-w-0">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-start gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card flex-1 w-full">
+            <div className="flex items-start gap-4 flex-1 min-w-0 w-full">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
                     {avatarLetter}
                 </div>
-                <div className="min-w-0">
+                <div className="flex-1 min-w-0">
                     <h1 className="text-2xl font-black text-slate-800 leading-tight truncate">{projectName}</h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="px-2 py-1 rounded-full text-[11px] font-bold border bg-slate-50 text-slate-700 border-slate-200">
@@ -2175,13 +2245,43 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
                             <Briefcase size={14} className="text-slate-400" />
                             {project.client_name || project.client || 'No client selected'}
                         </span>
-                        <div className="ml-2 flex items-center gap-3">
-
+                        
+                        <div className="flex items-center gap-2 ml-1">
                             {headcount > 0 && (
-                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 flex items-center gap-1.5">
+                                    <Users size={12} />
                                     {headcount} Team Members
                                 </span>
                             )}
+
+                            {/* DEPARTMENT TAG - EDITABLE */}
+                            <div className="relative group/dept">
+                                {isEditingDept ? (
+                                    <select
+                                        autoFocus
+                                        className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-300 transition-all cursor-pointer"
+                                        value={project.department_id || ''}
+                                        onChange={(e) => handleDeptChange(e.target.value)}
+                                        onBlur={() => setIsEditingDept(false)}
+                                        disabled={isSaving}
+                                    >
+                                        <option value="">Select Department</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <button
+                                        onClick={() => setIsEditingDept(true)}
+                                        className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-100 transition-all flex items-center gap-1.5"
+                                        title="Click to edit department"
+                                    >
+                                        <Activity size={12} className="text-indigo-400" />
+                                        {deptDisplayName}
+                                        <Edit2 size={10} className="ml-0.5 opacity-0 group-hover/dept:opacity-100 transition-opacity" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                     {/* PROJECT SKILLS DISPLAY */}
@@ -2195,15 +2295,6 @@ const OngoingProjectInfoCard = ({ project, resources, onEdit }) => {
                         </div>
                     )}
                 </div>
-            </div>
-
-            <div className="flex flex-col items-end gap-2">
-                <button 
-                    onClick={onEdit}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 group-hover/card:border-blue-100"
-                >
-                    <Pencil size={14} /> Edit Project Details
-                </button>
             </div>
         </div>
     );
@@ -2616,12 +2707,14 @@ const ProjectDetailsPage = () => {
     const { refreshKey } = useDataRefresh();
     const [project, setProject] = useState(() => location.state?.project || null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null); // null | { status: number, message: string }
     const [resources, setResources] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [rolesList, setRolesList] = useState([]);
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
     const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
+    const [departments, setDepartments] = useState([]);
 
     const allocationStartBoundary = useMemo(() => {
         const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
@@ -2642,18 +2735,30 @@ const ProjectDetailsPage = () => {
     }, [viewMode, allocationStartBoundary, allocationEndBoundary]);
 
     const loadProjectData = async () => {
+        setError(null);
         try {
-            const [detailsResult, resourcesResult, employeesResult, rolesResult, globalAllocResult] = await Promise.allSettled([
+            const [detailsResult, resourcesResult, employeesResult, rolesResult, globalAllocResult, deptsResult] = await Promise.allSettled([
                 axios.get(`/projects/${id}/details`),
                 axios.get(`/projects/${id}/resources`),
                 axios.get('/employees/list'),
                 axios.get('/employees/departments/roles-mapping'),
-                axios.get('/employees/allocations/weekly')
+                axios.get('/employees/allocations/weekly'),
+                axios.get('/projects/departments')
             ]);
 
             if (detailsResult.status === 'fulfilled') {
                 setProject(detailsResult.value.data);
             } else {
+                const status = detailsResult.reason?.response?.status;
+                if (status === 404) {
+                    setError({ status: 404, message: 'This project does not exist or the link is invalid.' });
+                    setLoading(false);
+                    return;
+                } else if (status === 401) {
+                    setError({ status: 401, message: 'You are not authorised to view this project.' });
+                    setLoading(false);
+                    return;
+                }
                 console.error("Failed to load project details:", detailsResult.reason);
                 setProject((current) => current || location.state?.project || null);
             }
@@ -2694,6 +2799,10 @@ const ProjectDetailsPage = () => {
                 console.error("Failed to load global allocations:", globalAllocResult.reason);
                 setGlobalAllocations({});
             }
+
+            if (deptsResult.status === 'fulfilled') {
+                setDepartments(deptsResult.value.data || []);
+            }
         } catch (err) {
             console.error("Failed to load project details:", err);
             setResources((current) => (Array.isArray(current) ? current : []));
@@ -2727,6 +2836,25 @@ const ProjectDetailsPage = () => {
         return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-full">Loading Project Details...</div>;
     }
 
+    if (error) {
+        return (
+            <div className="p-8 flex flex-col items-center justify-center h-full gap-5">
+                <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-400"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div className="text-center">
+                    <p className="text-slate-800 font-bold text-lg">
+                        {error.status === 404 ? 'Project Not Found' : 'Access Denied'}
+                    </p>
+                    <p className="text-slate-500 text-sm mt-1">{error.message}</p>
+                </div>
+                <button onClick={() => navigate('/info/projects')} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm">
+                    Back to Projects
+                </button>
+            </div>
+        );
+    }
+
     if (!project) {
         return (
             <div className="p-8 flex flex-col items-center justify-center h-full gap-4">
@@ -2738,16 +2866,21 @@ const ProjectDetailsPage = () => {
 
     return (
         <div className="p-6 h-full flex flex-col w-full overflow-y-auto bg-slate-50/30 projects-poppins-container">
-            <div className="mb-5 flex items-center gap-4">
+            <div className="mb-5 flex items-center gap-4 w-full">
                 <button
-                    onClick={() => navigate('/info/projects')}
+                    onClick={() => navigate(-1)}
                     className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                     title="Go Back"
                 >
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
 
-                <OngoingProjectInfoCard project={project} resources={resources} onEdit={() => setIsEditPanelOpen(true)} />
+                <OngoingProjectInfoCard 
+                    project={project} 
+                    resources={resources} 
+                    departments={departments}
+                    onUpdate={loadProjectData}
+                />
             </div>
 
             <div className="flex flex-col gap-5">

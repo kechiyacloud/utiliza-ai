@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, Calendar, Plus } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS } from '../../data/constants';
 
@@ -133,19 +133,6 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                         </div>
                     </div>
 
-                    {/* Resource Estimate */}
-                    <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-gray-500 uppercase">Resource Estimate</label>
-                        <input
-                            type="number"
-                            name="resources"
-                            min="0"
-                            placeholder="0"
-                            className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                            value={formData.resources}
-                            onChange={handleChange}
-                        />
-                    </div>
 
                     {/* Actions */}
                     <div className="flex gap-3 mt-4">
