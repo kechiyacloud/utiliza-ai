@@ -1,12 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
+import PhoneInputField from '../../components/PhoneInputField';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
-import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
+
+const normalizeDate = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value.slice(0, 10);
+    try {
+        return new Date(value).toISOString().slice(0, 10);
+    } catch {
+        return '';
+    }
+};
+
+const normalizeEmploymentType = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'Full Time';
+    if (normalized === 'fte' || normalized === 'full-time' || normalized === 'full time') return 'Full Time';
+    if (normalized === 'intern') return 'Intern';
+    if (normalized === 'consultant') return 'Consultant';
+    return 'Contract';
+};
+
+const normalizeWorkMode = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'Hybrid';
+    if (normalized === 'onsite' || normalized === 'office') return 'Office';
+    if (normalized === 'remote') return 'Remote';
+    return 'Hybrid';
+};
 
 const AddEmployee = () => {
     const navigate = useNavigate();
@@ -18,6 +46,7 @@ const AddEmployee = () => {
 
     const [currentSection, setCurrentSection] = useState('personal'); // personal, professional, project, preview
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState({});
     const [skillSearch, setSkillSearch] = useState('');
     const [isSkillsOpen, setIsSkillsOpen] = useState(false);
     const [currentProject, setCurrentProject] = useState({
@@ -32,7 +61,50 @@ const AddEmployee = () => {
     const [completedSections, setCompletedSections] = useState([]); // Track which sections are completed
     const [allEmployees, setAllEmployees] = useState([]);
     const [allProjects, setAllProjects] = useState([]);
+    const [dynamicDepartments, setDynamicDepartments] = useState([]);
+    const [dynamicLocations, setDynamicLocations] = useState([]);
     const [editingProjectIndex, setEditingProjectIndex] = useState(null);
+    const [shiftPreset, setShiftPreset] = useState('');
+    const [shiftStart, setShiftStart] = useState('');
+    const [shiftEnd, setShiftEnd] = useState('');
+
+    const SHIFT_PRESETS = [
+        { label: 'General',    start: '10:00', end: '19:00' },
+        { label: 'Mid Shift',  start: '13:00', end: '22:00' },
+        { label: 'Late Shift', start: '18:30', end: '03:30' },
+    ];
+
+    const fmt12 = (t24) => {
+        if (!t24) return '';
+        const [h, m] = t24.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = h % 12 || 12;
+        return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+    };
+
+    const buildShiftLabel = (preset, start, end) => {
+        if (!start && !end) return '';
+        const base = preset || 'Custom';
+        return `${base} (${fmt12(start)} - ${fmt12(end)})`;
+    };
+
+    const handleShiftPresetChange = (e) => {
+        const val = e.target.value;
+        setShiftPreset(val);
+        const found = SHIFT_PRESETS.find(p => p.label === val);
+        const s = found ? found.start : shiftStart;
+        const en = found ? found.end   : shiftEnd;
+        if (found) { setShiftStart(s); setShiftEnd(en); }
+        setFormData(prev => ({ ...prev, shift: buildShiftLabel(val || 'Custom', s, en) }));
+    };
+
+    const handleShiftTimeChange = (field, value) => {
+        const s  = field === 'start' ? value : shiftStart;
+        const en = field === 'end'   ? value : shiftEnd;
+        if (field === 'start') setShiftStart(value);
+        else setShiftEnd(value);
+        setFormData(prev => ({ ...prev, shift: buildShiftLabel(shiftPreset || 'Custom', s, en) }));
+    };
 
     // Form state
     const [formData, setFormData] = useState({
@@ -62,39 +134,13 @@ const AddEmployee = () => {
         notice_end_date: '',
         skills: [],
         certificates: [], // Array of {name: '', file: null, fileData: ''}
+        shift: '',
 
         // Projects - now array for multiple projects
         projects: []
     });
 
     useEffect(() => {
-        const normalizeDate = (value) => {
-            if (!value) return '';
-            if (typeof value === 'string') return value.slice(0, 10);
-            try {
-                return new Date(value).toISOString().slice(0, 10);
-            } catch {
-                return '';
-            }
-        };
-
-        const normalizeEmploymentType = (value) => {
-            const normalized = String(value || '').trim().toLowerCase();
-            if (!normalized) return 'Full Time';
-            if (normalized === 'fte' || normalized === 'full-time' || normalized === 'full time') return 'Full Time';
-            if (normalized === 'intern') return 'Intern';
-            if (normalized === 'consultant') return 'Consultant';
-            return 'Contract';
-        };
-
-        const normalizeWorkMode = (value) => {
-            const normalized = String(value || '').trim().toLowerCase();
-            if (!normalized) return 'Hybrid';
-            if (normalized === 'onsite' || normalized === 'office') return 'Office';
-            if (normalized === 'remote') return 'Remote';
-            return 'Hybrid';
-        };
-
         const applyEditData = (source) => {
             if (!source) return;
 
@@ -115,6 +161,7 @@ const AddEmployee = () => {
                 location: source.status?.location || source.location || '',
                 work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
                 employee_status: source.status?.allocated || source.employee_status || 'Bench',
+                shift: source.shift || '',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
                 reporting_manager_id: source.reporting_manager_id || '',
                 date_of_resign: normalizeDate(source.date_of_resign),
@@ -132,8 +179,33 @@ const AddEmployee = () => {
                     project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date)
                 }))
             });
+
+            // Parse existing shift string to restore preset + time pickers in edit mode
+            const rawShift = source.shift || '';
+            if (rawShift) {
+                // Try to match "Label (HH:MM AM - HH:MM PM)"
+                const match = rawShift.match(/^(.+?)\s*\((\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))\)$/i);
+                if (match) {
+                    const presetLabel = match[1].trim();
+                    // Convert 12-hr to 24-hr for input[type=time]
+                    const to24 = (t12) => {
+                        const [time, ap] = t12.trim().split(/\s+/);
+                        let [h, m] = time.split(':').map(Number);
+                        if (ap?.toUpperCase() === 'PM' && h !== 12) h += 12;
+                        if (ap?.toUpperCase() === 'AM' && h === 12) h = 0;
+                        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+                    };
+                    const s24 = to24(match[2]);
+                    const e24 = to24(match[3]);
+                    setShiftPreset(presetLabel);
+                    setShiftStart(s24);
+                    setShiftEnd(e24);
+                }
+            }
+
             setShowPreview(true);
             setCompletedSections(['personal', 'professional', 'project', 'preview']);
+
         };
 
         const loadEditData = async () => {
@@ -173,15 +245,19 @@ const AddEmployee = () => {
     }, []);
 
     useEffect(() => {
-        const loadProjects = async () => {
+        const loadMetadata = async () => {
             try {
-                const res = await fetchProjectsData();
-                setAllProjects(res?.data?.projects || []);
+                const [depts, locs] = await Promise.all([
+                    getDepartments(),
+                    getLocations()
+                ]);
+                setDynamicDepartments(depts || []);
+                setDynamicLocations(locs || []);
             } catch (err) {
-                console.error('Failed to load projects list', err);
+                console.error('Failed to load metadata lists', err);
             }
         };
-        loadProjects();
+        loadMetadata();
     }, []);
 
     const sections = [
@@ -191,8 +267,8 @@ const AddEmployee = () => {
         { id: 'preview', label: 'Preview', icon: Check }
     ];
 
-    const departments = DEPARTMENTS;
-    const locations = LOCATIONS;
+    const departments = dynamicDepartments.length > 0 ? dynamicDepartments : DEPARTMENTS;
+    const locations = dynamicLocations.length > 0 ? dynamicLocations : LOCATIONS;
     const departmentSkills = DEPARTMENT_SKILLS;
     const allSkills = ALL_SKILLS;
 
@@ -211,6 +287,15 @@ const AddEmployee = () => {
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
 
+        // Clear error for this field when user types
+        if (errors[name]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[name];
+                return newErrors;
+            });
+        }
+
         if (type === 'checkbox') {
             // Handle skills multi-select
             if (name === 'skills') {
@@ -224,6 +309,17 @@ const AddEmployee = () => {
             }
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    const handlePhoneChange = (value) => {
+        setFormData(prev => ({ ...prev, phone: value }));
+        if (errors.phone) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.phone;
+                return newErrors;
+            });
         }
     };
 
@@ -417,47 +513,70 @@ const AddEmployee = () => {
     };
 
     // Validation functions for each section
-    const validatePersonalSection = () => {
-        const basicFields = (
-            formData.employee_id?.trim() &&
-            formData.employee_name?.trim() &&
-            formData.email?.trim() &&
-            formData.date_of_joining
-        );
+    const validatePersonalSection = (showErrors = true) => {
+        const newErrors = {};
         
-        if (!basicFields) return false;
+        if (!formData.employee_id?.trim()) newErrors.employee_id = 'Employee ID is required';
+        else if (formData.employee_id.length > 20) newErrors.employee_id = 'Employee ID must be under 20 chars';
 
-        // If DOB is provided, DOJ must be after DOB
+        if (!formData.employee_name?.trim()) newErrors.employee_name = 'Employee Name is required';
+        else if (formData.employee_name.length > 100) newErrors.employee_name = 'Name must be under 100 chars';
+
+        if (!formData.email?.trim()) {
+            newErrors.email = 'Email is required';
+        } else {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(formData.email)) newErrors.email = 'Invalid email format';
+            else if (formData.email.length > 100) newErrors.email = 'Email must be under 100 chars';
+        }
+
+        if (formData.phone && formData.phone.length > 20) {
+            newErrors.phone = 'Phone number too long';
+        }
+
+        if (!formData.date_of_joining) {
+            newErrors.date_of_joining = 'Date of Joining is required';
+        }
+
         if (formData.date_of_birth && formData.date_of_joining) {
             const dob = new Date(formData.date_of_birth);
             const doj = new Date(formData.date_of_joining);
-            if (doj <= dob) return false;
+            if (doj <= dob) {
+                newErrors.date_of_joining = 'Joining Date must be after Date of Birth';
+            }
         }
 
-        return true;
+        if (formData.address && formData.address.length > 500) {
+            newErrors.address = 'Address must be under 500 chars';
+        }
+
+        if (showErrors) setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
-    const validateProfessionalSection = () => {
-        return (
-            formData.role_designation?.trim() &&
-            formData.department &&
-            formData.location &&
-            formData.work_mode &&
-            formData.employment_type
-        );
+    const validateProfessionalSection = (showErrors = true) => {
+        const newErrors = {};
+
+        if (!formData.role_designation?.trim()) newErrors.role_designation = 'Designation is required';
+        else if (formData.role_designation.length > 100) newErrors.role_designation = 'Designation too long';
+
+        if (!formData.department) newErrors.department = 'Department is required';
+        if (!formData.location) newErrors.location = 'Location is required';
+        if (!formData.reporting_manager_id) newErrors.reporting_manager_id = 'Reporting Manager is required';
+        if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
+
+        if (showErrors) setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
-    const validateProjectSection = () => {
-        // Project section is optional, always allow proceeding
-        return true;
-    };
+    const validateProjectSection = () => true;
 
     const canProceedToNext = () => {
         switch (currentSection) {
             case 'personal':
-                return validatePersonalSection();
+                return validatePersonalSection(false); // Check without updating state
             case 'professional':
-                return validateProfessionalSection();
+                return validateProfessionalSection(false);
             case 'project':
                 return validateProjectSection();
             default:
@@ -467,24 +586,45 @@ const AddEmployee = () => {
 
     // Auto-calculate status and allocation based on project selection.
     // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
+    // Auto-calculate status and allocation based on project selection.
+    // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     useEffect(() => {
         const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
+        const totalAllocation = formData.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
+        
         setFormData(prev => {
+            // Calculate what the auto-status SHOULD be based on project list
+            const autoStatus = (formData.projects.length > 0 && totalAllocation > 0) ? 'Allocated' : 'Bench';
+            
+            // If current status is manual (Notice/PIP/Resign), keep status but sync allocation %
             if (MANUAL_STATUSES.some(s => (prev.employee_status || '').toLowerCase().includes(s))) {
-                return prev; // preserve manual status unchanged
+                if (prev.employee_allocations !== totalAllocation) {
+                    return { ...prev, employee_allocations: totalAllocation };
+                }
+                return prev;
             }
-            const totalAllocation = prev.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
-            if (prev.projects.length > 0 && totalAllocation > 0) {
-                return { ...prev, employee_status: 'Allocated', employee_allocations: totalAllocation };
+            
+            // If current status is an auto-type (Bench/Allocated) but doesn't match projects, enforce the rule
+            if (prev.employee_status !== autoStatus || prev.employee_allocations !== totalAllocation) {
+                return { 
+                    ...prev, 
+                    employee_status: autoStatus, 
+                    employee_allocations: totalAllocation 
+                };
             }
-            return { ...prev, employee_status: 'Bench', employee_allocations: 0 };
+            return prev;
         });
-    }, [formData.projects]);
+    }, [formData.projects, formData.employee_status]);
 
     const handleSubmit = async () => {
-        // Final sanity check for critical fields
-        if (!formData.email?.trim() || !formData.employee_name?.trim() || !formData.employee_id?.trim()) {
-            alert('Employee ID, Name, and Email are all required properties.');
+        // Run all validations as a final check
+        const isPersonalValid = validatePersonalSection();
+        const isProfessionalValid = validateProfessionalSection();
+
+        if (!isPersonalValid || !isProfessionalValid) {
+            if (!isPersonalValid) setCurrentSection('personal');
+            else if (!isProfessionalValid) setCurrentSection('professional');
+            alert('Please fix the validation errors before submitting.');
             return;
         }
 
@@ -504,8 +644,9 @@ const AddEmployee = () => {
                 employment_type: formData.employment_type,
                 location: formData.location,
                 work_mode: formData.work_mode,
-                employee_status: formData.employee_status,
-                employee_allocations: formData.employee_allocations,
+                employee_status: formData.employee_status || 'Bench',
+                shift: formData.shift || '',
+                employee_allocations: formData.employee_allocations || 0,
                 reporting_manager_id: formData.reporting_manager_id || null,
                 date_of_resign: formData.date_of_resign || null,
                 pip_start_date: formData.pip_start_date || null,
@@ -520,6 +661,7 @@ const AddEmployee = () => {
                 }))
             };
 
+            console.log('Saving employee with payload:', payload);
             if (isEditMode) {
                 await updateEmployee(editEmployeeId || formData.employee_id, payload);
             } else {
@@ -551,11 +693,13 @@ const AddEmployee = () => {
                         name="employee_id"
                         value={formData.employee_id}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="EMP001"
+                        maxLength={20}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        placeholder="CDIN001"
                         required
                         disabled={isEditMode}
                     />
+                    {errors.employee_id && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employee_id}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Full Name *</label>
@@ -564,10 +708,12 @@ const AddEmployee = () => {
                         name="employee_name"
                         value={formData.employee_name}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        maxLength={100}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         placeholder="John Doe"
                         required
                     />
+                    {errors.employee_name && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employee_name}</p>}
                 </div>
             </div>
 
@@ -579,21 +725,23 @@ const AddEmployee = () => {
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        maxLength={100}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         placeholder="john.doe@organization.com"
                         required
                     />
+                    {errors.email && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.email}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Phone Number</label>
-                    <input
-                        type="tel"
-                        name="phone"
+                    <PhoneInputField
                         value={formData.phone}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="+91 9876543210"
+                        onChange={handlePhoneChange}
+                        error={errors.phone}
+                        placeholder="+1 (234) 567-890"
                     />
+                    <p className="text-[10px] text-gray-500 mt-1">Select country and enter phone number</p>
+                    {errors.phone && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.phone}</p>}
                 </div>
             </div>
 
@@ -616,17 +764,11 @@ const AddEmployee = () => {
                         value={formData.date_of_joining}
                         onChange={handleInputChange}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            formData.date_of_birth && formData.date_of_joining && new Date(formData.date_of_joining) <= new Date(formData.date_of_birth)
-                                ? 'border-red-500 bg-red-50'
-                                : 'border-gray-300'
+                            errors.date_of_joining ? 'border-red-500 bg-red-50' : 'border-gray-300'
                         }`}
                         required
                     />
-                    {formData.date_of_birth && formData.date_of_joining && new Date(formData.date_of_joining) <= new Date(formData.date_of_birth) && (
-                        <p className="text-[10px] text-red-600 mt-1 font-bold italic anim-pulse">
-                            Date of Joining must be after Date of Birth
-                        </p>
-                    )}
+                    {errors.date_of_joining && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.date_of_joining}</p>}
                 </div>
             </div>
 
@@ -637,9 +779,11 @@ const AddEmployee = () => {
                     value={formData.address}
                     onChange={handleInputChange}
                     rows="2"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    maxLength={500}
+                    className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.address ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     placeholder="Enter full address"
                 />
+                {errors.address && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.address}</p>}
             </div>
 
             <div>
@@ -703,10 +847,12 @@ const AddEmployee = () => {
                         name="role_designation"
                         value={formData.role_designation}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        maxLength={100}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.role_designation ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         placeholder="Senior Developer"
                         required
                     />
+                    {errors.role_designation && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.role_designation}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Department *</label>
@@ -714,7 +860,7 @@ const AddEmployee = () => {
                         name="department"
                         value={formData.department}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.department ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         required
                     >
                         <option value="">Select Department</option>
@@ -722,16 +868,18 @@ const AddEmployee = () => {
                             <option key={dept} value={dept}>{dept}</option>
                         ))}
                     </select>
+                    {errors.department && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.department}</p>}
                 </div>
             </div>
 
             <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Reporting Manager</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Reporting Manager *</label>
                 <select
                     name="reporting_manager_id"
                     value={formData.reporting_manager_id}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.reporting_manager_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    required
                 >
                     <option value="">Select Reporting Manager</option>
                     {allEmployees
@@ -743,6 +891,7 @@ const AddEmployee = () => {
                         ))
                     }
                 </select>
+                {errors.reporting_manager_id && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.reporting_manager_id}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -765,7 +914,7 @@ const AddEmployee = () => {
                         name="location"
                         value={formData.location}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         required
                     >
                         <option value="">Select Location</option>
@@ -773,10 +922,51 @@ const AddEmployee = () => {
                             <option key={loc} value={loc}>{loc}</option>
                         ))}
                     </select>
+                    {errors.location && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.location}</p>}
                 </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Shift Timing <span className="text-red-500">*</span></label>
+                    {/* Preset picker */}
+                    <select
+                        value={shiftPreset}
+                        onChange={handleShiftPresetChange}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2 ${errors.shift ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    >
+                        <option value="">Select Preset</option>
+                        {SHIFT_PRESETS.map(p => (
+                            <option key={p.label} value={p.label}>{p.label}</option>
+                        ))}
+                    </select>
+                    {errors.shift && <p className="text-[10px] text-red-600 mb-2 font-bold">{errors.shift}</p>}
+                    {/* Editable time pickers */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                            <span className="text-[10px] text-gray-500 font-semibold">Start</span>
+                            <input
+                                type="time"
+                                value={shiftStart}
+                                onChange={e => handleShiftTimeChange('start', e.target.value)}
+                                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                        <span className="text-gray-400 mt-4 font-bold">→</span>
+                        <div className="flex-1">
+                            <span className="text-[10px] text-gray-500 font-semibold">End</span>
+                            <input
+                                type="time"
+                                value={shiftEnd}
+                                onChange={e => handleShiftTimeChange('end', e.target.value)}
+                                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                    </div>
+                    {formData.shift && (
+                        <p className="text-[10px] text-blue-600 font-medium mt-1 truncate">{formData.shift}</p>
+                    )}
+                </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Work Mode</label>
                     <select
@@ -801,11 +991,11 @@ const AddEmployee = () => {
                             onChange={handleInputChange}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                            <optgroup label="Auto-calculated">
-                                <option value="Bench">Bench</option>
-                                <option value="Partially bench">Partially bench</option>
-                                <option value="Partially allocated">Partially allocated</option>
-                                <option value="Allocated">Allocated</option>
+                            <optgroup label="Auto-calculated (based on projects)">
+                                <option value="Bench" disabled={formData.projects.length > 0}>Bench</option>
+                                <option value="Partially bench" disabled={formData.projects.length === 0}>Partially bench</option>
+                                <option value="Partially allocated" disabled={formData.projects.length === 0}>Partially allocated</option>
+                                <option value="Allocated" disabled={formData.projects.length === 0}>Allocated</option>
                             </optgroup>
                             <optgroup label="Manually set">
                                 <option value="Notice period">Notice period</option>
@@ -884,14 +1074,17 @@ const AddEmployee = () => {
                             </div>
                         </div>
                     )}
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>
-                    <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
-                        {formData.employee_allocations}%
+
+                    <div className="mt-4">
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>
+                        <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
+                            {formData.employee_allocations}%
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Auto-calculated from project assignment</p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Auto-calculated from project assignment</p>
                 </div>
+
+
             </div>
 
             <div>
@@ -1052,7 +1245,7 @@ const AddEmployee = () => {
 
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Project</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Project <span className="text-red-500">*</span></label>
                         <select
                             value={currentProject.project_id}
                             onChange={(e) => handleProjectChange('project_id', e.target.value)}
@@ -1069,7 +1262,7 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project <span className="text-red-500">*</span></label>
                             <input
                                 type="text"
                                 value={currentProject.project_role}
@@ -1079,7 +1272,7 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day <span className="text-red-500">*</span></label>
                             <input
                                 type="number"
                                 value={currentProject.daily_hours}
@@ -1091,7 +1284,7 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation %</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation % <span className="text-red-500">*</span></label>
                             <input
                                 type="number"
                                 value={currentProject.project_allocation}
@@ -1105,7 +1298,7 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date <span className="text-red-500">*</span></label>
                             <input
                                 type="date"
                                 value={currentProject.project_start_date}
@@ -1238,6 +1431,7 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Work Mode:</span> {formData.work_mode || 'N/A'}</div>
                     <div><span className="font-semibold">Employment Type:</span> {formData.employment_type || 'N/A'}</div>
                     <div><span className="font-semibold">Status:</span> <span className={`px-2 py-1 rounded text-xs ${formData.employee_status === 'Allocated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{formData.employee_status}</span></div>
+                    <div><span className="font-semibold">Shift:</span> {formData.shift || 'N/A'}</div>
                     <div><span className="font-semibold">Allocation:</span> {formData.employee_allocations}%</div>
                     <div><span className="font-semibold">Reporting Manager:</span> {formData.reporting_manager_id ? (() => { const mgr = allEmployees.find(e => e.employee_id === formData.reporting_manager_id); return mgr ? `${mgr.employee_name} (${mgr.employee_id})` : formData.reporting_manager_id; })() : 'N/A'}</div>
                 </div>
@@ -1251,7 +1445,7 @@ const AddEmployee = () => {
                         </div>
                     </div>
                 )}
-                {formData.certificates.length > 0 && (
+                {formData.certificates.length > 0 ? (
                     <div className="mt-3">
                         <span className="font-semibold text-sm">Certificates:</span>
                         <ul className="list-disc list-inside mt-1 text-sm text-gray-600">
@@ -1259,6 +1453,11 @@ const AddEmployee = () => {
                                 <li key={i}>{cert.name} {cert.file && <span className="text-xs text-green-600">✓</span>}</li>
                             ))}
                         </ul>
+                    </div>
+                ) : (
+                    <div className="mt-3">
+                        <span className="font-semibold text-sm">Certificates:</span>
+                        <p className="mt-1 text-sm text-gray-500 italic">No certification</p>
                     </div>
                 )}
             </div>
@@ -1399,30 +1598,28 @@ const AddEmployee = () => {
                     {currentSection !== 'preview' ? (
                         <button
                             onClick={() => {
-                                if (canProceedToNext()) {
+                                // Trigger validation with error reporting on click
+                                let isValid = false;
+                                if (currentSection === 'personal') isValid = validatePersonalSection(true);
+                                else if (currentSection === 'professional') isValid = validateProfessionalSection(true);
+                                else if (currentSection === 'project') isValid = validateProjectSection();
+
+                                if (isValid) {
                                     // Mark current section as completed
                                     if (!completedSections.includes(currentSection)) {
                                         setCompletedSections([...completedSections, currentSection]);
                                     }
 
                                     if (currentSection === 'project') {
-                                        // On project section, show and navigate to preview
                                         setShowPreview(true);
                                         setCurrentSection('preview');
                                     } else {
-                                        // For other sections, just go to next
                                         const idx = sections.findIndex(s => s.id === currentSection);
                                         setCurrentSection(sections[idx + 1].id);
                                     }
-                                } else {
-                                    alert('Please fill all required fields before proceeding.');
                                 }
                             }}
-                            disabled={!canProceedToNext()}
-                            className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${canProceedToNext()
-                                ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
-                                : 'bg-gray-400 cursor-not-allowed'
-                                }`}
+                            className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors bg-blue-600 hover:bg-blue-700`}
                         >
                             {currentSection === 'project' ? 'Review & Submit' : 'Next'}
                         </button>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Filter, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Filter, RotateCcw, Search } from 'lucide-react';
 import { PROJECT_STATUS_OPTIONS, PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const FilterPanel = ({
@@ -7,9 +7,11 @@ const FilterPanel = ({
     onClose,
     onApplyFilters,
     onClearFilters,
-    currentFilters
+    currentFilters,
+    departments = []
 }) => {
     const [filters, setFilters] = useState({
+        department: '',
         projectName: '',
         resourceName: '',
         status: 'All Status',
@@ -18,10 +20,12 @@ const FilterPanel = ({
         startDate: '',
         endDate: ''
     });
+    const [focusedField, setFocusedField] = useState(null);
 
     useEffect(() => {
         if (isOpen && currentFilters) {
             setFilters({
+                department: currentFilters.department || '',
                 projectName: currentFilters.projectName || '',
                 resourceName: currentFilters.resourceName || '',
                 status: currentFilters.status || 'All Status',
@@ -33,19 +37,50 @@ const FilterPanel = ({
         }
     }, [isOpen, currentFilters]);
 
+    // Get unique resource names for suggestions
+    const resourceSuggestions = React.useMemo(() => {
+        const query = (filters.resourceName || '').toLowerCase();
+        const names = Array.from(new Set(
+            currentFilters?.allResourceNames?.split(',').map(s => s.trim()) || []
+        )).filter(Boolean);
+
+        return names
+            .filter(name => name.toLowerCase().includes(query))
+            .sort((a, b) => {
+                const aLower = a.toLowerCase();
+                const bLower = b.toLowerCase();
+                const aStarts = aLower.startsWith(query);
+                const bStarts = bLower.startsWith(query);
+                
+                if (aStarts && !bStarts) return -1;
+                if (!aStarts && bStarts) return 1;
+                return aLower.localeCompare(bLower);
+            });
+    }, [currentFilters?.allResourceNames, filters.resourceName]);
+
     if (!isOpen) return null;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        let newFilters;
         if (name === 'status') {
-            setFilters(prev => ({
-                ...prev,
+            newFilters = {
+                ...filters,
                 status: value,
-                sowStatus: value === 'In Progress' ? prev.sowStatus : '',
-            }));
-            return;
+                sowStatus: value === 'In Progress' ? filters.sowStatus : '',
+            };
+        } else {
+            newFilters = { ...filters, [name]: value };
         }
-        setFilters(prev => ({ ...prev, [name]: value }));
+        
+        setFilters(newFilters);
+        
+        // Trigger immediate filtering for a snappier experience as requested
+        const finalFiltersForApply = {
+            ...newFilters,
+            sowStatus: newFilters.status === 'In Progress' ? newFilters.sowStatus : '',
+        };
+        onApplyFilters(finalFiltersForApply);
     };
 
     const handleApply = () => {
@@ -88,6 +123,24 @@ const FilterPanel = ({
                     <div className="flex-1 overflow-y-auto p-6">
                         <div className="flex flex-col gap-6">
 
+                            {/* Department */}
+                            {departments.length > 0 && (
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Department</label>
+                                    <select
+                                        name="department"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                        value={filters.department}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">All Departments</option>
+                                        {departments.map((d) => (
+                                            <option key={d.id || d} value={d.id || d}>{d.name || d}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             {/* Project Name */}
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Project Name</label>
@@ -102,16 +155,41 @@ const FilterPanel = ({
                             </div>
 
                             {/* Resource Name */}
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5 relative">
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Resource Name</label>
-                                <input
-                                    type="text"
-                                    name="resourceName"
-                                    placeholder="Search by team member..."
-                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
-                                    value={filters.resourceName}
-                                    onChange={handleChange}
-                                />
+                                <div className="relative group">
+                                    <input
+                                        type="text"
+                                        name="resourceName"
+                                        placeholder="Search by team member..."
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
+                                        value={filters.resourceName}
+                                        onChange={handleChange}
+                                        onFocus={() => setFocusedField('resourceName')}
+                                        onBlur={() => setTimeout(() => setFocusedField(null), 200)}
+                                        autoComplete="off"
+                                    />
+                                    {focusedField === 'resourceName' && filters.resourceName && resourceSuggestions.length > 0 && (
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl z-[60] py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100 max-h-60 overflow-y-auto">
+                                            {resourceSuggestions.map(name => (
+                                                <button
+                                                    key={name}
+                                                    type="button"
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault(); // Prevent input onBlur from firing before this selection
+                                                        const mockEvent = { target: { name: 'resourceName', value: name } };
+                                                        handleChange(mockEvent);
+                                                        setFocusedField(null);
+                                                    }}
+                                                    className="w-full px-4 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                                >
+                                                    <Search size={14} className="text-slate-300" />
+                                                    {name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Status */}
@@ -153,9 +231,9 @@ const FilterPanel = ({
                                     <input
                                         type="date"
                                         name="startDate"
-                                        value={filters.startDate}
+                                        value={filters.startDate || ''}
                                         onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
                                     />
                                 </div>
 
@@ -165,9 +243,9 @@ const FilterPanel = ({
                                     <input
                                         type="date"
                                         name="endDate"
-                                        value={filters.endDate}
+                                        value={filters.endDate || ''}
                                         onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-bold text-slate-700 focus:bg-white"
+                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
                                     />
                                 </div>
                             </div>
@@ -181,6 +259,7 @@ const FilterPanel = ({
                             <button
                                 onClick={() => {
                                     setFilters({
+                                        department: '',
                                         projectName: '',
                                         resourceName: '',
                                         status: 'All Status',
@@ -189,8 +268,8 @@ const FilterPanel = ({
                                         startDate: '',
                                         endDate: ''
                                     });
-                                    onClearFilters?.();
-                                    onClose();
+                                    // Removed onClearFilters?() and onClose() to keep panel open 
+                                    // and prevent unwanted navigation/reload per user request
                                 }}
                                 className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
                                 type="button"

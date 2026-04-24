@@ -4,7 +4,7 @@ const ProjectUtilization = ({ projects, onProjectClick }) => {
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-1 min-h-[450px] max-h-[450px] flex flex-col">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-800">Project Utilization</h3>
+                <h3 className="text-lg font-bold text-gray-800 tracking-tight">Project Utilization</h3>
             </div>
 
             <div className="overflow-y-auto flex-1 custom-scrollbar">

@@ -2,20 +2,20 @@ import api from './axios';
 
 // Fetch total employee count
 export const getEmployeeCount = async () => {
-    const res = await api.post('/employee/count');
-    return res?.data?.count ?? res?.data ?? null;
+    const res = await api.get('/employees/count');
+    return res?.data?.total_employees ?? 0;
 };
 
 // Fetch bench employee count
 export const getBenchCount = async () => {
-    const res = await api.post('/employee/bench');
-    return res?.data?.count ?? res?.data ?? null;
+    const res = await api.get('/employees/bench/count');
+    return res?.data?.bench_employees ?? 0;
 };
 
 // Fetch notice period employee count
 export const getNoticeCount = async () => {
-    const res = await api.post('/employee/notice');
-    return res?.data?.count ?? res?.data ?? null;
+    const res = await api.get('/employees/notice/count');
+    return res?.data?.notice_employees ?? 0;
 };
 
 // Global Cache to fix duplicate loading problems and speed up site
@@ -154,8 +154,8 @@ export const nominateEmployee = async (nominationData) => {
 };
 
 // Create new employee
-export const createEmployee = async (employeeData) => {
-    const res = await api.post('/employees', employeeData);
+export const createEmployee = async (employeeData, upsert = false) => {
+    const res = await api.post(`/employees?upsert=${upsert}`, employeeData);
     clearEmployeeCache();
     return res.data;
 };
@@ -175,8 +175,10 @@ export const restoreEmployee = async (id) => {
 };
 
 // Delete employee
-export const deleteEmployee = async (id) => {
-    const res = await api.delete(`/employees/${id}`);
+export const deleteEmployee = async (id, permanent = false) => {
+    const res = await api.delete(`/employees/${id}`, {
+        params: { permanent }
+    });
     clearEmployeeCache();
     return res.data;
 };
@@ -223,4 +225,19 @@ export const getFilterOptions = async (forceUpdate = false) => {
         console.error('Error fetching filter options:', err);
         return null;
     }
+};
+export const getDepartments = async () => {
+    const res = await api.get('/dashboard/departments');
+    return res.data;
+};
+
+export const getDesignations = async () => {
+    const res = await api.get('/dashboard/designations');
+    return res.data;
+};
+
+export const getLocations = async () => {
+    // Standardizing on existing API pattern
+    const res = await api.get('/employees/filter-options');
+    return res.data?.locations || [];
 };

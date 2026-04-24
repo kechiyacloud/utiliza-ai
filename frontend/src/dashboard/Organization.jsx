@@ -5,6 +5,7 @@ import { getEmployeeList } from '../api/employeeApi';
 import { fetchDashboardData } from '../api/dashboardApi';
 import OrganizationInsights from './OrganizationInsights';
 import { useDataRefresh } from '../context';
+import ModuleLoader from '../components/ModuleLoader';
 
 const Organization = () => {
     const navigate = useNavigate();
@@ -112,17 +113,9 @@ const Organization = () => {
         dept.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    if (loading) return (
-        <div className="h-full flex items-center justify-center bg-slate-50">
-            <div className="flex flex-col items-center gap-3 text-center animate-in fade-in duration-500">
-                <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500/20 border-t-teal-500 shadow-sm"></div>
-                <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-700 uppercase tracking-widest">Mapping Organization</p>
-                    <p className="text-xs text-slate-400">Fetching department hierarchies and team members...</p>
-                </div>
-            </div>
-        </div>
-    );
+    if (loading) {
+        return <ModuleLoader label="Mapping Organization" />;
+    }
     
     if (error) return (
         <div className="h-full flex items-center justify-center bg-slate-50 text-center p-6 animate-in zoom-in duration-300">
@@ -166,11 +159,16 @@ const Organization = () => {
                         <ArrowLeft size={20} className="text-gray-600" />
                     </button>
                     <div>
-                        <h1 className="text-xl font-bold text-slate-800">
-                            {activeDeptId ? 'Team Map' : 'Organization Map'}
-                        </h1>
-                        <p className="text-slate-500 text-xs">
-                            {activeDeptId ? 'Focused view of your team hierarchy.' : 'Navigate through the department hierarchy.'}
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
+                                {activeDeptId ? 'Team Map' : 'Organization Map'}
+                            </h1>
+                            <span className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] font-bold rounded-full uppercase tracking-wider border border-teal-100">
+                                Real-Time (Today)
+                            </span>
+                        </div>
+                        <p className="text-sm font-medium text-gray-500">
+                            As of {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })} • {activeDeptId ? 'Focused team hierarchy' : 'Department hierarchy'}
                         </p>
                     </div>
                 </div>

@@ -41,9 +41,7 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 
                 {/* Right Side: Allocation Pill */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200 shadow-sm">
-                        {project.value}%
-                    </span>
+                        {project.value === 0 ? "No project allocation" : `${project.value}%`}
                     <ChevronRight
                         size={14}
                         className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
@@ -327,7 +325,7 @@ const EmployeeDetails = () => {
                 onConfirm={async () => {
                     setIsDeleting(true);
                     try {
-                        await deleteEmployee(id);
+                        await deleteEmployee(userData.employee_id || userData.id || id);
                         clearDashboardCache(); // Sync dashboard
                         triggerRefresh();
                         navigate('/info/employee');
@@ -358,7 +356,7 @@ const EmployeeDetails = () => {
             <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
                 {/* Actions */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
+                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || userData.id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
                     <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors">Delete</button>
                 </div>
 
@@ -549,9 +547,10 @@ const EmployeeDetails = () => {
                         </ResponsiveContainer>
                         {/* Center Text */}
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center">
-                            <span className="text-lg font-bold text-slate-800">
-                                {chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0)}%
-                            </span>
+                                {(() => {
+                                    const total = chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+                                    return total === 0 ? "No project allocation" : `${total}%`;
+                                })()}
                         </div>
                     </div>
 
@@ -719,16 +718,20 @@ const EmployeeDetails = () => {
                     {/* Certificates */}
                     <div className="flex-grow">
                         <h2 className="text-lg font-bold text-slate-800 mb-4">Certificates</h2>
-                        <ul className="space-y-3">
-                            {userData.certificates && userData.certificates.map((cert, idx) => (
-                                <li key={idx} className="flex items-start gap-3">
-                                    <div className="mt-1 p-1 bg-orange-100 rounded-full text-orange-600">
-                                        <Briefcase size={12} />
-                                    </div>
-                                    <span className="text-sm text-slate-700 font-medium">{cert}</span>
-                                </li>
-                            ))}
-                        </ul>
+                        {userData.certificates && userData.certificates.length > 0 ? (
+                            <ul className="space-y-3">
+                                {userData.certificates.map((cert, idx) => (
+                                    <li key={idx} className="flex items-start gap-3">
+                                        <div className="mt-1 p-1 bg-orange-100 rounded-full text-orange-600">
+                                            <Briefcase size={12} />
+                                        </div>
+                                        <span className="text-sm text-slate-700 font-medium">{cert}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-slate-500 italic">No certification</p>
+                        )}
                     </div>
                 </div>
 
@@ -818,7 +821,7 @@ const EmployeeDetails = () => {
 
                                                 {/* Inside Label */}
                                                 <span className="ml-3 text-[11px] text-white font-bold px-2 truncate drop-shadow-sm relative z-10 flex items-center leading-none">
-                                                    <span>{project.value}%</span>
+                                                    <span>{project.value === 0 ? "No project allocation" : `${project.value}%`}</span>
                                                 </span>
                                             </div>
                                         </div>

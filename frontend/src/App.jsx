@@ -7,6 +7,7 @@ const LoginRegister = lazy(() => import('./LoginRegister'))
 const Login = lazy(() => import('./login-register/Login'))
 const Register = lazy(() => import('./login-register/Register'))
 const Verify = lazy(() => import('./login-register/Verify'))
+const ForgotPassword = lazy(() => import('./login-register/ForgotPassword'))
 const MainDashboard = lazy(() => import('./MainDashboard'))
 const Dashboard = lazy(() => import('./dashboard/Dashboard'))
 const Projects = lazy(() => import('./dashboard/Projects'))
@@ -29,12 +30,22 @@ const SkillsSummaryPage = lazy(() => import('./dashboard/employee/SkillsSummaryP
 
 import ErrorBoundary from './components/ErrorBoundary'
 
-function RouteLoader({ label = 'Loading page...' }) {
+function RouteLoader({ label = 'Initializing...' }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-500">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500/25 border-t-blue-500"></div>
-        <p className="text-sm font-medium tracking-wide">{label}</p>
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-500/10"></div>
+          <div className="absolute top-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-blue-600"></div>
+        </div>
+        <div className="flex flex-col items-center gap-1.5">
+          <p className="text-sm font-bold tracking-[0.2em] text-slate-700 uppercase">{label}</p>
+          <div className="flex items-center gap-1">
+            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.3s]"></span>
+            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.15s]"></span>
+            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-400"></span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -61,6 +72,7 @@ function App() {
             <Route path='login' element={withSuspense(<Login />, 'Loading sign in...')} />
             <Route path='register' element={withSuspense(<Register />, 'Loading registration...')} />
             <Route path='verify' element={withSuspense(<Verify />, 'Loading verification...')} />
+            <Route path='forgot-password' element={withSuspense(<ForgotPassword />, 'Loading...')} />
           </Route>
 
           {/* DASHBOARD — protected: requires login token */}

@@ -1,16 +1,35 @@
 import api from "./axios";
 
+export const fetchProjectDepartments = async () => {
+    try {
+        const response = await api.get('/projects/departments');
+        return response.data || [];
+    } catch (error) {
+        console.error("Fetch Project Departments Error:", error);
+        return [];
+    }
+};
+
 /**
  * Fetch projects overview and list data.
  * @param {Object} filters - Optional filters (e.g. { department: '...' })
  */
 export const fetchProjectsData = async (filters = {}) => {
     try {
-        const params = { ...filters };
+        const apiParams = {
+            ...filters,
+            resource_name: filters.resourceName,
+            project_name: filters.projectName,
+            sow_status: filters.sowStatus,
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            startDate: filters.startDate,
+            endDate: filters.endDate
+        };
 
         const [overviewRes, listRes] = await Promise.all([
-            api.get('/projects/overview', { params }),
-            api.get('/projects/list', { params })
+            api.get('/projects/overview', { params: apiParams }),
+            api.get('/projects/list', { params: apiParams })
         ]);
 
         const o = overviewRes?.data || {};
@@ -19,13 +38,14 @@ export const fetchProjectsData = async (filters = {}) => {
         // Map Backend structure to Frontend Expected Structure
         const REAL_PROJECTS_DATA = {
             stats: {
-                totalProjects: o.total_projects || 0,
-                internalProjects: o.internal_projects || 0,
-                clientProjects: o.client_projects || o.external_projects || 0,
-                externalProjects: o.client_projects || o.external_projects || 0,
-                ongoing: o.ongoing_projects || 0,
-                completedProjects: o.completed_projects || 0,
-                upcoming_projects: o.upcoming_projects || 0,
+                totalProjects: o.totalProjects ?? o.total_projects ?? 0,
+                internalProjects: o.internalProjects ?? o.internal_projects ?? 0,
+                externalProjects: o.externalProjects ?? o.external_projects ?? o.clientProjects ?? o.client_projects ?? 0,
+                ongoingProjects: o.ongoingProjects ?? o.ongoing_projects ?? 0,
+                overdueProjects: o.overdueProjects ?? 0,
+                endingSoonProjects: o.endingSoonProjects ?? 0,
+                completedProjects: o.completedProjects ?? o.completed_projects ?? 0,
+                upcomingProjects: o.upcomingProjects ?? o.upcoming_projects ?? 0,
             },
             projects: l.map((p) => {
                 // Determine display status pill color based on mapped status string from DB
@@ -49,6 +69,8 @@ export const fetchProjectsData = async (filters = {}) => {
 
                 return {
                     id: p.project_id,
+                    project_id: p.project_id,
+                    uuid: p.uuid || null,
                     name: p.project_name,
                     statusText: "Active",
                     statusColor: "text-green-500",

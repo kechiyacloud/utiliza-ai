@@ -24,7 +24,9 @@ const AllocationBar = ({ percentage, status }) => {
     return (
         <div className="w-full max-w-[110px]">
             <div className="flex justify-end mb-1">
-                <span className="text-[10px] font-bold text-gray-600">{percentage}%</span>
+                <span className="text-[10px] font-bold text-gray-600">
+                    {percentage === 0 ? 'No project allocation' : `${percentage}%`}
+                </span>
             </div>
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -57,7 +59,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSortOpen, setIsSortOpen] = useState(false);
     const [itemsPerPage, setItemsPerPage] = useState(() => {
-        const saved = sessionStorage.getItem('employeeRowsPerPage');
+        const saved = localStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
     });
 
@@ -140,7 +142,9 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         break;
                     }
                     case 'top-performer':
-                        matchesCardFilter = (emp.employee_allocations || 0) >= 100; break;
+                        matchesCardFilter = emp.employee_allocations >= 100; break;
+                    case 'overallocated':
+                        matchesCardFilter = (emp.employee_allocations || 0) > 100; break;
                     default: matchesCardFilter = true;
                 }
             }
@@ -212,11 +216,11 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     const startIndex = (currentPage - 1) * itemsPerPage;
     const currentEmployees = sortedEmployees.slice(startIndex, startIndex + itemsPerPage);
 
-    const handleDelete = async () => {
+    const handleDelete = async (permanent = false) => {
         if (!deleteTarget) return;
         setIsDeleting(true);
         try {
-            await deleteEmployee(deleteTarget.employee_id);
+            await deleteEmployee(deleteTarget.employee_id, permanent);
             if (onEmployeeDelete) onEmployeeDelete(deleteTarget.employee_id);
         } catch (err) {
             console.error('Delete failed', err);
@@ -239,7 +243,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold text-gray-800">Organization Directory</h3>
-                    <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+                    <span className="text-sm font-medium text-gray-500 whitespace-nowrap">
                         {filteredEmployees.length} employees
                     </span>
                 </div>
@@ -249,8 +253,8 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Find an employee or skill..."
-                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all font-poppins"
+                            placeholder="Find an employee or skill"
+                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-72 transition-all font-poppins"
                             value={searchValue || ''}
                             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
                         />
@@ -352,12 +356,14 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                 />
                                             ) : (
                                                 <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100 uppercase">
-                                                    {(emp.employee_name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                                    {(emp.employee_name || 'Unknown Name').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'UN'}
                                                 </div>
                                             )}
                                             <div className="flex flex-col justify-center">
-                                                <span className="font-bold text-gray-800 text-sm">{emp.employee_name}</span>
-                                                <span className="text-xs text-gray-500 font-mono">{emp.employee_id}</span>
+                                                <span className="font-bold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
+                                                    {emp.employee_name || 'Unknown Name'}
+                                                </span>
+                                                <span className="text-xs text-gray-500 font-mono">{emp.employee_id || 'N/A'}</span>
                                             </div>
                                         </div>
                                     </td>
@@ -455,7 +461,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                 onChange={(e) => {
                                     const val = Number(e.target.value);
                                     setItemsPerPage(val);
-                                    sessionStorage.setItem('employeeRowsPerPage', val);
+                                    localStorage.setItem('employeeRowsPerPage', val);
                                     setCurrentPage(1);
                                 }}
                                 className="bg-white border border-gray-200 text-gray-700 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 cursor-pointer font-medium"

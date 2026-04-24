@@ -355,12 +355,24 @@ def list_simple_clients():
     try:
         _ensure_clients_table(cur)
         schema = _detect_clients_schema(cur)
+        
+        # Check if partner_id exists
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'clients' AND column_name = 'partner_id'")
+        has_partner = bool(cur.fetchone())
+        
         if schema == "modern":
-            cur.execute("SELECT id::text, name FROM clients ORDER BY name")
+            if has_partner:
+                cur.execute("SELECT id::text, name, partner_id FROM clients ORDER BY name")
+            else:
+                cur.execute("SELECT id::text, name, NULL AS partner_id FROM clients ORDER BY name")
         else:
-            cur.execute("SELECT client_id, client_name FROM clients ORDER BY client_name")
+            if has_partner:
+                cur.execute("SELECT client_id, client_name, partner_id FROM clients ORDER BY client_name")
+            else:
+                cur.execute("SELECT client_id, client_name, NULL AS partner_id FROM clients ORDER BY client_name")
+                
         rows = cur.fetchall()
-        return [{"id": str(r[0]), "name": r[1]} for r in rows]
+        return [{"id": str(r[0]), "name": r[1], "partner_id": str(r[2]) if r[2] else None} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Award, Search, Filter } from 'lucide-react';
 import { getEmployeeList } from '../../api/employeeApi';
+import { useDataRefresh } from '../../context';
 import SkillsOverview from './insights/SkillsOverview';
 
 const SkillsSummaryPage = () => {
@@ -10,23 +11,22 @@ const SkillsSummaryPage = () => {
     const [employees, setEmployees] = useState(location.state?.employees || []);
     const [loading, setLoading] = useState(!employees.length);
     const [error, setError] = useState(null);
+    const { refreshKey } = useDataRefresh();
 
     useEffect(() => {
-        if (!employees.length) {
-            const fetchEmployees = async () => {
-                setLoading(true);
-                try {
-                    const data = await getEmployeeList();
-                    setEmployees(data);
-                } catch (err) {
-                    setError(err.message || 'Failed to load resources');
-                } finally {
-                    setLoading(false);
-                }
-            };
-            fetchEmployees();
-        }
-    }, [employees.length]);
+        const fetchEmployees = async () => {
+            setLoading(true);
+            try {
+                const data = await getEmployeeList(refreshKey > 0);
+                setEmployees(data);
+            } catch (err) {
+                setError(err.message || 'Failed to load resources');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchEmployees();
+    }, [refreshKey]);
 
     if (loading) {
         return (
@@ -57,7 +57,7 @@ const SkillsSummaryPage = () => {
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Skill Summary</h1>
-                            <p className="text-sm text-gray-500 font-medium">Explore the talent matrix and skill concentration across your organization.</p>
+                            <p className="text-sm font-medium text-gray-500">Explore the talent matrix and skill concentration across your organization.</p>
                         </div>
                     </div>
                 </div>

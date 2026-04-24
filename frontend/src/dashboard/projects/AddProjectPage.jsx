@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import AddProjectPanel from './AddProjectPanel';
 
@@ -6,7 +6,7 @@ const AddProjectPage = () => {
     const navigate = useNavigate();
 
     const handleDone = () => {
-        navigate('/info/projects');
+        navigate('/info/projects', { state: { projectAdded: true } });
     };
 
     return (

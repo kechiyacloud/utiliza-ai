@@ -48,14 +48,15 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
             executiveCards: {
-                totalEmployees: { value: info?.total_employees ?? 0, change: "", label: "Total Employees" },
-                activeClients: { value: info?.total_clients ?? 0, change: "", label: "Active Clients" },
-                runningProjects: { value: info?.running_projects ?? 0, change: "", label: "Total Projects", alertCount: 0 },
-                benchStrength: { value: info?.bench_employees ?? 0, change: "", label: "Bench Strength" }
+                totalEmployees: { value: info?.totalEmployees?.value ?? 0, change: info?.totalEmployees?.change ?? "", label: "Total Employees" },
+                activeClients: { value: info?.activeClients?.value ?? 0, change: info?.activeClients?.change ?? "", label: "Active Clients" },
+                runningProjects: { value: info?.runningProjects?.value ?? 0, change: info?.runningProjects?.change ?? "", label: "Total Projects", alertCount: 0 },
+                benchStrength: { value: info?.benchEmployees?.value ?? 0, change: info?.benchEmployees?.change ?? "", label: "Bench Strength" },
+                newJoiners: { value: info?.newJoiners?.value ?? 0, change: info?.newJoiners?.change ?? "", label: "New Joiners" }
             },
             resourceForecast: forecast.map((f) => ({
                 month: f?.month || "Unknown",
-                totalEmployees: info?.total_employees ?? 0,
+                totalEmployees: info?.totalEmployees?.value ?? 0,
                 allocated: f?.allocations ?? 0
             })),
             highAllocationProjects: highAlloc.map((p, idx) => ({

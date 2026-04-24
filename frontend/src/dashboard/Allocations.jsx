@@ -14,6 +14,7 @@ import ForecastBenchList from './allocation/ForecastBenchList';
 import PossibleProjectMatches from './allocation/PossibleProjectMatches';
 import { fetchAllocationData, fetchForecastBench, fetchPossibleProjects } from '../api/allocationApi';
 import { useDataRefresh } from '../context';
+import ModuleLoader from '../components/ModuleLoader';
 
 function Allocations() {
   const location = useLocation();
@@ -97,11 +98,15 @@ function Allocations() {
     setSelectedProject(project);
   };
 
+  const handleOverallocatedClick = () => {
+    navigate('/employees/list', { state: { cardFilter: 'overallocated' } });
+  };
+
   const showForecastOnly = location.state?.showForecastOnly;
   const showUtilizationOnly = location.state?.showUtilizationOnly;
 
   if (loading) {
-    return <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-full">Loading Resource Data...</div>;
+    return <ModuleLoader label="Loading Allocations" />;
   }
 
   if (showForecastOnly) {
@@ -116,8 +121,8 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Forecast Bench</h1>
-            <p className="text-sm text-gray-500">See which team members will be available soon.</p>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{contextLabel} Forecast Bench</h1>
+            <p className="text-sm font-medium text-gray-500">See which team members will be available soon.</p>
           </div>
         </div>
         <div id="forecast-bench" className="flex flex-col lg:flex-row gap-6 w-full pb-8">
@@ -155,8 +160,8 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Utilization</h1>
-            <p className="text-sm text-gray-500">Check how your team's time is being spent.</p>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{contextLabel} Utilization</h1>
+            <p className="text-sm font-medium text-gray-500">Check how your team's time is being spent.</p>
           </div>
         </div>
 
@@ -164,7 +169,7 @@ function Allocations() {
         <div className="flex justify-end w-full">
           <AllocationFilters filters={filters} setFilters={setFilters} />
         </div>
-        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} />
+        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} onOverallocatedClick={handleOverallocatedClick} />
 
         <div className="flex flex-col lg:flex-row gap-6 w-full pb-8">
           <ProjectUtilization
@@ -197,8 +202,8 @@ function Allocations() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Resource Allocation</h1>
-            <p className="text-gray-500 text-sm">See who is busy working and who is free for new projects.</p>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Resource Allocation</h1>
+            <p className="text-sm font-medium text-gray-500">See who is busy working and who is free for new projects.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

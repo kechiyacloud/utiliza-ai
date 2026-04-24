@@ -28,6 +28,7 @@ import { createClient } from '../api/clientApi';
 
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
+import ModuleLoader from '../components/ModuleLoader';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
 import AddProjectPanel from './projects/AddProjectPanel';
@@ -220,19 +221,19 @@ function Dashboard() {
     if (!loading) {
       setTimeout(() => {
         let elId = null;
-        if (sessionStorage.getItem('returnToTopPerformers') === 'true') {
+        if (localStorage.getItem('returnToTopPerformers') === 'true') {
           elId = 'dashboard-top-performers';
-          sessionStorage.removeItem('returnToTopPerformers');
-        } else if (sessionStorage.getItem('returnToDashboardCards') === 'true') {
+          localStorage.removeItem('returnToTopPerformers');
+        } else if (localStorage.getItem('returnToDashboardCards') === 'true') {
           elId = 'dashboard-cards';
-          sessionStorage.removeItem('returnToDashboardCards');
-        } else if (sessionStorage.getItem('returnToHighAllocation') === 'true') {
+          localStorage.removeItem('returnToDashboardCards');
+        } else if (localStorage.getItem('returnToHighAllocation') === 'true') {
           elId = 'dashboard-high-allocation';
-          sessionStorage.removeItem('returnToHighAllocation');
-        } else if (sessionStorage.getItem('returnToResourceAvailability') === 'true' || sessionStorage.getItem('returnToDashboardOperational') === 'true') {
+          localStorage.removeItem('returnToHighAllocation');
+        } else if (localStorage.getItem('returnToResourceAvailability') === 'true' || localStorage.getItem('returnToDashboardOperational') === 'true') {
           elId = 'dashboard-operational-insights';
-          sessionStorage.removeItem('returnToResourceAvailability');
-          sessionStorage.removeItem('returnToDashboardOperational');
+          localStorage.removeItem('returnToResourceAvailability');
+          localStorage.removeItem('returnToDashboardOperational');
         }
 
         if (elId) {
@@ -292,7 +293,7 @@ function Dashboard() {
   const dynamicKpiData = [
     { 
       title: "Total Employee", 
-      value: _metrics?.total_employees || 0, 
+      value: _metrics?.totalEmployees || 0, 
       subtext: "Across all departments", 
       icon: UsersIcon, 
       color: "text-slate-500", 
@@ -303,8 +304,8 @@ function Dashboard() {
     },
     { 
       title: "Billable Headcount", 
-      value: _metrics?.billable_headcount || 0, 
-      subtext: `out of ${String(_metrics?.total_employees || 0)} total`, 
+      value: _metrics?.billableHeadcount || 0, 
+      subtext: `out of ${String(_metrics?.totalEmployees || 0)} total`, 
       icon: UserCheck, 
       color: "text-blue-500", 
       bg: "bg-blue-50", 
@@ -314,7 +315,7 @@ function Dashboard() {
     },
     { 
       title: "Non-Billable Headcount", 
-      value: _metrics?.internal_headcount || 0, 
+      value: _metrics?.internalHeadcount || 0, 
       subtext: "Internal & Shared services", 
       icon: Activity, 
       color: "text-emerald-500", 
@@ -325,7 +326,7 @@ function Dashboard() {
     },
     { 
       title: "Bench Headcount", 
-      value: _metrics?.bench_headcount || 0, 
+      value: _metrics?.benchHeadcount || 0, 
       subtext: "resources currently idle", 
       icon: UserMinus, 
       color: "text-rose-500", 
@@ -336,7 +337,7 @@ function Dashboard() {
     },
     { 
       title: `${String(contextLabel)} Utilization`, 
-      value: `${_metrics?.company_utilization || 0}%`, 
+      value: `${_metrics?.companyUtilization || 0}%`, 
       subtext: "Target 85%", 
       icon: TrendingUp, 
       color: "text-emerald-500", 
@@ -369,7 +370,7 @@ function Dashboard() {
     },
     { 
       title: "Upcoming Bench (30days)", 
-      value: _metrics?.upcoming_bench || 0, 
+      value: _metrics?.upcomingBench || 0, 
       subtext: "Resources roll-off", 
       icon: Clock, 
       color: "text-amber-500", 
@@ -383,10 +384,10 @@ function Dashboard() {
   const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
 
   const dynamicAllocationData = [
-    { name: 'Billable', value: _metrics.billable_headcount || 0, color: '#3b82f6' },
-    { name: 'Non-billable', value: _metrics.internal_headcount || 0, color: '#10b981' },
-    { name: 'Bench', value: _metrics.bench_headcount || 0, color: '#f59e0b' },
-    { name: 'Notice Period', value: _metrics.notice_period || 0, color: '#ef4444' },
+    { name: 'Billable', value: _metrics.billableHeadcount || 0, color: '#3b82f6' },
+    { name: 'Non-billable', value: _metrics.internalHeadcount || 0, color: '#10b981' },
+    { name: 'Bench', value: _metrics.benchHeadcount || 0, color: '#f59e0b' },
+    { name: 'Notice Period', value: _metrics.noticePeriod || 0, color: '#ef4444' },
   ].filter(item => item.value > 0);
 
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
@@ -435,14 +436,7 @@ function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex items-center justify-center w-full">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-          <p className="text-slate-500 font-medium tracking-wide">Loading Dashboard...</p>
-        </div>
-      </div>
-    );
+    return <ModuleLoader label="Loading Dashboard" />;
   }
 
   return (
@@ -462,16 +456,16 @@ function Dashboard() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+              className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
               title="Go Back"
             >
-              <ArrowLeft size={24} className="text-slate-600" />
+              <ArrowLeft size={20} className="text-gray-600" />
             </button>
             <div>
-              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
                 Dashboard
               </h1>
-              <p className="mt-1.5 text-sm font-medium text-slate-500">
+              <p className="text-sm font-medium text-gray-500">
                 See how your {contextLabel.toLowerCase()} is doing, track project progress, and check overall health.
               </p>
             </div>
@@ -517,8 +511,8 @@ function Dashboard() {
                 </div>
                 <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
                   <h3 className="text-xl font-bold text-slate-900 tracking-tight mb-0.5 leading-none">{kpi.value}</h3>
-                  <p className="text-slate-500 text-[9px] font-bold tracking-wider uppercase mb-0.5 whitespace-nowrap">{kpi.title}</p>
-                  <p className="text-[9px] text-slate-400 font-medium leading-tight">{kpi.subtext}</p>
+                  <p className="text-slate-500 text-[11px] font-bold tracking-tight uppercase mb-0.5 whitespace-nowrap">{kpi.title}</p>
+                  <p className="text-[10px] text-slate-400 font-medium leading-tight">{kpi.subtext}</p>
                 </div>
               </div>
             ))}
@@ -532,11 +526,11 @@ function Dashboard() {
             >
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <BarChart2 size={16} className="text-blue-500" />
+                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <BarChart2 size={18} className="text-blue-500" />
                     Allocate vs Available
                   </h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
+                  <p className="text-sm font-medium text-gray-500 mt-1">Comparing how many people are working versus who is available</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
@@ -565,10 +559,10 @@ function Dashboard() {
 
               {/* Blurred background preview */}
               <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <ListTodo size={16} className="text-blue-500" />
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <ListTodo size={18} className="text-blue-500" />
                   Actionable Todo List
-                  <span className="ml-auto text-[10px] font-bold text-slate-400">3 pending</span>
+                  <span className="ml-auto text-xs font-bold text-slate-400">3 pending</span>
                 </h2>
                 <div className="flex gap-2">
                   <div className="flex-1 h-8 bg-slate-100 rounded-lg" />
@@ -627,7 +621,7 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
-              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilization_prediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
+              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilizationPrediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
               onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
@@ -675,15 +669,15 @@ function Dashboard() {
               </div>
 
               {/* Strategic Predictor Tip */}
-              {data?.executiveMetrics?.utilization_prediction && (
-                <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                  <div className={`mt-0.5 ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+              {data?.executiveMetrics?.utilizationPrediction && (
+                <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                  <div className={`mt-0.5 ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
                     <Trophy size={14} />
                   </div>
                   <div className="flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-tight ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
-                    <p className={`text-[10px] font-bold leading-tight ${data.executiveMetrics.utilization_prediction.gap > 0 ? 'text-amber-600/80' : 'text-emerald-600/80'}`}>
-                      {data.executiveMetrics.utilization_prediction.tip}
+                    <p className={`text-[10px] font-bold uppercase tracking-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
+                    <p className={`text-[10px] font-bold leading-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-600/80' : 'text-emerald-600/80'}`}>
+                      {data.executiveMetrics.utilizationPrediction.tip}
                     </p>
                   </div>
                   <ChevronRight size={14} className="mt-2 text-slate-400" />
@@ -697,7 +691,7 @@ function Dashboard() {
               onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <ShieldAlert size={18} className="text-emerald-500" />
                   Top Skills on Bench
                 </h2>
@@ -756,10 +750,10 @@ function Dashboard() {
               skillsGap={data?.skillsGap || []}
               transitions={data?.recentTransitions || []}
               certifications={data?.certificationExpiry || []}
-              benchAging={data?.executiveMetrics?.bench_aging || []}
+              benchAging={data?.executiveMetrics?.benchAging || []}
               highUtilizationEmployee={data?.topPerformers || []}
               highUtilizationProject={data?.highAllocationProjects || []}
-              trends={data?.executiveMetrics?.utilization_trends || []}
+              trends={data?.executiveMetrics?.utilizationTrends || []}
               forcedTab={forcedTab}
             />
           </div>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.database import get_db_connection, release_db_connection, db_cursor
 from pydantic import BaseModel
 from typing import List, Optional
@@ -155,7 +155,7 @@ class EmployeeCreateUpdate(BaseModel):
     work_mode: str
     employee_status: str
     employee_allocations: int
-    reporting_manager_id: Optional[str] = None
+    reporting_manager_id: str
     date_of_resign: Optional[date] = None
     pip_start_date: Optional[date] = None
     pip_end_date: Optional[date] = None
@@ -164,6 +164,7 @@ class EmployeeCreateUpdate(BaseModel):
     skills: List[str] = []
     projects: List[ProjectAllocationInput] = []
     certificates: List[CertificateInput] = []
+    shift: Optional[str] = None
 
 class NominationInput(BaseModel):
     employee_id: str
@@ -176,7 +177,7 @@ router = APIRouter()
 @router.get("/employees/count")
 def get_total_employee_count():
     with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL")
+        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
         result = cur.fetchone()
         return {"total_employees": result[0]}
 
@@ -188,7 +189,7 @@ def get_bench_employee_count():
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-            AND m.date_of_resign IS NULL
+            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0
         """)
         result = cur.fetchone()
@@ -200,7 +201,7 @@ def get_notice_employee_count():
         cur.execute("""
             SELECT COUNT(*) FROM employee_master m
             JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            WHERE m.date_of_resign IS NULL
+            WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%')
         """)
         result = cur.fetchone()
@@ -217,6 +218,7 @@ def get_employee_roles():
 def sync_all_employees():
     """Forces a global synchronization of all active employee allocations and statuses."""
     with db_cursor() as cur:
+        _ensure_employee_columns(cur)
         cur.execute("SELECT employee_id FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
         ids = [row[0] for row in cur.fetchall()]
         if ids:
@@ -227,114 +229,91 @@ def sync_all_employees():
 def get_all_employees(include_resigned: bool = False, include_deleted: bool = False):
     print("API: Fetching all employees...")
     with db_cursor() as cur:
-        _ensure_employee_columns(cur)
-        has_employee_type = _table_has_column(cur, "employee_master", "employee_type")
-        has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
-        has_pip_end_date = _table_has_column(cur, "employee_master_pro", "pip_end_date")
-        has_notice_start_date = _table_has_column(cur, "employee_master_pro", "notice_start_date")
-        has_notice_end_date = _table_has_column(cur, "employee_master_pro", "notice_end_date")
+        # Optimization: Perform schema checks once in a consolidated query
+        cur.execute("""
+            SELECT 
+                column_name, table_name
+            FROM information_schema.columns 
+            WHERE (table_name = 'employee_master' AND column_name IN ('employee_type', 'is_deleted'))
+               OR (table_name = 'employee_master_pro' AND column_name IN ('pip_start_date', 'pip_end_date', 'notice_start_date', 'notice_end_date'))
+        """)
+        cols_present = {(r[0], r[1]) for r in cur.fetchall()}
+        
+        has_employee_type = ("employee_type", "employee_master") in cols_present
+        has_is_deleted = ("is_deleted", "employee_master") in cols_present
+        has_pip_start_date = ("pip_start_date", "employee_master_pro") in cols_present
+        has_pip_end_date = ("pip_end_date", "employee_master_pro") in cols_present
+        has_notice_start_date = ("notice_start_date", "employee_master_pro") in cols_present
+        has_notice_end_date = ("notice_end_date", "employee_master_pro") in cols_present
 
-        employee_type_expr = "COALESCE(MAX(m.employee_type), 'Full Time')" if has_employee_type else "'Full Time'"
+        employee_type_expr = "m.employee_type" if has_employee_type else "'Full Time'"
+        is_deleted_expr = "(m.is_deleted = FALSE OR m.is_deleted IS NULL OR %s = TRUE)" if has_is_deleted else "(TRUE OR %s = TRUE)"
         pip_start_expr = "p.pip_start_date" if has_pip_start_date else "NULL::date"
         pip_end_expr = "p.pip_end_date" if has_pip_end_date else "NULL::date"
         notice_start_expr = "p.notice_start_date" if has_notice_start_date else "NULL::date"
         notice_end_expr = "p.notice_end_date" if has_notice_end_date else "NULL::date"
 
-        notice_status_expr = (
-            "WHEN p.employee_status ILIKE '%%notice%%' AND MAX(p.notice_end_date) IS NOT NULL AND MAX(p.notice_end_date) < CURRENT_DATE THEN 'Resigned'\n"
-            "                    WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
-            if has_notice_end_date
-            else "WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status"
+        # Refactored Optimized Query
+        query = (
+            "WITH SkillsAgg AS ("
+            "    SELECT es.employee_id, ARRAY_AGG(DISTINCT s.skill_name) as skills "
+            "    FROM employee_skills es "
+            "    JOIN skills s ON es.skill_id = s.skill_id "
+            "    GROUP BY es.employee_id"
+            "), "
+            "AllocAgg AS ("
+            "    SELECT "
+            "        pa.employee_id, "
+            "        COALESCE(SUM(pa.allocation_percentage), 0) as total_alloc, "
+            "        MAX(CASE "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 3 "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags) = 'no') THEN 2 "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) = 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 1 "
+            "            ELSE 0 "
+            "        END) as priority_rank "
+            "    FROM projects_allocation pa "
+            "    LEFT JOIN projects pj ON pa.project_id = pj.project_id "
+            "    WHERE pa.allocation_start_date <= CURRENT_DATE "
+            "      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) "
+            "      AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
+            "    GROUP BY pa.employee_id"
+            ") "
+            "SELECT "
+            "    m.employee_id, m.employee_name, m.role_designation, m.department, m.location, "
+            "    m.photo_url, m.email_id, m.phone_number, m.date_of_joining, "
+            "    COALESCE(" + employee_type_expr + ", 'Full Time') as employee_type, "
+            "    CASE "
+            "        WHEN p.employee_status ILIKE '%%notice%%' AND " + notice_end_expr + " IS NOT NULL AND " + notice_end_expr + " < CURRENT_DATE THEN 'Resigned' "
+            "        WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status "
+            "        WHEN p.employee_status ILIKE '%%pip%%' THEN p.employee_status "
+            "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
+            "        WHEN COALESCE(al.total_alloc, 0) <= 0 THEN 'Bench' "
+            "        WHEN COALESCE(al.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' "
+            "        WHEN COALESCE(al.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' "
+            "        ELSE 'Allocated' "
+            "    END as employee_status, "
+            "    CASE "
+            "        WHEN al.priority_rank = 3 THEN 'billable' "
+            "        WHEN al.priority_rank = 2 THEN 'non-billable' "
+            "        WHEN al.priority_rank = 1 THEN 'billable' "
+            "        ELSE 'bench' "
+            "    END as billable, "
+            "    COALESCE(al.total_alloc, 0) as employee_allocations, "
+            "    m.date_of_resign, "
+            "    " + pip_start_expr + " as pip_start_date, "
+            "    " + pip_end_expr + " as pip_end_date, "
+            "    " + notice_start_expr + " as notice_start_date, "
+            "    " + notice_end_expr + " as notice_end_date, "
+            "    COALESCE(sk.skills, ARRAY[]::text[]) as skills "
+            "FROM employee_master m "
+            "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
+            "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
+            "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
+            "WHERE (m.date_of_resign IS NULL OR %s = TRUE) "
+            "  AND " + is_deleted_expr + " "
+            "ORDER BY m.employee_name ASC"
         )
-
-        query = """
-            WITH AllocationPriority AS (
-                SELECT 
-                    employee_id,
-                    MAX(CASE 
-                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3
-                        WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2
-                        WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1
-                        ELSE 0 
-                    END) as priority_rank
-                FROM projects_allocation
-                WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
-                GROUP BY employee_id
-            ),
-            DynAlloc AS (
-                SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc
-                FROM projects_allocation
-                WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE
-                GROUP BY employee_id
-            )
-            SELECT 
-                m.employee_id, 
-                m.employee_name, 
-                m.role_designation, 
-                m.department, 
-                m.location, 
-                m.photo_url,
-                m.email_id,
-                m.phone_number,
-                m.date_of_joining,
-                {employee_type_expr} as employee_type,
-                CASE
-                    {notice_status_expr}
-                    WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
-                    WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
-                    WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
-                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                    WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
-                    ELSE p.employee_status
-                END as employee_status,
-                CASE
-                    WHEN ap.priority_rank = 3 THEN 'billable'
-                    WHEN ap.priority_rank = 2 THEN 'non-billable'
-                    WHEN ap.priority_rank = 1 THEN 'billable'
-                    ELSE 'bench'
-                END as billable,
-                COALESCE(da.total_alloc, 0) as employee_allocations,
-                m.date_of_resign,
-                MAX({pip_start_expr}) as pip_start_date,
-                MAX({pip_end_expr}) as pip_end_date,
-                MAX({notice_start_expr}) as notice_start_date,
-                MAX({notice_end_expr}) as notice_end_date,
-                ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
-            FROM employee_master m
-            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
-            LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id
-            LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
-            LEFT JOIN skills s ON es.skill_id = s.skill_id
-            WHERE (m.date_of_resign IS NULL OR %s = TRUE)
-              AND (m.is_deleted = FALSE OR %s = TRUE)
-            GROUP BY
-                m.employee_id,
-                m.employee_name,
-                m.role_designation,
-                m.department,
-                m.location,
-                m.photo_url,
-                m.email_id,
-                m.phone_number,
-                m.date_of_joining,
-                p.employee_status,
-                ap.priority_rank,
-                da.total_alloc,
-                m.date_of_resign
-        """
-        cur.execute(
-            query.format(
-                employee_type_expr=employee_type_expr,
-                notice_status_expr=notice_status_expr,
-                pip_start_expr=pip_start_expr,
-                pip_end_expr=pip_end_expr,
-                notice_start_expr=notice_start_expr,
-                notice_end_expr=notice_end_expr,
-            ),
-            (include_resigned, include_deleted),
-        )
+        cur.execute(query, (include_resigned, include_deleted))
         columns = [desc[0] for desc in cur.description]
         results = [dict(zip(columns, row)) for row in cur.fetchall()]
         return results
@@ -348,19 +327,30 @@ def get_upcoming_bench():
                 m.employee_name, 
                 m.role_designation, 
                 m.photo_url,
-                MIN(pa.allocation_end_date) as bench_date,
+                pa.allocation_end_date as bench_date,
                 ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
             FROM employee_master m
             JOIN projects_allocation pa ON m.employee_id = pa.employee_id
+            LEFT JOIN projects pj ON pa.project_id = pj.project_id
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
-            AND m.date_of_resign IS NULL
+            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+            AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+            AND NOT EXISTS (
+                SELECT 1 FROM projects_allocation pa2
+                LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
+                WHERE pa2.employee_id = m.employee_id
+                  AND pa2.allocation_id <> pa.allocation_id
+                  AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
+                  AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+            )
             GROUP BY 
                 m.employee_id, 
                 m.employee_name, 
                 m.role_designation, 
-                m.photo_url
+                m.photo_url,
+                pa.allocation_end_date
             ORDER BY bench_date ASC
         """
         cur.execute(query)
@@ -387,7 +377,7 @@ def get_new_joiners():
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE m.date_of_joining >= NOW() - INTERVAL '90 days'
-            AND m.date_of_resign IS NULL
+            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             ORDER BY m.date_of_joining DESC
         """
         cur.execute(query)
@@ -410,7 +400,7 @@ def fetch_employee_of_month():
                 COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
             LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-            WHERE m.date_of_resign IS NULL
+            WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
             HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
             ORDER BY employee_allocations DESC, m.date_of_joining ASC
@@ -447,7 +437,7 @@ def fetch_action_inbox():
             SELECT m.employee_name, m.department
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            WHERE m.date_of_resign IS NOT NULL 
+            WHERE m.date_of_resign IS NOT NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND (p.employee_status IS NULL OR p.employee_status != 'Exited')
         """
         cur.execute(notice_query)
@@ -473,7 +463,7 @@ def fetch_action_inbox():
             FROM employee_master
             WHERE date_of_joining > NOW() - INTERVAL '100 days'
               AND date_of_joining <= NOW() - INTERVAL '80 days'
-              AND date_of_resign IS NULL
+              AND date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)
         """
         cur.execute(probation_query)
         prob_rows = cur.fetchall()
@@ -521,6 +511,9 @@ def get_employee_filter_options():
         cur.execute("SELECT DISTINCT employee_status FROM employee_master_pro WHERE employee_status IS NOT NULL AND employee_status != ''")
         status_tags = [row[0] for row in cur.fetchall()]
 
+        cur.execute("SELECT DISTINCT employee_name FROM employee_master WHERE date_of_resign IS NULL ORDER BY employee_name")
+        employee_names = [row[0] for row in cur.fetchall()]
+
         # Ensure known statuses like 'Allocated' exist if empty
         if not status_tags:
             status_tags = ['Allocated', 'Bench', 'Partially allocated', 'Notice period', 'Partially bench', 'PIP', 'Resigned']
@@ -530,7 +523,8 @@ def get_employee_filter_options():
             "locations": sorted(locations),
             "employee_types": sorted(employee_types),
             "skills": sorted(skills),
-            "status_tags": sorted(status_tags)
+            "status_tags": sorted(status_tags),
+            "employee_names": employee_names
         }
     except Exception as e:
         print(f"Error fetching filter options: {e}")
@@ -568,16 +562,26 @@ def get_employee_id_by_email(email_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s)", (email_id,))
+        # Prevent any potential SQL syntax issues if email_id is weirdly formatted
+        safe_email = email_id.strip()
+        
+        cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s)", (safe_email,))
         row = cur.fetchone()
+        
         if not row:
-            return {"employee_id": None, "linked": False}
+            return {"employee_id": None, "linked": False, "message": "No matching employee found."}
+            
         return {"employee_id": row[0], "linked": True}
+        
     except HTTPException as he:
         raise he
     except Exception as e:
-        print(f"Error looking up employee by email: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"CRITICAL Error looking up employee by email ({email_id}): {str(e)}\n{error_details}")
+        # Return a graceful JSON payload instead of an abrupt 500 to prevent frontend crashes
+        # though a 500 is standard for unexpected errors. We'll return 500 with detail.
+        raise HTTPException(status_code=500, detail=f"Database lookup failed: {str(e)}")
     finally:
         cur.close()
         release_db_connection(conn)
@@ -607,83 +611,90 @@ def get_employee_by_id(employee_id: str):
         )
         
         # 1️⃣ Fetch Main Employee Details
-        employee_query = f"""
-        WITH AllocationPriority AS (
-            SELECT 
-                employee_id,
-                MAX(CASE 
-                    WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3
-                    WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2
-                    WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1
-                    ELSE 0 
-                END) as priority_rank
-            FROM projects_allocation
-            WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
-            GROUP BY employee_id
-        ),
-        DynAlloc AS (
-            SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc
-                FROM projects_allocation
-                WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE
-                GROUP BY employee_id
+        # Check if the identifier is an email (contains '@')
+        is_email = "@" in employee_id
+        id_filter = "WHERE LOWER(m.email_id) = LOWER(%s)" if is_email else "WHERE m.employee_id = %s"
+
+        employee_query = (
+            "WITH AllocationPriority AS ("
+            "    SELECT "
+            "        employee_id, "
+            "        MAX(CASE "
+            "            WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3 "
+            "            WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2 "
+            "            WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1 "
+            "            ELSE 0 "
+            "        END) as priority_rank "
+            "    FROM projects_allocation "
+            "    WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE) "
+            "    GROUP BY employee_id"
+            "), "
+            "DynAlloc AS ("
+            "    SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc "
+            "        FROM projects_allocation "
+            "        WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE "
+            "        GROUP BY employee_id "
+            ") "
+            "SELECT "
+            "    m.employee_id, "
+            "    m.employee_name, "
+            "    m.role_designation, "
+            "    m.department, "
+            "    m.location, "
+            "    m.photo_url, "
+            "    m.email_id, "
+            "    m.phone_number, "
+            "    m.date_of_joining, "
+            "    m.total_experience, "
+            "    m.experience_in_cd, "
+            "    m.shift, "
+            "    m.mode_of_work, "
+            "    CASE " +
+            "        " + notice_status_expr + " "
+            "        WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status "
+            "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
+            "        WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench' "
+            "        WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' "
+            "        WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' "
+            "        WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated' "
+            "        ELSE p.employee_status "
+            "    END as employee_status, "
+            "    CASE "
+            "        WHEN ap.priority_rank = 3 THEN 'billable' "
+            "        WHEN ap.priority_rank = 2 THEN 'non-billable' "
+            "        WHEN ap.priority_rank = 1 THEN 'billable' "
+            "        ELSE 'non-billable' "
+            "    END as billable, "
+            "    COALESCE(da.total_alloc, 0) as employee_allocations, "
+            "    m.date_of_resign, "
+            "    " + pip_start_expr + " as pip_start_date, "
+            "    " + pip_end_expr + " as pip_end_date, "
+            "    " + notice_start_expr + " as notice_start_date, "
+            "    " + notice_end_expr + " as notice_end_date, "
+            "    p.reporting_manager_id, "
+            "    mgr.employee_name as reporting_manager_name, "
+            "    " + dob_expr + " as date_of_birth, "
+            "    " + address_expr + " as address "
+            "FROM employee_master m "
+            "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
+            "LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id "
+            "LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id "
+            "LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id "
+            f"{id_filter}"
         )
-        SELECT 
-            m.employee_id,
-            m.employee_name,
-            m.role_designation,
-            m.department,
-            m.location,
-            m.photo_url,
-            m.email_id,
-            m.phone_number,
-            m.date_of_joining,
-            m.total_experience,
-            m.experience_in_cd,
-            m.shift,
-            m.mode_of_work,
-            CASE
-                {notice_status_expr}
-                WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
-                WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
-                WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench'
-                WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-                WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-                WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated'
-                ELSE p.employee_status
-            END as employee_status,
-            CASE
-                WHEN ap.priority_rank = 3 THEN 'billable'
-                WHEN ap.priority_rank = 2 THEN 'non-billable'
-                WHEN ap.priority_rank = 1 THEN 'billable'
-                ELSE 'non-billable'
-            END as billable,
-            COALESCE(da.total_alloc, 0) as employee_allocations,
-            m.date_of_resign,
-            {pip_start_expr} as pip_start_date,
-            {pip_end_expr} as pip_end_date,
-            {notice_start_expr} as notice_start_date,
-            {notice_end_expr} as notice_end_date,
-            p.reporting_manager_id,
-            mgr.employee_name as reporting_manager_name,
-            {dob_expr} as date_of_birth,
-            {address_expr} as address
-        FROM employee_master m
-        LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-        LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id
-        LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id
-        LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id
-        WHERE m.employee_id = %s
-        """
 
         cur.execute(employee_query, (employee_id,))
         employee_row = cur.fetchone()
 
         if not employee_row:
+            # If not found by identifier, 404
             raise HTTPException(status_code=404, detail="Employee not found")
 
         columns = [desc[0] for desc in cur.description]
         employee = dict(zip(columns, employee_row))
 
+        # Real employee_id for downstream queries (even if we fetched by email)
+        real_employee_id = employee.get("employee_id")
 
         # 2️⃣ Fetch Skills
         skills_query = """
@@ -692,7 +703,7 @@ def get_employee_by_id(employee_id: str):
         JOIN skills s ON es.skill_id = s.skill_id
         WHERE es.employee_id = %s
         """
-        cur.execute(skills_query, (employee_id,))
+        cur.execute(skills_query, (real_employee_id,))
         skills_rows = cur.fetchall()
 
         skills = [
@@ -713,7 +724,7 @@ def get_employee_by_id(employee_id: str):
         ON ec.certificate_id = c.certificate_id
         WHERE ec.employee_id = %s
         """
-        cur.execute(certificates_query, (employee_id,))
+        cur.execute(certificates_query, (real_employee_id,))
         cert_rows = cur.fetchall()
 
         certificates = [row[0] for row in cert_rows]
@@ -749,7 +760,7 @@ def get_employee_by_id(employee_id: str):
         ON pa.project_id = p.project_id
         WHERE pa.employee_id = %s
         """
-        cur.execute(projects_query, (employee_id,))
+        cur.execute(projects_query, (real_employee_id,))
         project_rows = cur.fetchall()
 
         projects = [
@@ -802,32 +813,157 @@ def get_employee_by_id(employee_id: str):
 
         return response
 
+def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
+    """Internal helper to perform a full update of an employee record."""
+    # Check if Email is already used by ANOTHER employee
+    cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s) AND employee_id != %s", (emp.email, employee_id))
+    email_match = cur.fetchone()
+    if email_match:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Email '{emp.email}' is already used by another employee ({email_match[0]})"
+        )
+
+    # Check for optional columns in schema
+    has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
+    has_address = _table_has_column(cur, "employee_master", "address")
+
+    # 1. Update employee_master
+    phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
+    phone_numeric = int(phone_digits) if phone_digits else None
+    update_fields = [
+        "employee_name = %s", "email_id = %s", "phone_number = %s", "location = %s",
+        "mode_of_work = %s", "date_of_joining = %s", "role_designation = %s", "department = %s",
+        "employee_type = %s", "date_of_resign = %s", "shift = %s"
+    ]
+    update_params = [
+        emp.employee_name, emp.email, phone_numeric, emp.location,
+        emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
+        emp.employment_type, emp.date_of_resign, emp.shift
+    ]
+    
+    if emp.photo_url:
+        update_fields.append("photo_url = %s")
+        update_params.append(emp.photo_url)
+
+    if has_dob:
+        update_fields.append("date_of_birth = %s")
+        update_params.append(emp.date_of_birth)
+    if has_address:
+        update_fields.append("address = %s")
+        update_params.append(emp.address)
+
+    cur.execute(f"""
+        UPDATE employee_master SET
+            {", ".join(update_fields)}
+        WHERE employee_id = %s
+    """, update_params + [employee_id])
+
+    # 2. Update employee_master_pro
+    cur.execute("SELECT employee_id FROM employee_master_pro WHERE employee_id = %s", (employee_id,))
+    if cur.fetchone():
+        cur.execute("""
+            UPDATE employee_master_pro SET
+                employee_status = %s, employee_allocations = %s, reporting_manager_id = %s,
+                pip_start_date = %s, pip_end_date = %s, notice_start_date = %s, notice_end_date = %s
+            WHERE employee_id = %s
+        """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date, employee_id))
+    else:
+        cur.execute("""
+            INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
+
+    # 3. Update skills (delete old, insert new)
+    cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
+    for skill_name in emp.skills:
+        cur.execute("SELECT skill_id FROM skills WHERE skill_name = %s", (skill_name,))
+        skill_row = cur.fetchone()
+        if skill_row:
+            skill_id = skill_row[0]
+        else:
+            cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id", (skill_name,))
+            skill_id = cur.fetchone()[0]
+        cur.execute("INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience) VALUES (%s, %s, 1, 0) ON CONFLICT DO NOTHING", (employee_id, skill_id))
+
+    # 4. Update projects (delete old, insert new)
+    cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (employee_id,))
+    for proj in emp.projects:
+        # Validate project exists before inserting to prevent FK constraint errors
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (proj.project_id,))
+        if not cur.fetchone():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Project '{proj.project_id}' does not exist. Please select a valid project."
+            )
+        allocation_id = str(uuid.uuid4())
+        cur.execute("""
+            INSERT INTO projects_allocation (
+                allocation_id, employee_id, project_id, role_in_project,
+                allocation_percentage, allocation_start_date, allocation_end_date, project_tags
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
+        """, (
+            allocation_id, employee_id, proj.project_id, proj.project_role,
+            proj.project_allocation, proj.project_start_date, proj.project_end_date
+        ))
+
+    # Sync
+    _sync_employee_allocations(cur, [employee_id])
+
+    # 5. Update certificates
+    cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (employee_id,))
+    for cert in emp.certificates:
+        cur.execute("""
+            INSERT INTO certificates (certificate_name) VALUES (%s)
+            ON CONFLICT DO NOTHING RETURNING certificate_id
+        """, (cert.name,))
+        cert_id_row = cur.fetchone()
+        if not cert_id_row:
+            cur.execute("SELECT certificate_id FROM certificates WHERE certificate_name = %s", (cert.name,))
+            cert_id_row = cur.fetchone()
+        
+        if cert_id_row:
+            cert_id = cert_id_row[0]
+            cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (employee_id, cert_id))
+
+
 @router.post("/employees")
-def create_employee(emp: EmployeeCreateUpdate):
+def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
     with db_cursor() as cur:
         _ensure_employee_columns(cur)
-        # Check if exists
+        # Check if exists by ID
         cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (emp.employee_id,))
         if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Employee ID already exists")
+            if upsert:
+                _perform_employee_update(cur, emp.employee_id, emp)
+                return {"detail": "Employee updated successfully (Upsert)"}
+            else:
+                raise HTTPException(status_code=400, detail="Employee ID already exists")
 
-        # Check for optional columns in schema
+        # Check if exists by Email (New Check)
+        cur.execute("SELECT employee_id FROM employee_master WHERE LOWER(email_id) = LOWER(%s)", (emp.email,))
+        email_match = cur.fetchone()
+        if email_match:
+            matching_id = email_match[0]
+            # Even if upsert is True, if the IDs don't match, we reject to prevent data corruption
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Email '{emp.email}' already exists for another Employee ID ({matching_id})"
+            )
+
+        # 1. Insert into employee_master (Standard Create)
         has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
         has_address = _table_has_column(cur, "employee_master", "address")
-
-        # 1. Insert into employee_master
         phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
         phone_numeric = int(phone_digits) if phone_digits else None
         
-        cols = ["employee_id", "employee_name", "email_id", "phone_number", "location", "mode_of_work", "date_of_joining", "role_designation", "department", "employee_type", "photo_url", "date_of_resign"]
-        vals = [emp.employee_id, emp.employee_name, emp.email, phone_numeric, emp.location, emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department, emp.employment_type, emp.photo_url, emp.date_of_resign]
+        cols = ["employee_id", "employee_name", "email_id", "phone_number", "location", "mode_of_work", "date_of_joining", "role_designation", "department", "employee_type", "photo_url", "date_of_resign", "shift"]
+        vals = [emp.employee_id, emp.employee_name, emp.email, phone_numeric, emp.location, emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department, emp.employment_type, emp.photo_url, emp.date_of_resign, emp.shift]
         
         if has_dob:
-            cols.append("date_of_birth")
-            vals.append(emp.date_of_birth)
+            cols.append("date_of_birth"); vals.append(emp.date_of_birth)
         if has_address:
-            cols.append("address")
-            vals.append(emp.address)
+            cols.append("address"); vals.append(emp.address)
 
         placeholders = ", ".join(["%s"] * len(cols))
         cur.execute(f"INSERT INTO employee_master ({', '.join(cols)}) VALUES ({placeholders})", tuple(vals))
@@ -840,175 +976,100 @@ def create_employee(emp: EmployeeCreateUpdate):
 
         # 3. Handle skills
         for skill_name in emp.skills:
-            cur.execute("SELECT skill_id FROM skills WHERE skill_name = %s", (skill_name,))
+            # Case-insensitive check to reuse existing skills
+            cur.execute("SELECT skill_id FROM skills WHERE LOWER(skill_name) = LOWER(%s)", (skill_name,))
             skill_row = cur.fetchone()
             if skill_row:
                 skill_id = skill_row[0]
             else:
+                # Skill doesn't exist, insert it. Trigger generate_skill_id handles the SKL- prefix.
                 cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id", (skill_name,))
                 skill_id = cur.fetchone()[0]
             
-            cur.execute("""
-                INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience)
-                VALUES (%s, %s, 1, 0)
-            """, (emp.employee_id, skill_id))
+            cur.execute("INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience) VALUES (%s, %s, 1, 0) ON CONFLICT DO NOTHING", (emp.employee_id, skill_id))
 
-        # 4. Handle projects allocation
+        # 4. Handle projects
         for proj in emp.projects:
+            # Validate project exists before inserting to prevent FK constraint errors
+            cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (proj.project_id,))
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Project '{proj.project_id}' does not exist. Please select a valid project."
+                )
             allocation_id = str(uuid.uuid4())
             cur.execute("""
                 INSERT INTO projects_allocation (
                     allocation_id, employee_id, project_id, role_in_project,
                     allocation_percentage, allocation_start_date, allocation_end_date, project_tags
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
-            """, (
-                allocation_id, emp.employee_id, proj.project_id, proj.project_role,
-                proj.project_allocation, proj.project_start_date, proj.project_end_date
-            ))
+            """, (allocation_id, emp.employee_id, proj.project_id, proj.project_role, proj.project_allocation, proj.project_start_date, proj.project_end_date))
 
-        # 4b. Sync employee_master_pro allocations from live projects_allocation
         _sync_employee_allocations(cur, [emp.employee_id])
 
         # 5. Handle certificates
         for cert in emp.certificates:
-            cur.execute("""
-                INSERT INTO certificates (certificate_name) VALUES (%s)
-                ON CONFLICT DO NOTHING RETURNING certificate_id
-            """, (cert.name,))
-            cert_id_row = cur.fetchone()
-            if not cert_id_row:
+            cur.execute("INSERT INTO certificates (certificate_name) VALUES (%s) ON CONFLICT DO NOTHING RETURNING certificate_id", (cert.name,))
+            cid = cur.fetchone()
+            if not cid:
                 cur.execute("SELECT certificate_id FROM certificates WHERE certificate_name = %s", (cert.name,))
-                cert_id_row = cur.fetchone()
-            
-            if cert_id_row:
-                cert_id = cert_id_row[0]
-                cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s)", (emp.employee_id, cert_id))
+                cid = cur.fetchone()
+            if cid:
+                cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s)", (emp.employee_id, cid[0]))
 
         return {"detail": "Employee created successfully"}
 
 @router.put("/employees/{employee_id}")
 def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
     with db_cursor() as cur:
-        _ensure_employee_columns(cur)
-        cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
-        if not cur.fetchone():
+        # Check if the identifier is an email (contains '@')
+        is_email = "@" in employee_id
+        id_filter = "WHERE LOWER(email_id) = LOWER(%s)" if is_email else "WHERE employee_id = %s"
+        
+        cur.execute(f"SELECT employee_id FROM employee_master {id_filter}", (employee_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Employee not found")
-
-        # Check for optional columns in schema
-        has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
-        has_address = _table_has_column(cur, "employee_master", "address")
-
-        # 1. Update employee_master
-        phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
-        phone_numeric = int(phone_digits) if phone_digits else None
         
-        # Don't update photo if it wasn't provided
-        photo_update_sql = "photo_url = %s," if emp.photo_url else ""
-        photo_param = [emp.photo_url] if emp.photo_url else []
-
-        update_fields = [
-            "employee_name = %s", "email_id = %s", "phone_number = %s", "location = %s",
-            "mode_of_work = %s", "date_of_joining = %s", "role_designation = %s", "department = %s",
-            "employee_type = %s", "date_of_resign = %s"
-        ]
-        if photo_update_sql:
-            update_fields.append("photo_url = %s")
-        
-        update_params = [
-            emp.employee_name, emp.email, phone_numeric, emp.location,
-            emp.work_mode, emp.date_of_joining, emp.role_designation, emp.department,
-            emp.employment_type, emp.date_of_resign
-        ]
-        if emp.photo_url:
-            update_params.append(emp.photo_url)
-
-        if has_dob:
-            update_fields.append("date_of_birth = %s")
-            update_params.append(emp.date_of_birth)
-        if has_address:
-            update_fields.append("address = %s")
-            update_params.append(emp.address)
-
-        cur.execute(f"""
-            UPDATE employee_master SET
-                {", ".join(update_fields)}
-            WHERE employee_id = %s
-        """, update_params + [employee_id])
-
-        # 2. Update employee_master_pro
-        # First check if exists in pro, if not insert
-        cur.execute("SELECT employee_id FROM employee_master_pro WHERE employee_id = %s", (employee_id,))
-        if cur.fetchone():
-            cur.execute("""
-                UPDATE employee_master_pro SET
-                    employee_status = %s, employee_allocations = %s, reporting_manager_id = %s,
-                    pip_start_date = %s, pip_end_date = %s, notice_start_date = %s, notice_end_date = %s
-                WHERE employee_id = %s
-            """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date, employee_id))
-        else:
-            cur.execute("""
-                INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
-
-        # 3. Update skills (delete old, insert new)
-        cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
-        for skill_name in emp.skills:
-            cur.execute("SELECT skill_id FROM skills WHERE skill_name = %s", (skill_name,))
-            skill_row = cur.fetchone()
-            if skill_row:
-                skill_id = skill_row[0]
-            else:
-                cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_id", (skill_name,))
-                skill_id = cur.fetchone()[0]
-            cur.execute("INSERT INTO employee_skills (employee_id, skill_id, proficiency_level, years_of_experience) VALUES (%s, %s, 1, 0) ON CONFLICT DO NOTHING", (employee_id, skill_id))
-
-        # 4. Update projects (delete old, insert new)
-        cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (employee_id,))
-        for proj in emp.projects:
-            allocation_id = str(uuid.uuid4())
-            cur.execute("""
-                INSERT INTO projects_allocation (
-                    allocation_id, employee_id, project_id, role_in_project,
-                    allocation_percentage, allocation_start_date, allocation_end_date, project_tags
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
-            """, (
-                allocation_id, emp.employee_id, proj.project_id, proj.project_role,
-                proj.project_allocation, proj.project_start_date, proj.project_end_date
-            ))
-
-        # 4b. Sync employee_master_pro allocations from live projects_allocation
-        _sync_employee_allocations(cur, [employee_id])
-
-        # 5. Update certificates
-        cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (employee_id,))
-        for cert in emp.certificates:
-            cur.execute("""
-                INSERT INTO certificates (certificate_name) VALUES (%s)
-                ON CONFLICT DO NOTHING RETURNING certificate_id
-            """, (cert.name,))
-            cert_id_row = cur.fetchone()
-            if not cert_id_row:
-                cur.execute("SELECT certificate_id FROM certificates WHERE certificate_name = %s", (cert.name,))
-                cert_id_row = cur.fetchone()
-            
-            if cert_id_row:
-                cert_id = cert_id_row[0]
-                cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (employee_id, cert_id))
-
-        return {"detail": "Employee updated successfully", "new_id": emp.employee_id}
+        actual_id = row[0]
+        _perform_employee_update(cur, actual_id, emp)
+        return {"detail": "Employee updated successfully", "new_id": actual_id}
 
 @router.delete("/employees/{employee_id}")
-def delete_employee(employee_id: str):
+def delete_employee(employee_id: str, permanent: bool = Query(False)):
     with db_cursor() as cur:
-        cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
-        if not cur.fetchone():
+        # Check if the identifier is an email (contains '@')
+        is_email = "@" in employee_id
+        id_filter = "WHERE LOWER(email_id) = LOWER(%s)" if is_email else "WHERE employee_id = %s"
+
+        cur.execute(f"SELECT employee_id FROM employee_master {id_filter}", (employee_id,))
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Employee not found")
 
-        # Instead of deleting, we set is_deleted = TRUE (Soft Delete)
-        cur.execute("UPDATE employee_master SET is_deleted = TRUE WHERE employee_id = %s", (employee_id,))
-
-        return {"detail": "Employee deleted successfully"}
+        actual_id = row[0]
+        
+        if permanent:
+            # 1. Cascade delete from all dependent tables
+            # Note: reporting_manager_id in master_pro is a self-reference to employee_master
+            # We should nullify any references first to avoid FK violations if this employee is a manager
+            cur.execute("UPDATE employee_master_pro SET reporting_manager_id = NULL WHERE reporting_manager_id = %s", (actual_id,))
+            
+            # Delete related records
+            cur.execute("DELETE FROM employee_certificates WHERE employee_id = %s", (actual_id,))
+            cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (actual_id,))
+            cur.execute("DELETE FROM weekly_allocations WHERE allocation_id IN (SELECT allocation_id FROM projects_allocation WHERE employee_id = %s)", (actual_id,))
+            cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (actual_id,))
+            cur.execute("DELETE FROM users WHERE employee_id = %s", (actual_id,))
+            cur.execute("DELETE FROM employee_master_pro WHERE employee_id = %s", (actual_id,))
+            
+            # 2. Finally, delete from employee_master
+            cur.execute("DELETE FROM employee_master WHERE employee_id = %s", (actual_id,))
+            return {"detail": "Employee permanently deleted from database"}
+        else:
+            # Standard Soft Delete
+            cur.execute("UPDATE employee_master SET is_deleted = TRUE WHERE employee_id = %s", (actual_id,))
+            return {"detail": "Employee soft-deleted (archived) successfully"}
 
 
 @router.put("/employees/{employee_id}/restore")

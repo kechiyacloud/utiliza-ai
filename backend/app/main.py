@@ -3,8 +3,16 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, employees, dashboard, projects, allocations, clients, partner_clients, availability, feedback
+from app.database import db_cursor
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    print("API starting up: checking database schema...")
+    with db_cursor() as cur:
+        employees._ensure_employee_columns(cur)
+    print("Schema check complete.")
 
 # -------------------- Global Exception Handler (CORS Robustness) --------------------
 @app.exception_handler(Exception)

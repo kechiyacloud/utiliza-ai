@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserSearch } from 'lucide-react';
+import { UserSearch, Users } from 'lucide-react';
 
 const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);
@@ -54,7 +54,9 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
             onClick={onClick}
         >
             <div className="w-full">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">NEW JOINER</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                    {joiners.length > 1 ? 'NEW JOINERS' : 'NEW JOINER'} {joiners.length > 0 && <span className="text-blue-500 ml-1">({joiners.length})</span>}
+                </p>
 
                 <div key={currentIndex} className="flex items-center gap-2 animate-fade-in">
                     {joiner.photo_url ? (
@@ -74,8 +76,13 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
                     </div>
                 </div>
             </div>
-            <div className="p-2 rounded-lg bg-slate-400 bg-opacity-10 flex-shrink-0">
+            <div className="p-2 rounded-lg bg-slate-400 bg-opacity-10 flex-shrink-0 relative">
                 <Users size={20} className="text-slate-500" />
+                {joiners.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white shadow-sm border border-white">
+                        {joiners.length}
+                    </span>
+                )}
             </div>
         </div>
     );

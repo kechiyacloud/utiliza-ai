@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, UserSearch } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -11,6 +11,7 @@ import { normalizeSkillName } from '../utils/skillTopics'
 import MultiSelectDropdown from '../components/MultiSelectDropdown'
 import { exportToCSV } from '../utils/exportUtils'
 import { useDataRefresh } from '../context'
+import ModuleLoader from '../components/ModuleLoader'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -170,6 +171,10 @@ function Employee() {
     return s.includes('notice') || s.includes('pip');
   }).length;
 
+  if (loading && !allEmployees.length) {
+    return <ModuleLoader label="Loading Employees" />;
+  }
+
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
       <FilterOverlay
@@ -195,6 +200,32 @@ function Employee() {
             title="Add Single Employee"
           >
             <UserPlus size={18} />
+          </button>
+
+          {/* New Joiners Button */}
+          <button
+            onClick={() => setCardFilter('new-joiner')}
+            className={`flex items-center gap-2.5 px-4 py-2.5 bg-white border rounded-xl transition-all shadow-sm ${cardFilter === 'new-joiner' ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-600 hover:border-green-300'}`}
+            title="View New Joiners"
+          >
+            <UserSearch size={18} strokeWidth={2.5} />
+            <span className="text-sm font-bold whitespace-nowrap">
+              New Joiners {baseGroup.filter(e => {
+                const now = new Date();
+                const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
+                const s = (e.employee_status || '').toLowerCase();
+                const isLeaving = s.includes('notice') || e.date_of_resign;
+                return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
+              }).length > 0 ? `(${baseGroup.filter(e => {
+                const now = new Date();
+                const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
+                const s = (e.employee_status || '').toLowerCase();
+                const isLeaving = s.includes('notice') || e.date_of_resign;
+                return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
+              }).length})` : ''}
+            </span>
           </button>
 
         </div>
@@ -233,7 +264,6 @@ function Employee() {
           isActive={cardFilter === 'notice'}
           onClick={() => setCardFilter('notice')}
         />
-        <NewJoinerCard employees={baseGroup} isActive={cardFilter === 'new-joiner'} onClick={() => setCardFilter('new-joiner')} />
         <StatCard
           label="Skill Summary"
           value="Tap to View"

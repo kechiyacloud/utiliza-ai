@@ -332,6 +332,9 @@ def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
 
         return {"message": "If that email exists, an OTP has been sent."}
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))

@@ -34,6 +34,7 @@ import { AddClientModal, ReportModal, EditClientModal, DeleteConfirmationModal }
 import { fetchClientData, createClient, updateClient, deleteClient } from '../api/clientApi';
 import { deleteProject } from '../api/projectsApi';
 import { clearDashboardCache } from '../api/dashboardApi';
+import ModuleLoader from '../components/ModuleLoader';
 
 const Client = () => {
   const navigate = useNavigate();
@@ -153,7 +154,7 @@ const Client = () => {
   );
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full text-slate-400">Loading Clients...</div>;
+    return <ModuleLoader label="Loading Clients" />;
   }
 
   // ── MASK: replace `return <ClientMask />;` with the block below to restore ──

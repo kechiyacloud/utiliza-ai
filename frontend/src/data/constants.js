@@ -4,6 +4,8 @@ export const DEPARTMENTS = [
     'Data Engineering',
     'Quality Engineering',
     'Cloud Solutions Engineering',
+    'SRE',
+    'CSE',
     'System Operations',
     'Product Engineering',
     'Security Engineering',

@@ -2,9 +2,20 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown } from 'lucide-react';
 
-const AvatarCircle = ({ name, avatar_url, size = 'w-10 h-10' }) => {
+const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
+    // Generate a consistent vibrant background color based on name
+    const colors = [
+        'bg-blue-500', 'bg-emerald-500', 'bg-indigo-500', 'bg-rose-500', 
+        'bg-amber-500', 'bg-violet-500', 'bg-cyan-500'
+    ];
+    const colorIndex = name ? name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length : 0;
+    const bgColor = colors[colorIndex];
+
     return (
-        <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
+        <div 
+            className={`${size} rounded-full border-2 border-white ${avatar_url ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`} 
+            title={name}
+        >
             {avatar_url ? (
                 <img 
                     src={avatar_url} 
@@ -13,24 +24,24 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-10 h-10' }) => {
                     onError={(e) => {
                         e.target.onerror = null;
                         e.target.src = '';
-                        e.target.parentElement.innerHTML = `<span class="text-[8px] font-bold text-slate-400 font-sans">${name?.[0]?.toUpperCase() || '?'}</span>`;
+                        e.target.parentElement.innerHTML = `<span class="text-[9px] font-black text-white font-sans">${name?.[0]?.toUpperCase() || '?'}</span>`;
                     }}
                 />
             ) : (
-                <span className="text-[8px] font-bold text-slate-400 font-sans">{name?.[0]?.toUpperCase() || '?'}</span>
+                <span className="text-[9px] font-black text-white font-sans">{name?.[0]?.toUpperCase() || '?'}</span>
             )}
         </div>
     );
 };
 
-const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
+const AvatarStack = ({ resources, totalCount, size = 'w-7 h-7' }) => {
     if (!resources || resources.length === 0) return null;
     
     const displayMembers = resources.slice(0, 3);
     const remainingCount = Math.max((totalCount || resources.length) - displayMembers.length, 0);
 
     return (
-        <div className="flex -space-x-1.5 overflow-hidden items-center group/stack cursor-pointer">
+        <div className="flex -space-x-2.5 items-center">
             {displayMembers.map((user, i) => {
                 const avatar = user.avatar_url || user.photo_url || user.profile_image;
                 return (
@@ -43,7 +54,7 @@ const AvatarStack = ({ resources, totalCount, size = 'w-6 h-6' }) => {
                 );
             })}
             {remainingCount > 0 && (
-                <div className={`${size} rounded-full border-2 border-white bg-blue-50 flex items-center justify-center text-[7px] font-black text-blue-600 shadow-sm z-10 transition-transform group-hover/stack:translate-x-0.5`}>
+                <div className={`${size} rounded-full border-2 border-white bg-slate-800 flex items-center justify-center text-[8px] font-black text-white shadow-md z-10 hover:scale-110 transition-all duration-200 cursor-pointer`}>
                     +{remainingCount}
                 </div>
             )}
@@ -103,14 +114,13 @@ const ProjectStatusChart = ({ projects }) => {
     const sortedProjects = useMemo(() => {
         const safeDate = (val) => {
             const d = new Date(val);
-            return Number.isNaN(d.getTime()) ? null : d;
+            return Number.isNaN(d.getTime()) ? new Date('9999-12-31') : d;
         };
+
         return [...filteredProjects].sort((a, b) => {
             const aEnd = safeDate(a.endDate || a.end_date);
             const bEnd = safeDate(b.endDate || b.end_date);
-            if (!aEnd && !bEnd) return 0;
-            if (!aEnd) return 1;
-            if (!bEnd) return -1;
+            
             return sortOrder === 'asc' ? aEnd - bEnd : bEnd - aEnd;
         });
     }, [filteredProjects, sortOrder]);
@@ -151,7 +161,7 @@ const ProjectStatusChart = ({ projects }) => {
                                     <AvatarStack 
                                         resources={p.team_members || p.resources || p.allocations || []} 
                                         totalCount={p.resource_count || (p.team_members || p.resources || []).length || 0} 
-                                        size="w-6 h-6" 
+                                        size="w-7 h-7" 
                                     />
                                     <span className={`text-xs font-bold ${colors.text}`}>{pct}%</span>
                                 </div>

@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS employee_master (
     date_of_resign     DATE,
     photo_url          VARCHAR(255),
     created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    updated_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    updated_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    is_deleted         BOOLEAN      DEFAULT FALSE
 );
 
 -- One-to-one extension of employee_master
@@ -126,7 +127,11 @@ CREATE TABLE IF NOT EXISTS employee_master_pro (
                              ON UPDATE CASCADE,
     employee_status      VARCHAR(50)  DEFAULT 'Active',
     upcoming_leaves      VARCHAR(255),
-    employee_allocations INTEGER      DEFAULT 0
+    employee_allocations INTEGER      DEFAULT 0,
+    pip_start_date       DATE,
+    pip_end_date         DATE,
+    notice_start_date    DATE,
+    notice_end_date      DATE
 );
 
 -- Auth / Login table — linked to employee, department, designation

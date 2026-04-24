@@ -16,6 +16,7 @@ import {
 import { getEmployeeList } from '../api/employeeApi';
 import ExportPreviewModal from './employee/ExportPreviewModal';
 import { clearDashboardCache } from '../api/dashboardApi';
+import ModuleLoader from '../components/ModuleLoader';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -53,7 +54,7 @@ const labelCls = 'block text-xs font-bold text-gray-500 uppercase tracking-wider
 // ─────────────────────────────────────────────
 
 const ProfileSection = ({ employeeData, loading, notLinked }) => {
-    const email = sessionStorage.getItem('userEmail') || '';
+    const email = localStorage.getItem('userEmail') || '';
     const username = email.split('@')[0] || 'User';
 
     if (loading) {
@@ -153,7 +154,7 @@ const FeedbackSection = ({ employeeData }) => {
         setStatus(null);
         setErrorMsg('');
 
-        const email = sessionStorage.getItem('userEmail') || '';
+        const email = localStorage.getItem('userEmail') || '';
         try {
             await submitFeedback({
                 employee_id: employeeData?.employee_id || null,
@@ -510,7 +511,7 @@ const Settings = () => {
             setEmpLoading(true);
             setEmpNotLinked(false);
             try {
-                const email = sessionStorage.getItem('userEmail');
+                const email = localStorage.getItem('userEmail');
                 if (!email) { setEmpNotLinked(true); return; }
 
                 const idRes = await api.get(`/employee/by-email/${email}`);
@@ -529,6 +530,10 @@ const Settings = () => {
         fetchEmployee();
     }, []);
 
+    if (empLoading && !employeeData && activeTab === 'profile') {
+        return <ModuleLoader label="Loading Settings" />;
+    }
+
     return (
         <div className="p-6 min-h-full">
             {/* Header */}
@@ -541,11 +546,8 @@ const Settings = () => {
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
                 <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <SettingsIcon size={20} className="text-mainTheme" />
-                        <h1 className="text-xl font-bold text-mainTheme">Settings</h1>
-                    </div>
-                    <p className="text-sm text-gray-500">Manage your profile, integrations, and preferences</p>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Settings</h1>
+                    <p className="text-sm font-medium text-gray-500">Manage your profile, integrations, and preferences</p>
                 </div>
             </div>
 
