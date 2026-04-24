@@ -683,18 +683,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                                 <Plus size={20} />
                                             </button>
                                         </div>
-                                        {formData.partnerId && (
-                                            <div className="flex gap-2 justify-end">
-                                                <button type="button" onClick={() => openModal('edit', 'partner')}
-                                                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors flex items-center gap-1">
-                                                    <Pencil size={12} /> Edit
-                                                </button>
-                                                <button type="button" onClick={() => openModal('delete', 'partner')}
-                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors flex items-center gap-1">
-                                                    <Trash2 size={12} /> Delete
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex gap-2 justify-end">
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('edit', 'partner')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -717,18 +715,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                                 <Plus size={20} />
                                             </button>
                                         </div>
-                                        {formData.clientId && (
-                                            <div className="flex gap-2 justify-end">
-                                                <button type="button" onClick={() => openModal('edit')}
-                                                    className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors flex items-center gap-1">
-                                                    <Pencil size={12} /> Edit
-                                                </button>
-                                                <button type="button" onClick={() => openModal('delete')}
-                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors flex items-center gap-1">
-                                                    <Trash2 size={12} /> Delete
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="flex gap-2 justify-end">
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('edit')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                <Pencil size={12} /> Edit
+                                            </button>
+                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                                <Trash2 size={12} /> Delete
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

@@ -1528,11 +1528,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 <Plus size={12} /> Add
                                             </button>
                                             <button type="button" disabled={!formData.partnerId} onClick={() => openModal('edit', 'partner')}
-                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Partner">
+                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.partnerId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Partner">
                                                 <Pencil size={12} /> Edit
                                             </button>
                                             <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
-                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.partnerId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Partner">
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.partnerId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Partner">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1558,11 +1558,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 <Plus size={12} /> Add
                                             </button>
                                             <button type="button" disabled={!formData.clientId} onClick={() => openModal('edit', 'client')}
-                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.clientId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Client">
+                                                className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.clientId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Client">
                                                 <Pencil size={12} /> Edit
                                             </button>
                                             <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete', 'client')}
-                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.clientId ? 'opacity-60 cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Client">
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.clientId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Client">
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
