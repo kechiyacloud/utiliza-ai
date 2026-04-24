@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { loadLogoAsBase64, buildPDFHeader, addPDFFooter } from '../utils/exportUtils';
 import cdBlueLogo from '../assets/CD-Blue.svg';
+import ModuleLoader from '../components/ModuleLoader';
 
 const MONTH_WIDTH = 180;
 const STICKY_COLUMNS_WIDTH = 432;
@@ -473,11 +474,7 @@ const Availability = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex h-full items-center justify-center bg-[#f8fafc]">
-                <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-CD_Blue"></div>
-            </div>
-        );
+        return <ModuleLoader label="Loading Availability" />;
     }
 
     if (error && !data.length) {
@@ -525,7 +522,10 @@ const Availability = () => {
                         >
                             <ArrowLeft size={20} className="text-gray-600" />
                         </button>
-                        <h1 className="text-[30px] font-bold leading-none text-mainTheme">Resource Availability</h1>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Resource Availability</h1>
+                            <p className="text-sm font-medium text-gray-500">Monitor team utilization and future availability across all projects.</p>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 xl:justify-end">
@@ -815,7 +815,7 @@ const Availability = () => {
                             <input
                                 type="text"
                                 value={selectedEmployee ? selectedEmployee : searchQuery}
-                                placeholder="Search employee…"
+                                placeholder="Search employee"
                                 className="w-40 bg-transparent text-sm font-bold text-slate-700 placeholder:font-normal placeholder:text-slate-400 focus:outline-none"
                                 onFocus={() => {
                                     if (selectedEmployee) {

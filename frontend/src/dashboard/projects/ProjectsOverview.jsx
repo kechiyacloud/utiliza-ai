@@ -85,6 +85,15 @@ const ProjectsOverview = ({
                                 const deptObj = departments.find(d => String(d.id) === String(selectedDepartment) || d.name === selectedDepartment);
                                 return `${deptObj ? deptObj.name : selectedDepartment} Department`;
                             })()}
+                        className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                        title="Go Back"
+                    >
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Projects Overview</h1>
+                        <p className="text-sm font-medium text-gray-500">
+                            {selectedDepartment === '' || selectedDepartment === 'All Departments' ? 'All Organization Projects' : `${selectedDepartment} Department`}
                         </p>
                     </div>
                 </div>

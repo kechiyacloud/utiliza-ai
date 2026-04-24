@@ -16,6 +16,7 @@ import {
 import { getEmployeeList } from '../api/employeeApi';
 import ExportPreviewModal from './employee/ExportPreviewModal';
 import { clearDashboardCache } from '../api/dashboardApi';
+import ModuleLoader from '../components/ModuleLoader';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -529,6 +530,10 @@ const Settings = () => {
         fetchEmployee();
     }, []);
 
+    if (empLoading && !employeeData && activeTab === 'profile') {
+        return <ModuleLoader label="Loading Settings" />;
+    }
+
     return (
         <div className="p-6 min-h-full">
             {/* Header */}
@@ -541,11 +546,8 @@ const Settings = () => {
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
                 <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <SettingsIcon size={20} className="text-mainTheme" />
-                        <h1 className="text-xl font-bold text-mainTheme">Settings</h1>
-                    </div>
-                    <p className="text-sm text-gray-500">Manage your profile, integrations, and preferences</p>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Settings</h1>
+                    <p className="text-sm font-medium text-gray-500">Manage your profile, integrations, and preferences</p>
                 </div>
             </div>
 

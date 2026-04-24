@@ -707,8 +707,8 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                         <Upload size={18} className="text-violet-600" />
                     </div>
                     <div>
-                        <h2 className="text-base font-bold text-slate-800">Import Allocation from File</h2>
-                        <p className="text-xs text-slate-500 mt-0.5">Upload a CSV or Excel file to bulk-import resource allocations for this project</p>
+                        <h2 className="text-lg font-bold text-gray-800 tracking-tight">Import Allocation from File</h2>
+                        <p className="text-sm font-medium text-gray-500 mt-0.5">Upload a CSV or Excel file to bulk-import resource allocations for this project</p>
                     </div>
                 </div>
                 <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
@@ -732,8 +732,8 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                     <div className="max-w-2xl mx-auto flex flex-col gap-6">
                         {/* Template section */}
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-                            <h3 className="text-sm font-bold text-slate-700 mb-1">Step 1 — Download the template</h3>
-                            <p className="text-xs text-slate-500 mb-3">Fill in employee IDs and allocation details, then upload below.</p>
+                            <h3 className="text-base font-bold text-gray-700 mb-1">Step 1 — Download the template</h3>
+                            <p className="text-sm font-medium text-gray-500 mb-3">Fill in employee IDs and allocation details, then upload below.</p>
                             <div className="mb-3 text-xs text-slate-600 leading-relaxed">
                                 <strong>Required column:</strong> <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">employee_id</code><br />
                                 <strong>Optional:</strong> <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">employee_name</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">role_in_project</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_percentage</code> (0–100, default 100), <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_start_date</code>, <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200">allocation_end_date</code> (YYYY-MM-DD)
@@ -745,7 +745,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
 
                         {/* Upload section */}
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-                            <h3 className="text-sm font-bold text-slate-700 mb-3">Step 2 — Upload your file</h3>
+                            <h3 className="text-base font-bold text-gray-700 mb-3">Step 2 — Upload your file</h3>
                             <div
                                 className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors ${dragOver ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50/40'}`}
                                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}

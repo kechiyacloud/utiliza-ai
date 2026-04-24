@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trophy, MessageSquare, Send, User, ShieldCheck, UserCheck, Star, Loader2 } from 'lucide-react';
 import { getEmployeeList, nominateEmployee } from '../../api/employeeApi';
+import { useDataRefresh } from '../../context';
 
 export default function NominationModal({ onClose, onSuccess }) {
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const { refreshKey } = useDataRefresh();
     const [selection, setSelection] = useState({
         employee_id: '',
         nominator_role: 'Leader',
@@ -16,7 +18,7 @@ export default function NominationModal({ onClose, onSuccess }) {
     useEffect(() => {
         async function load() {
             try {
-                const data = await getEmployeeList();
+                const data = await getEmployeeList(refreshKey > 0);
                 setEmployees(data || []);
             } catch (err) {
                 console.error(err);
@@ -25,7 +27,7 @@ export default function NominationModal({ onClose, onSuccess }) {
             }
         }
         load();
-    }, []);
+    }, [refreshKey]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

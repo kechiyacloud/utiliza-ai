@@ -8,6 +8,7 @@ import FilterOverlay from './FilterOverlay'
 import SkillsOverview from './insights/SkillsOverview'
 import { getEmployeeList } from '../../api/employeeApi'
 import { useEmployees } from '../../context/EmployeeContext'
+import { useDataRefresh } from '../../context'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
@@ -38,6 +39,7 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
 
 function EmployeeMasterList() {
   const navigate = useNavigate()
+  const { refreshKey } = useDataRefresh()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
@@ -104,7 +106,7 @@ function EmployeeMasterList() {
       setError(null)
       try {
         // When showing archived, we want both resigned and deleted
-        const data = await getEmployeeList(false, showArchived, showDeleted)
+        const data = await getEmployeeList(refreshKey > 0, showArchived, showDeleted)
         if (controller.signal.aborted) return;
         setAllEmployees(data)
       } catch (err) {
@@ -120,7 +122,7 @@ function EmployeeMasterList() {
 
     fetchAllData()
     return () => controller.abort();
-  }, [showArchived])
+  }, [showArchived, refreshKey])
 
   const combinedFilters = useMemo(() => ({
     ...filters,
@@ -210,8 +212,8 @@ function EmployeeMasterList() {
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Organization Management</h1>
-            <p className="text-gray-500 font-medium tracking-tight">See how your organization is doing and manage people records.</p>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Organization Management</h1>
+            <p className="text-sm font-medium text-gray-500">See how your organization is doing and manage people records.</p>
           </div>
         </div>
 
@@ -237,15 +239,13 @@ function EmployeeMasterList() {
           {/* New Joiners Button */}
           <button
             onClick={() => setCardFilter('new-joiner')}
-            className={`flex items-center justify-center p-2.5 bg-white border rounded-xl transition-all shadow-sm relative ${cardFilter === 'new-joiner' ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-600 hover:border-green-300'}`}
+            className={`flex items-center gap-2.5 px-4 py-2.5 bg-white border rounded-xl transition-all shadow-sm ${cardFilter === 'new-joiner' ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-600 hover:border-green-300'}`}
             title="View New Joiners"
           >
-            <UserSearch size={18} />
-            {newJoinersCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white shadow-sm border-2 border-white">
-                {newJoinersCount}
-              </span>
-            )}
+            <UserSearch size={18} strokeWidth={2.5} />
+            <span className="text-sm font-bold whitespace-nowrap">
+              New Joiners {newJoinersCount > 0 ? `(${newJoinersCount})` : ''}
+            </span>
           </button>
 
           {/* Department Selector */}

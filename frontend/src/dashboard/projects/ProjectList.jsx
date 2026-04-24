@@ -557,6 +557,8 @@ const ProjectList = ({
                         <button
                             onClick={() => onViewChange('table')}
                             className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={() => setActiveView('table')}
+                            className={`text-base font-bold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tableTitle} ({filteredProjects.length})
                         </button>

@@ -8,6 +8,7 @@ const Navbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
     const userName = (userEmail || '').split('@')[0] || 'User';
@@ -24,6 +25,10 @@ const Navbar = () => {
     ];
 
     const handleLogout = () => {
+        setShowLogoutConfirm(true);
+    };
+
+    const confirmLogout = () => {
         // Clear any auth tokens/session data
         localStorage.removeItem('token');
         localStorage.clear();
@@ -142,6 +147,38 @@ const Navbar = () => {
                         )}
                     </button>
                 </div>
+
+                {/* Logout Confirmation Modal */}
+                {showLogoutConfirm && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 animate-in zoom-in duration-300 border border-gray-100 relative overflow-hidden">
+                            <div className="flex flex-col items-center text-center relative z-10">
+                                <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6 text-red-500 border border-red-100 shadow-sm">
+                                    <LogOut size={36} strokeWidth={2} />
+                                </div>
+                                <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">Confirm Logout</h3>
+                                <p className="text-sm text-gray-500 mb-10 leading-relaxed px-4">
+                                    Are you sure you want to log out? Any unsaved changes may be lost.
+                                </p>
+                                
+                                <div className="flex flex-col w-full gap-3">
+                                    <button
+                                        onClick={confirmLogout}
+                                        className="w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-[0.98]"
+                                    >
+                                        Log Out
+                                    </button>
+                                    <button
+                                        onClick={() => setShowLogoutConfirm(false)}
+                                        className="w-full py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

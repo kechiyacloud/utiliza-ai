@@ -226,3 +226,18 @@ export const getFilterOptions = async (forceUpdate = false) => {
         return null;
     }
 };
+export const getDepartments = async () => {
+    const res = await api.get('/dashboard/departments');
+    return res.data;
+};
+
+export const getDesignations = async () => {
+    const res = await api.get('/dashboard/designations');
+    return res.data;
+};
+
+export const getLocations = async () => {
+    // Standardizing on existing API pattern
+    const res = await api.get('/employees/filter-options');
+    return res.data?.locations || [];
+};

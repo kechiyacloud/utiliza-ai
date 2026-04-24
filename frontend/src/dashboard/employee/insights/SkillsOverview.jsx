@@ -107,7 +107,7 @@ const SkillsOverview = ({ employees = [] }) => {
     return (
         <div className="flex flex-col gap-6">
             <div className="flex min-h-[300px] flex-1 flex-col items-center justify-center rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <h4 className="mb-2 self-start text-sm font-bold uppercase tracking-wider text-gray-800">Skill Concentration by Topic</h4>
+                <h4 className="mb-2 self-start text-lg font-bold text-gray-800 tracking-tight">Skill Concentration by Topic</h4>
                 <ResponsiveContainer width="99%" height={280} minWidth={1} minHeight={1}>
                     <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
                         <PolarGrid stroke="#e5e7eb" />
@@ -160,7 +160,7 @@ const SkillsOverview = ({ employees = [] }) => {
                                         <td className="px-2 py-3">
                                             <div className="flex flex-col">
                                                 <span className={`font-semibold ${isExpanded ? 'text-blue-700' : 'text-gray-800'}`}>{topic.name}</span>
-                                                <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{topic.subskills.length} subskills</span>
+                                                <span className="text-sm font-medium text-gray-500">{topic.subskills.length} subskills</span>
                                             </div>
                                         </td>
                                         <td className="px-2 py-3 text-right">
@@ -187,7 +187,7 @@ const SkillsOverview = ({ employees = [] }) => {
                                         <tr className="bg-blue-50/30">
                                             <td colSpan="5" className="p-0">
                                                 <div className="animate-fade-in border-l-4 border-blue-500 px-10 py-4 shadow-inner">
-                                                    <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">
+                                                    <h4 className="mb-3 text-base font-bold text-gray-700">
                                                         {topic.name} Subskills
                                                     </h4>
                                                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

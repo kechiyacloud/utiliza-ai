@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   LineChart, Line
 } from 'recharts';
-import { Briefcase, Users, TrendingUp, Zap } from 'lucide-react';
+import { Briefcase, Users, TrendingUp, Zap, UserPlus } from 'lucide-react';
 
 const OrganizationInsights = ({ departments, metrics, loading = false }) => {
   const executive = metrics?.executiveMetrics || {};
@@ -64,7 +64,7 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
                 <kpi.icon size={20} className={kpi.color} />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">{kpi.label}</p>
+                <p className="text-sm text-gray-500 font-medium">{kpi.label}</p>
                 <p className="text-xl font-bold text-slate-900">{kpi.value}</p>
               </div>
             </div>
@@ -76,8 +76,13 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
         {/* Utilization Chart */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-sm font-bold text-slate-800">Utilization by Department</h3>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Billable vs Non-Billable</span>
+            <div>
+              <h3 className="text-lg font-bold text-gray-800 tracking-tight flex items-center gap-2">
+                Utilization by Department
+                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold rounded uppercase tracking-tighter">Current Day</span>
+              </h3>
+              <p className="text-[10px] font-medium text-gray-400 mt-0.5">As of {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} • Billable vs Non-Billable</p>
+            </div>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
@@ -106,8 +111,8 @@ const OrganizationInsights = ({ departments, metrics, loading = false }) => {
         {/* Skills Radar */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-sm font-bold text-slate-800">Skills Concentration</h3>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Organization-Wide proficiency</span>
+            <h3 className="text-lg font-bold text-gray-800 tracking-tight">Skills Concentration</h3>
+            <span className="text-sm font-medium text-gray-500">Organization-Wide proficiency</span>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>

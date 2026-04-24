@@ -5,6 +5,7 @@ import { fetchProjectsData, fetchProjectDepartments } from '../api/projectsApi';
 import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
+import ModuleLoader from '../components/ModuleLoader';
 
 function Projects() {
   const navigate = useNavigate();
@@ -107,14 +108,7 @@ function Projects() {
   }, [location.state, navigate, location.pathname, setSearchParams]);
 
   if (loading && !data) {
-    return (
-      <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-64">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-          <span>Loading Projects...</span>
-        </div>
-      </div>
-    );
+    return <ModuleLoader label="Loading Projects" />;
   }
 
   if (error) {
@@ -153,6 +147,7 @@ function Projects() {
         }
       `}</style>
       <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
+
         {/* Overview Section */}
         <ProjectsOverview
           stats={data?.stats}
