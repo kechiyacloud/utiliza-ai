@@ -12,6 +12,7 @@ async def startup_event():
     print("API starting up: checking database schema...")
     with db_cursor() as cur:
         employees._ensure_employee_columns(cur)
+        auth._ensure_auth_schema(cur)
     print("Schema check complete.")
 
 # -------------------- Global Exception Handler (CORS Robustness) --------------------
