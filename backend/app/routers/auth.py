@@ -30,6 +30,32 @@ router = APIRouter()
 
 ALLOWED_EMAIL_DOMAIN = "@clouddestinations.com"
 
+
+def _ensure_auth_schema(cur):
+    """Ensure auth-related schema exists: pending_registrations table and
+    reset_otp / reset_otp_expiry columns on users. Safe to re-run."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS pending_registrations (
+            email          VARCHAR(255) PRIMARY KEY,
+            password_hash  VARCHAR(255) NOT NULL,
+            otp            VARCHAR(10)  NOT NULL,
+            otp_expiry     TIMESTAMP    NOT NULL,
+            created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+        );
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='users' AND column_name='reset_otp') THEN
+                ALTER TABLE users ADD COLUMN reset_otp VARCHAR(10);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='users' AND column_name='reset_otp_expiry') THEN
+                ALTER TABLE users ADD COLUMN reset_otp_expiry TIMESTAMP;
+            END IF;
+        END $$;
+    """)
+
 def _load_logo_b64() -> str:
     try:
         svg = Path(__file__).resolve().parents[3] / "frontend" / "public" / "vite.svg"
