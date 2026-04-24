@@ -155,19 +155,31 @@ def allocation_metrics(
             overallocated   = 0
             avg_utilization = round(float(avg_utilization_raw or 0), 2)
         else:
+            avg_utilization = round(float(avg_utilization_raw or 0), 2)
+
+            # Build filter clauses for the overallocated sub-query
+            overalloc_filters = ["em.date_of_resign IS NULL", "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
+            overalloc_params = []
+            if department and department != 'All Departments':
+                dept_list = [d.strip() for d in department.split(',')]
+                overalloc_filters.append("em.department = ANY(%s)")
+                overalloc_params.append(dept_list)
+            if location and location != 'All Locations':
+                overalloc_filters.append("em.location = %s")
+                overalloc_params.append(location)
+
             overalloc_query = """
                 SELECT COUNT(*) FROM (
                     SELECT pa.employee_id
                     FROM projects_allocation pa
                     JOIN employee_master em ON pa.employee_id = em.employee_id
-                    WHERE em.date_of_resign IS NULL
+                    WHERE {0}
                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                    {0}
                     GROUP BY pa.employee_id
                     HAVING SUM(pa.allocation_percentage) > 100
                 ) overalloc
-            """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
-            cur.execute(overalloc_query, tuple(params))
+            """.format(" AND ".join(overalloc_filters))
+            cur.execute(overalloc_query, tuple(overalloc_params))
 
             row = cur.fetchone()
             overallocated = row[0] if row else 0
