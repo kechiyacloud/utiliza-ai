@@ -28,6 +28,7 @@ import { createClient } from '../api/clientApi';
 
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
+import ModuleLoader from '../components/ModuleLoader';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
 import AddProjectPanel from './projects/AddProjectPanel';
@@ -435,14 +436,7 @@ function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex items-center justify-center w-full">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-          <p className="text-slate-500 font-medium tracking-wide">Loading Dashboard...</p>
-        </div>
-      </div>
-    );
+    return <ModuleLoader label="Loading Dashboard" />;
   }
 
   return (
@@ -462,16 +456,16 @@ function Dashboard() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"
+              className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
               title="Go Back"
             >
-              <ArrowLeft size={24} className="text-slate-600" />
+              <ArrowLeft size={20} className="text-gray-600" />
             </button>
             <div>
-              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
                 Dashboard
               </h1>
-              <p className="mt-1.5 text-sm font-medium text-slate-500">
+              <p className="text-sm font-medium text-gray-500">
                 See how your {contextLabel.toLowerCase()} is doing, track project progress, and check overall health.
               </p>
             </div>
@@ -517,8 +511,8 @@ function Dashboard() {
                 </div>
                 <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
                   <h3 className="text-xl font-bold text-slate-900 tracking-tight mb-0.5 leading-none">{kpi.value}</h3>
-                  <p className="text-slate-500 text-[9px] font-bold tracking-wider uppercase mb-0.5 whitespace-nowrap">{kpi.title}</p>
-                  <p className="text-[9px] text-slate-400 font-medium leading-tight">{kpi.subtext}</p>
+                  <p className="text-slate-500 text-[11px] font-bold tracking-tight uppercase mb-0.5 whitespace-nowrap">{kpi.title}</p>
+                  <p className="text-[10px] text-slate-400 font-medium leading-tight">{kpi.subtext}</p>
                 </div>
               </div>
             ))}
@@ -532,11 +526,11 @@ function Dashboard() {
             >
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <BarChart2 size={16} className="text-blue-500" />
+                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <BarChart2 size={18} className="text-blue-500" />
                     Allocate vs Available
                   </h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-tight">Comparing how many people are working versus who is available</p>
+                  <p className="text-sm font-medium text-gray-500 mt-1">Comparing how many people are working versus who is available</p>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
@@ -565,10 +559,10 @@ function Dashboard() {
 
               {/* Blurred background preview */}
               <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <ListTodo size={16} className="text-blue-500" />
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <ListTodo size={18} className="text-blue-500" />
                   Actionable Todo List
-                  <span className="ml-auto text-[10px] font-bold text-slate-400">3 pending</span>
+                  <span className="ml-auto text-xs font-bold text-slate-400">3 pending</span>
                 </h2>
                 <div className="flex gap-2">
                   <div className="flex-1 h-8 bg-slate-100 rounded-lg" />
@@ -697,7 +691,7 @@ function Dashboard() {
               onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <ShieldAlert size={18} className="text-emerald-500" />
                   Top Skills on Bench
                 </h2>

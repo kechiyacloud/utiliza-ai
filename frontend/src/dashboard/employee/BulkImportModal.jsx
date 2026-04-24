@@ -24,21 +24,21 @@ const COLOR_MAP = {
   emerald: { bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700', icon: 'text-emerald-500', ring: 'ring-emerald-400' }
 };
 
-const CSV_TEMPLATE_HEADERS = [
-  'employee_id', 'employee_name', 'email', 'phone', 'date_of_joining',
-  'role_designation', 'department', 'location', 'work_mode', 'employment_type',
-  'skills'
+const CSV_HEADERS = [
+  'Employee ID', 'Full Name', 'Email', 'Phone', 'Joining Date', 
+  'Designation', 'Department', 'Location', 'Work Mode', 'Employment Type', 
+  'Skills (Comma Separated)', 'Reporting Manager ID'
 ];
 
 const CSV_SAMPLE_ROW = [
-  'EMP001', 'John Doe', 'john.doe@organization.com', '9876543210', '2024-01-15',
+  'EMP001', 'John Doe', 'john.doe@organization.com', '+1 234 567 890', '2024-01-15',
   'Senior Developer', 'Engineering', 'Chennai', 'Hybrid', 'Full Time',
-  'React,Node.js,PostgreSQL'
+  'React,Node.js,PostgreSQL', 'MGR001'
 ];
 
 function downloadCSVTemplate() {
   const csvContent = [
-    CSV_TEMPLATE_HEADERS.join(','),
+    CSV_HEADERS.join(','),
     CSV_SAMPLE_ROW.join(',')
   ].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -105,9 +105,11 @@ export default function BulkImportModal({ onClose }) {
           const dobRaw = normalizedRow.date_of_birth || normalizedRow.dob || normalizedRow.birth_date;
           const dojRaw = normalizedRow.date_of_joining || normalizedRow.doj || normalizedRow.joining_date;
 
-          if (!empId || !empName || !email || !dojRaw) {
+          const managerId = normalizedRow.reporting_manager_id || normalizedRow.manager_id || normalizedRow.manager;
+          
+          if (!empId || !empName || !email || !dojRaw || !managerId) {
             errorsCount++;
-            if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: Missing ID, Name, Email, or DOJ`);
+            if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: Missing ID, Name, Email, DOJ, or Reporting Manager`);
             return;
           }
 
@@ -155,6 +157,7 @@ export default function BulkImportModal({ onClose }) {
              skills: normalizedRow.skills ? String(normalizedRow.skills).split(',').map(s=>s.trim()).filter(Boolean) : [],
              employee_status: "Bench",
              employee_allocations: 0,
+             reporting_manager_id: String(managerId || ""),
              projects: [],
              certificates: []
           });

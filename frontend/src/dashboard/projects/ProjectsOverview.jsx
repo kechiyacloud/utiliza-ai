@@ -49,18 +49,16 @@ const ProjectsOverview = ({
         <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                    {location.state?.showBack && (
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
-                            title="Go Back"
-                        >
-                            <ArrowLeft size={20} className="text-gray-600" />
-                        </button>
-                    )}
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                        title="Go Back"
+                    >
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">Projects Overview</h1>
-                        <p className="text-slate-500 text-sm mt-1 font-normal">
+                        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Projects Overview</h1>
+                        <p className="text-sm font-medium text-gray-500">
                             {selectedDepartment === '' || selectedDepartment === 'All Departments' ? 'All Organization Projects' : `${selectedDepartment} Department`}
                         </p>
                     </div>

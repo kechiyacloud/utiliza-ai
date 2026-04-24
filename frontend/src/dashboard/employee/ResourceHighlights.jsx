@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, UserCheck, Activity, UserMinus, Search, Filter } from 'lucide-react';
 import { getEmployeeList } from '../../api/employeeApi';
+import { useDataRefresh } from '../../context';
 import EmployeeTable from './EmployeeTable';
 import FilterOverlay from './FilterOverlay';
 
@@ -12,6 +13,7 @@ const ResourceHighlights = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const { refreshKey } = useDataRefresh();
 
     // Get params from state
     const cardType = location.state?.cardType || 'total';
@@ -35,7 +37,7 @@ const ResourceHighlights = () => {
         const fetchEmployees = async () => {
             setLoading(true);
             try {
-                const data = await getEmployeeList();
+                const data = await getEmployeeList(refreshKey > 0);
                 setAllEmployees(data);
             } catch (err) {
                 setError(err.message || 'Failed to load resources');
@@ -44,7 +46,7 @@ const ResourceHighlights = () => {
             }
         };
         fetchEmployees();
-    }, []);
+    }, [refreshKey]);
 
     const pageConfig = useMemo(() => {
         switch (cardType) {
@@ -113,7 +115,7 @@ const ResourceHighlights = () => {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{contextLabel} {pageConfig.title}</h1>
-                        <p className="text-sm text-gray-500">{pageConfig.description}</p>
+                        <p className="text-sm font-medium text-gray-500">{pageConfig.description}</p>
                     </div>
                 </div>
             </div>

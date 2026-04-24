@@ -241,7 +241,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold text-gray-800">Organization Directory</h3>
-                    <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+                    <span className="text-sm font-medium text-gray-500 whitespace-nowrap">
                         {filteredEmployees.length} employees
                     </span>
                 </div>
@@ -251,8 +251,8 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                         <input
                             type="text"
-                            placeholder="Find an employee or skill..."
-                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-52 transition-all font-poppins"
+                            placeholder="Find an employee or skill"
+                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-72 transition-all font-poppins"
                             value={searchValue || ''}
                             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
                         />
@@ -354,12 +354,14 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                 />
                                             ) : (
                                                 <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100 uppercase">
-                                                    {(emp.employee_name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                                    {(emp.employee_name || 'Unknown Name').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'UN'}
                                                 </div>
                                             )}
                                             <div className="flex flex-col justify-center">
-                                                <span className="font-bold text-gray-800 text-sm">{emp.employee_name}</span>
-                                                <span className="text-xs text-gray-500 font-mono">{emp.employee_id}</span>
+                                                <span className="font-bold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
+                                                    {emp.employee_name || 'Unknown Name'}
+                                                </span>
+                                                <span className="text-xs text-gray-500 font-mono">{emp.employee_id || 'N/A'}</span>
                                             </div>
                                         </div>
                                     </td>

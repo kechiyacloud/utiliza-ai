@@ -155,7 +155,7 @@ class EmployeeCreateUpdate(BaseModel):
     work_mode: str
     employee_status: str
     employee_allocations: int
-    reporting_manager_id: Optional[str] = None
+    reporting_manager_id: str
     date_of_resign: Optional[date] = None
     pip_start_date: Optional[date] = None
     pip_end_date: Optional[date] = None
@@ -263,17 +263,20 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "), "
             "AllocAgg AS ("
             "    SELECT "
-            "        employee_id, "
-            "        COALESCE(SUM(allocation_percentage), 0) as total_alloc, "
+            "        pa.employee_id, "
+            "        COALESCE(SUM(pa.allocation_percentage), 0) as total_alloc, "
             "        MAX(CASE "
-            "            WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3 "
-            "            WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2 "
-            "            WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1 "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 3 "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags) = 'no') THEN 2 "
+            "            WHEN COALESCE(pa.allocation_percentage, 0) = 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 1 "
             "            ELSE 0 "
             "        END) as priority_rank "
-            "    FROM projects_allocation "
-            "    WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE) "
-            "    GROUP BY employee_id"
+            "    FROM projects_allocation pa "
+            "    LEFT JOIN projects pj ON pa.project_id = pj.project_id "
+            "    WHERE pa.allocation_start_date <= CURRENT_DATE "
+            "      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) "
+            "      AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
+            "    GROUP BY pa.employee_id"
             ") "
             "SELECT "
             "    m.employee_id, m.employee_name, m.role_designation, m.department, m.location, "
@@ -324,19 +327,30 @@ def get_upcoming_bench():
                 m.employee_name, 
                 m.role_designation, 
                 m.photo_url,
-                MIN(pa.allocation_end_date) as bench_date,
+                pa.allocation_end_date as bench_date,
                 ARRAY_AGG(DISTINCT s.skill_name) FILTER (WHERE s.skill_name IS NOT NULL) as skills
             FROM employee_master m
             JOIN projects_allocation pa ON m.employee_id = pa.employee_id
+            LEFT JOIN projects pj ON pa.project_id = pj.project_id
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
             AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+            AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+            AND NOT EXISTS (
+                SELECT 1 FROM projects_allocation pa2
+                LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
+                WHERE pa2.employee_id = m.employee_id
+                  AND pa2.allocation_id <> pa.allocation_id
+                  AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
+                  AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+            )
             GROUP BY 
                 m.employee_id, 
                 m.employee_name, 
                 m.role_designation, 
-                m.photo_url
+                m.photo_url,
+                pa.allocation_end_date
             ORDER BY bench_date ASC
         """
         cur.execute(query)
@@ -871,6 +885,13 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
     # 4. Update projects (delete old, insert new)
     cur.execute("DELETE FROM projects_allocation WHERE employee_id = %s", (employee_id,))
     for proj in emp.projects:
+        # Validate project exists before inserting to prevent FK constraint errors
+        cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (proj.project_id,))
+        if not cur.fetchone():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Project '{proj.project_id}' does not exist. Please select a valid project."
+            )
         allocation_id = str(uuid.uuid4())
         cur.execute("""
             INSERT INTO projects_allocation (
@@ -965,6 +986,13 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
 
         # 4. Handle projects
         for proj in emp.projects:
+            # Validate project exists before inserting to prevent FK constraint errors
+            cur.execute("SELECT project_id FROM projects WHERE project_id = %s", (proj.project_id,))
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Project '{proj.project_id}' does not exist. Please select a valid project."
+                )
             allocation_id = str(uuid.uuid4())
             cur.execute("""
                 INSERT INTO projects_allocation (

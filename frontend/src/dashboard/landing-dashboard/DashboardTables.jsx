@@ -92,7 +92,7 @@ const DashboardTables = ({
             {/* Tab Header */}
             <div className="px-5 pt-4 pb-2 border-b border-gray-50 bg-slate-50/30">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2">
-                    <h3 className="text-base font-bold text-slate-800 tracking-tight">{contextLabel} Highlights</h3>
+                    <h3 className="text-lg font-bold text-gray-800 tracking-tight">{contextLabel} Highlights</h3>
                     <div className="flex bg-slate-100 p-0.5 rounded-xl overflow-x-auto no-scrollbar">
                         {[
                             { id: 'availability', label: 'Releases', icon: Calendar },
@@ -392,9 +392,7 @@ const DashboardTables = ({
                 <div className="flex items-center gap-3 text-[8px] font-black text-slate-400 uppercase tracking-widest">
                     <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div> Immediate Action Required</span>
                 </div>
-                <div className="text-[10px] font-black text-blue-600 flex items-center gap-1 uppercase tracking-tighter cursor-pointer hover:underline" onClick={() => navigate('/info/employees/list')}>
-                    Full Analytics <ArrowUpRight size={12} />
-                </div>
+                <div></div>
             </div>
         </div >
     );

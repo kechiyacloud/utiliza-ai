@@ -5,6 +5,7 @@ import { fetchProjectsData } from '../api/projectsApi';
 import axios from '../api/axios';
 import ProjectsOverview from './projects/ProjectsOverview';
 import ProjectList from './projects/ProjectList';
+import ModuleLoader from '../components/ModuleLoader';
 
 function Projects() {
   const navigate = useNavigate();
@@ -49,14 +50,7 @@ function Projects() {
   }, [selectedDepartment, loadData]);
 
   if (loading && !data) {
-    return (
-      <div className="p-8 flex items-center justify-center text-gray-400 font-medium h-64">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-          <span>Loading Projects...</span>
-        </div>
-      </div>
-    );
+    return <ModuleLoader label="Loading Projects" />;
   }
 
   if (error) {
@@ -95,17 +89,6 @@ function Projects() {
         }
       `}</style>
       <div className="p-4 flex flex-col gap-4 w-full h-full overflow-y-auto bg-slate-50/50 projects-poppins-container">
-        {/* Back Button */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
-            title="Go Back"
-          >
-            <ArrowLeft size={20} className="text-gray-600" />
-          </button>
-          <div className="h-px bg-slate-200 flex-1"></div>
-        </div>
 
         {/* Overview Section */}
         <ProjectsOverview
