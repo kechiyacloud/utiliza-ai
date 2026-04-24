@@ -7,6 +7,7 @@ const LoginRegister = lazy(() => import('./LoginRegister'))
 const Login = lazy(() => import('./login-register/Login'))
 const Register = lazy(() => import('./login-register/Register'))
 const Verify = lazy(() => import('./login-register/Verify'))
+const ForgotPassword = lazy(() => import('./login-register/ForgotPassword'))
 const MainDashboard = lazy(() => import('./MainDashboard'))
 const Dashboard = lazy(() => import('./dashboard/Dashboard'))
 const Projects = lazy(() => import('./dashboard/Projects'))
@@ -71,6 +72,7 @@ function App() {
             <Route path='login' element={withSuspense(<Login />, 'Loading sign in...')} />
             <Route path='register' element={withSuspense(<Register />, 'Loading registration...')} />
             <Route path='verify' element={withSuspense(<Verify />, 'Loading verification...')} />
+            <Route path='forgot-password' element={withSuspense(<ForgotPassword />, 'Loading...')} />
           </Route>
 
           {/* DASHBOARD — protected: requires login token */}

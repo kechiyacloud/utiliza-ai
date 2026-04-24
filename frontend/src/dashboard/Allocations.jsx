@@ -98,6 +98,10 @@ function Allocations() {
     setSelectedProject(project);
   };
 
+  const handleOverallocatedClick = () => {
+    navigate('/employees/list', { state: { cardFilter: 'overallocated' } });
+  };
+
   const showForecastOnly = location.state?.showForecastOnly;
   const showUtilizationOnly = location.state?.showUtilizationOnly;
 
@@ -165,7 +169,7 @@ function Allocations() {
         <div className="flex justify-end w-full">
           <AllocationFilters filters={filters} setFilters={setFilters} />
         </div>
-        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} />
+        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} onOverallocatedClick={handleOverallocatedClick} />
 
         <div className="flex flex-col lg:flex-row gap-6 w-full pb-8">
           <ProjectUtilization

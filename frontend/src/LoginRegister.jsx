@@ -11,7 +11,7 @@ function LoginRegister() {
     <div className="relative w-screen h-screen bg-mainTheme flex justify-center items-center">
       
       {/* LEFT: Form + Logo */}
-      <div className="relative w-full h-full flex flex-col items-center justify-center">
+      <div className="relative w-full h-full flex flex-col items-center justify-center pb-24">
         {/* Logo */}
         <div className="absolute flex justify-center items-center top-4 left-4 text-white font-bold text-sm">
             <CD_Blue className="mr-2 w-5 h-5"/>

@@ -142,7 +142,9 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         break;
                     }
                     case 'top-performer':
-                        matchesCardFilter = (emp.employee_allocations || 0) >= 100; break;
+                        matchesCardFilter = emp.employee_allocations >= 100; break;
+                    case 'overallocated':
+                        matchesCardFilter = (emp.employee_allocations || 0) > 100; break;
                     default: matchesCardFilter = true;
                 }
             }

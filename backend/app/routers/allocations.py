@@ -155,7 +155,22 @@ def allocation_metrics(
             overallocated   = 0
             avg_utilization = round(float(avg_utilization_raw or 0), 2)
         else:
-            avg_utilization = round(float(avg_utilization_raw or 0), 2)
+            overalloc_query = """
+                SELECT COUNT(*) FROM (
+                    SELECT pa.employee_id
+                    FROM projects_allocation pa
+                    JOIN employee_master em ON pa.employee_id = em.employee_id
+                    WHERE em.date_of_resign IS NULL
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                    {0}
+                    GROUP BY pa.employee_id
+                    HAVING SUM(pa.allocation_percentage) > 100
+                ) overalloc
+            """.format(" AND " + " AND ".join(where_clauses) if where_clauses else "")
+            cur.execute(overalloc_query, tuple(params))
+
+            row = cur.fetchone()
+            overallocated = row[0] if row else 0
 
         return {
             "totalResources": {"value": total_resources,      "label": "Total Resources"},

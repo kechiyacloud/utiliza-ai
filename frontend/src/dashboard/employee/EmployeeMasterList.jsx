@@ -261,7 +261,7 @@ function EmployeeMasterList() {
 
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <StatCard
           label="TOTAL EMPLOYEES"
           value={totalEmployeesCount}

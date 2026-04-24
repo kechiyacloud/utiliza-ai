@@ -34,6 +34,11 @@ def create_refresh_token(user_id: int, email: str) -> str:
     payload = {"sub": str(user_id), "email": email, "exp": expire, "type": "refresh"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
+def create_refresh_token(user_id: int, email: str) -> str:
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    payload = {"sub": str(user_id), "email": email, "exp": expire, "type": "refresh"}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login", auto_error=False)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):

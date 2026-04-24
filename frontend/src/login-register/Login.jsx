@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CD_Blue } from '../Assets.jsx'
 import { Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import api from "../api/axios"
@@ -16,7 +16,13 @@ function Login() {
   })
   const [error, setError] = useState(null)
 
-  const successMessage = location.state?.message || null
+  const [successMessage] = useState(location.state?.message || null)
+
+  useEffect(() => {
+    if (location.state?.message) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [])
 
   const handleChange = (e) => {
     setFormData(prev => ({
@@ -28,21 +34,26 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    const email = formData.email.trim()
+    const password = formData.password.trim()
+
+    if (!email || !password) {
+      setError('Email and password are required.')
+      return
+    }
+
     setLoading(true)
     setError(null)
 
     try {
-      const response = await api.post("/login", {
-        email: formData.email,
-        password: formData.password
-      })
+      const response = await api.post("/login", { email, password })
 
       if (!response.data.token) {
         throw new Error("Login failed: no token received from server")
       }
 
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("userEmail", formData.email);
+      sessionStorage.setItem("token", response.data.token);
+      sessionStorage.setItem("userEmail", formData.email.trim());
       navigate("/info")
 
     } catch (err) {
@@ -94,7 +105,10 @@ function Login() {
       </div>
 
 
-      <p className="text-CD_Blue text-xs text-right font-semibold cursor-pointer">
+      <p
+        className="text-CD_Blue text-xs text-right font-semibold cursor-pointer hover:underline"
+        onClick={() => navigate('/forgot-password')}
+      >
         Forgot Password?
       </p>
 
@@ -111,20 +125,6 @@ function Login() {
         ) : 'Sign In'}
       </button>
 
-      {/* Development Bypass */}
-      <div className="mt-4 pt-4 border-t border-white/10 text-center">
-        <button
-          type="button"
-          onClick={() => {
-            localStorage.setItem("token", "fake-token");
-            localStorage.setItem("userEmail", "dev@utilizai.local");
-            navigate("/info");
-          }}
-          className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 hover:text-CD_Blue transition-colors"
-        >
-          Bypass Login (Local Dev)
-        </button>
-      </div>
     </form>
   )
 }

@@ -510,27 +510,24 @@ const Availability = () => {
     const hasActiveFilters = selectedDept || selectedLocation || selectedProjects.length > 0 || selectedEmployee;
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-[#f8fafc] p-3 text-mainTheme">
+        <div className="flex min-h-full flex-col bg-[#f8fafc] p-3 text-mainTheme">
             <div className="mb-3 flex flex-col gap-2">
                 {/* Header row: title + preview badge + reset + export */}
-                <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                         <button
                             onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+                            className="p-2 hover:bg-slate-200 bg-white shadow-md rounded-full transition-colors flex-shrink-0"
                             title="Go Back"
                         >
                             <ArrowLeft size={20} className="text-gray-600" />
                         </button>
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Resource Availability</h1>
-                            <p className="text-sm font-medium text-gray-500">Monitor team utilization and future availability across all projects.</p>
-                        </div>
+                        <h1 className="text-2xl font-bold leading-tight text-mainTheme truncate">Resource Availability</h1>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <div className="flex flex-wrap items-center gap-2 justify-end flex-shrink-0">
                         {/* Preview stats badge */}
-                        <div className="inline-flex items-center divide-x divide-blue-200 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-100 via-indigo-50 to-violet-100 px-1 py-1 shadow-sm">
+                        <div className="inline-flex items-center divide-x divide-blue-200 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-100 via-indigo-50 to-violet-100 px-1 py-1 shadow-md">
                             <div className="flex flex-col items-center px-5 py-1.5">
                                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Total</span>
                                 <span className="text-xl font-black text-blue-600">{previewStats.total}</span>
@@ -617,7 +614,7 @@ const Availability = () => {
                 </div>
 
                 {/* Info bar: date range + inline filters + employee count */}
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-[0_2px_12px_rgba(148,163,184,0.18)]">
                     {/* Date range pill — clickable calendar picker */}
                     <div className="relative shrink-0" ref={calendarRef}>
                         <button
@@ -887,7 +884,7 @@ const Availability = () => {
 
             <div
                 ref={timelineRef}
-                className="custom-scrollbar relative flex-1 min-h-0 overflow-x-auto overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-sm"
+                className="custom-scrollbar relative overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-[0_4px_24px_rgba(148,163,184,0.20)]"
                 style={{ cursor: isDragging.current ? 'grabbing' : 'grab' }}
                 onMouseDown={(e) => {
                     if (e.button !== 0) return;
@@ -923,17 +920,17 @@ const Availability = () => {
             >
                 <table className="border-separate border-spacing-0 table-fixed" style={{ minWidth: `${STICKY_COLUMNS_WIDTH + (timelineMonths.length * MONTH_WIDTH)}px` }}>
                     <thead>
-                        <tr>
-                            <th className="sticky top-0 left-0 z-40 h-14 w-44 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
+                        <tr className="shadow-[0_2px_6px_rgba(148,163,184,0.12)]">
+                            <th className="sticky top-0 left-0 z-40 h-14 w-44 border-b-2 border-r border-slate-200 bg-slate-50 px-4 text-left">
                                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Employee</span>
                             </th>
-                            <th className="sticky top-0 left-44 z-40 h-14 w-64 border-b border-r border-slate-100 bg-slate-50 px-4 text-left">
+                            <th className="sticky top-0 left-44 z-40 h-14 w-64 border-b-2 border-r border-slate-200 bg-slate-50 px-4 text-left">
                                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Project / Allocation</span>
                             </th>
                             {timelineMonths.map((month, index) => (
                                 <th
                                     key={month.key}
-                                    className={`sticky top-0 z-30 border-b border-r border-slate-100 p-0 ${month.isCurrent ? 'bg-blue-50' : index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}
+                                    className={`sticky top-0 z-30 border-b-2 border-r border-slate-200 p-0 ${month.isCurrent ? 'bg-blue-50' : index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}
                                     style={{ width: `${MONTH_WIDTH}px` }}
                                 >
                                     <div className={`flex h-8 items-center justify-center border-b border-slate-100 text-[13px] font-bold ${month.isCurrent ? 'text-blue-700' : 'text-slate-700'}`}>
@@ -962,12 +959,14 @@ const Availability = () => {
                                         const color = getProjectColor(allocationIndex);
                                         const barStyle = getBarStyle(allocation.start_date, allocation.end_date);
                                         const showBar = barStyle && (allocation.allocation_percentage ?? 0) > 0;
-                                        const rowBackground = employeeIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
+                                        const rowBackground = employeeIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+                                        const isLastAllocation = allocationIndex === allocations.length - 1;
+                                        const accentColor = employeeIndex % 2 === 0 ? '#60a5fa' : '#818cf8';
 
                                         return (
-                                            <tr key={`${employee.employee_id}-${allocationIndex}`} className={`h-12 ${rowBackground}`}>
+                                            <tr key={`${employee.employee_id}-${allocationIndex}`} className={`h-12 ${rowBackground} hover:bg-blue-50/30 transition-colors`}>
                                                 {allocationIndex === 0 && (
-                                                    <td className={`sticky left-0 z-20 border-b border-r border-slate-100 px-4 py-2 ${rowBackground}`} rowSpan={allocations.length} style={{ width: '176px', minWidth: '176px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
+                                                    <td className={`sticky left-0 z-20 border-b-2 border-r border-slate-200 px-4 py-2 ${rowBackground}`} rowSpan={allocations.length} style={{ width: '176px', minWidth: '176px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc', borderLeft: `3px solid ${accentColor}`, boxShadow: '2px 0 6px rgba(0,0,0,0.05)' }}>
                                                         <button
                                                             type="button"
                                                             onClick={() => navigate(`/info/employee/${employee.employee_id}`, {
@@ -989,7 +988,7 @@ const Availability = () => {
                                                     </td>
                                                 )}
 
-                                                <td className={`sticky left-44 z-20 overflow-hidden border-b border-r border-slate-100 px-4 py-2 ${rowBackground}`} style={{ width: '256px', minWidth: '256px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
+                                                <td className={`sticky left-44 z-20 overflow-hidden border-r border-slate-100 px-4 py-2 ${rowBackground} ${isLastAllocation ? 'border-b-2 border-slate-200' : 'border-b border-slate-100'}`} style={{ width: '256px', minWidth: '256px', backgroundColor: rowBackground === 'bg-white' ? '#ffffff' : '#f8fafc' }}>
                                                     <div className="flex flex-col overflow-hidden">
                                                         <div className="flex flex-wrap items-center gap-1.5">
                                                             <span className="max-w-[180px] truncate text-xs font-semibold text-slate-700" title={allocation.project_name}>
@@ -1012,7 +1011,7 @@ const Availability = () => {
                                                     </div>
                                                 </td>
 
-                                                <td colSpan={timelineMonths.length} className="relative h-12 overflow-hidden border-b border-slate-100 p-0">
+                                                <td colSpan={timelineMonths.length} className={`relative h-12 overflow-hidden p-0 ${isLastAllocation ? 'border-b-2 border-slate-200' : 'border-b border-slate-100'}`}>
                                                     <div className="absolute inset-0 flex">
                                                         {timelineMonths.map((month, monthIndex) => (
                                                             <div

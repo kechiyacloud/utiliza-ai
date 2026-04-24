@@ -30,6 +30,18 @@ Solving.md
 my_book.md
 CLAUDE.md
 env.md
+venv
+graphify-out
+../.agent/
+../graphify-out/
+../graphify_guide.md
+../venv/
+.agent/
+graphify_guide.md
+.agent/skills
+auth_pages_review.md
+.claude/skills
+
 
 # Debug & test files
 backend/debug_*.py
