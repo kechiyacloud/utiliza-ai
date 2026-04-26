@@ -147,7 +147,7 @@ const FilterPanel = ({
                                 <input
                                     type="text"
                                     name="projectName"
-                                    placeholder="Enter project name..."
+                                    placeholder="Enter project name"
                                     className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
                                     value={filters.projectName}
                                     onChange={handleChange}
@@ -161,7 +161,7 @@ const FilterPanel = ({
                                     <input
                                         type="text"
                                         name="resourceName"
-                                        placeholder="Search by team member..."
+                                        placeholder="Search by team member"
                                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-700 placeholder:text-slate-400 focus:bg-white"
                                         value={filters.resourceName}
                                         onChange={handleChange}

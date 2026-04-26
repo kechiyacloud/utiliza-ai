@@ -7,7 +7,8 @@ const MultiSelectDropdown = ({
   onChange, 
   placeholder = "Select Departments",
   label = "Departments",
-  icon: Icon = Building2
+  icon: Icon = Building2,
+  counts = {}
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -113,9 +114,14 @@ const MultiSelectDropdown = ({
                   onClick={() => toggleOption(option)}
                   className="group flex items-center justify-between w-full px-4 py-2.5 text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-all"
                 >
-                  <span className={`${selectedValues.includes(option) ? 'font-bold text-slate-900 text-sm' : ''} truncate`}>
-                    {option}
-                  </span>
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <span className={`${selectedValues.includes(option) ? 'font-bold text-slate-900 text-sm' : ''} truncate`}>
+                      {option}
+                    </span>
+                    {counts && counts[option] !== undefined && (
+                      <span className="text-[10px] font-bold text-slate-400">({counts[option]})</span>
+                    )}
+                  </div>
                   {selectedValues.includes(option) && (
                     <div className="bg-blue-600 rounded-full p-0.5 animate-in zoom-in duration-200">
                       <Check size={10} className="text-white" />

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.database import get_db_connection, release_db_connection
 from app.auth_utils import get_current_user
+from app.routers.employees import _sync_employee_allocations
 
 def ensure_project_columns():
     """Ensures necessary columns exist in the projects table."""
@@ -1097,17 +1098,23 @@ def delete_project_resource(project_id: str, allocation_id: str):
     try:
         project_id = _resolve_project_id(project_id, cur)
         cur.execute(
-            "SELECT 1 FROM projects_allocation WHERE allocation_id = %s AND project_id = %s",
+            "SELECT employee_id FROM projects_allocation WHERE allocation_id = %s AND project_id = %s",
             (allocation_id, project_id)
         )
-        if not cur.fetchone():
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Allocation not found")
+        emp_id = row[0]
 
         cur.execute("DELETE FROM weekly_allocations WHERE allocation_id = %s", (allocation_id,))
         cur.execute(
             "DELETE FROM projects_allocation WHERE allocation_id = %s AND project_id = %s",
             (allocation_id, project_id)
         )
+        
+        # Trigger sync for the employee who was just removed
+        _sync_employee_allocations(cur, {emp_id})
+        
         conn.commit()
         return {"message": "Resource deleted successfully"}
     except HTTPException:
@@ -1194,6 +1201,10 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate,
 
         project_billable = (project_row[0] or "").lower()
 
+        # Capture all employee IDs currently in this project to sync them later (even if they are removed)
+        cur.execute("SELECT DISTINCT employee_id FROM projects_allocation WHERE project_id = %s", (project_id,))
+        affected_employee_ids = {r[0] for r in cur.fetchall()}
+
         # Delete existing allocations AND weekly_allocations for this project
         cur.execute("""
             DELETE FROM weekly_allocations
@@ -1206,7 +1217,7 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate,
         for idx, tm in enumerate(payload.resources):
             # generate deterministic allocation id for bulk edit
             tm.allocation_id = tm.allocation_id or f"AL-{project_id}-{idx + 1:03d}"
-            _save_single_resource(
+            res = _save_single_resource(
                 cur,
                 project_id,
                 tm,
@@ -1216,6 +1227,13 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate,
                 project_end=project_row[2],
                 validate_capacity=False,
             )
+            # Add new/updated employees to the sync set
+            if res.get("employee_id"):
+                affected_employee_ids.add(res["employee_id"])
+
+        # Final sync for all affected employees (both removed and kept/added)
+        if affected_employee_ids:
+            _sync_employee_allocations(cur, affected_employee_ids)
 
         conn.commit()
         print(f"SUCCESS: Project {project_id} resources updated (count: {len(payload.resources)}) and committed.")

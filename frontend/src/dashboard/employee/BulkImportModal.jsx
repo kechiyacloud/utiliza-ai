@@ -375,7 +375,7 @@ export default function BulkImportModal({ onClose }) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv, .xlsx, .xls"
+                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 onChange={handleFileInput}
                 className="hidden"
               />

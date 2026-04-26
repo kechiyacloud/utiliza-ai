@@ -148,7 +148,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         designations: []
     });
 
-    const [activeSection, setActiveSection] = useState('designations');
+    const [activeSection, setActiveSection] = useState('');
     const [skillSearch, setSkillSearch] = useState("");
     const [designationSearch, setDesignationSearch] = useState("");
     const getTagLabel = (status) => getEmployeeTag(status).label;
@@ -165,6 +165,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
     const allDesignations = useMemo(() =>
         [...new Set(employees.map(e => e.role_designation).filter(Boolean))].sort()
         , [employees]);
+
 
     const availableDesignations = useMemo(() =>
         designationSearch
@@ -216,7 +217,6 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 
         return {
             designations: getCountsFor('role_designation'),
-            departments: getCountsFor('department'),
             types: getCountsFor('employee_type'),
             locations: getCountsFor('location'),
             skills: getCountsFor('skills', true),
@@ -317,6 +317,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-5 custom-scrollbar relative">
+
 
                     {/* DESIGNATION / ROLE */}
                     <AccordionSection
@@ -421,12 +422,12 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
 };
 
 export default FilterOverlay;
-    const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
-        if (!selectedSkills.length) return true;
+const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
+    if (!selectedSkills.length) return true;
 
-        const normalizedEmployeeSkills = new Set(
-            (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
-        );
+    const normalizedEmployeeSkills = new Set(
+        (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
+    );
 
-        return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
-    };
+    return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
+};

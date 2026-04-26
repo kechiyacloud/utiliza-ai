@@ -104,9 +104,11 @@ def allocation_metrics(
                     END) AS has_non_billable
                 FROM projects_allocation pa
                 JOIN projects pj ON pa.project_id = pj.project_id
+                LEFT JOIN employee_master_pro p ON pa.employee_id = p.employee_id
                 WHERE pa.allocation_start_date <= CURRENT_DATE
                   AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                  AND (p.employee_status NOT ILIKE '%%notice%%' AND p.employee_status NOT ILIKE '%%pip%%' OR p.employee_status IS NULL)
                 GROUP BY pa.employee_id
             ),
             EmpBase AS (
@@ -121,12 +123,12 @@ def allocation_metrics(
                                     THEN eb.employee_id END)                                            AS billable_count,
                 COUNT(DISTINCT CASE WHEN COALESCE(aa.has_non_billable, 0) = 1
                                     THEN eb.employee_id END)                                            AS non_billable_count,
-                COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) <= 0
+                COUNT(DISTINCT CASE WHEN aa.employee_id IS NULL OR COALESCE(aa.total_pct, 0) <= 0
                                     THEN eb.employee_id END)                                            AS bench_strength,
                 ROUND(
-                    COALESCE(SUM(COALESCE(aa.total_pct, 0)), 0)::NUMERIC /
+                    (COUNT(DISTINCT CASE WHEN COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) * 100.0) /
                     NULLIF(COUNT(DISTINCT eb.employee_id), 0),
-                2)                                                                                      AS avg_utilization,
+                0)                                                                                      AS avg_utilization,
                 COUNT(DISTINCT CASE WHEN COALESCE(aa.billable_pct, 0) > 100
                                     THEN eb.employee_id END)                                            AS overallocated
             FROM EmpBase eb

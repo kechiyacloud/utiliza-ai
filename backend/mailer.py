@@ -8,13 +8,13 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 def send_email(to_email, subject, html_body):
     smtp_host = os.getenv('SMTP_HOST')
     smtp_user = os.getenv('SMTP_USER')
-    smtp_pass = os.getenv('SMTP_PASS')
+    smtp_password = os.getenv('SMTP_PASSWORD')
     smtp_from = os.getenv('SMTP_FROM', smtp_user)
 
     print(f"[MAILER] Attempting to send email to={to_email}, from={smtp_from}, host={smtp_host}")
 
-    if not smtp_host or not smtp_user or not smtp_pass:
-        print(f"[MAILER] ERROR: Missing SMTP config — host={smtp_host}, user={smtp_user}, pass={'SET' if smtp_pass else 'MISSING'}")
+    if not smtp_host or not smtp_user or not smtp_password:
+        print(f"[MAILER] ERROR: Missing SMTP config — host={smtp_host}, user={smtp_user}, pass={'SET' if smtp_password else 'MISSING'}")
         return
 
     msg = MIMEMultipart('alternative')
@@ -27,7 +27,7 @@ def send_email(to_email, subject, html_body):
         with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
             server.set_debuglevel(1)
             server.starttls()
-            server.login(smtp_user, smtp_pass)
+            server.login(smtp_user, smtp_password)
             result = server.sendmail(smtp_from, to_email, msg.as_string())
             print(f'[MAILER] Email sent successfully to {to_email}! SMTP response: {result}')
     except smtplib.SMTPAuthenticationError as e:

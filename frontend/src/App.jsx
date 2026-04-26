@@ -22,7 +22,6 @@ const AddEmployee = lazy(() => import('./dashboard/employee/AddEmployee'))
 const ProjectDetailsPage = lazy(() => import('./dashboard/projects/ProjectDetailsPage'))
 const AddProjectPage = lazy(() => import('./dashboard/projects/AddProjectPage'))
 const ImportResourcesPage = lazy(() => import('./dashboard/projects/ImportResourcesPage'))
-const FullAnalytics = lazy(() => import('./dashboard/FullAnalytics'))
 const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
 const ResourceHighlights = lazy(() => import('./dashboard/employee/ResourceHighlights'))
@@ -96,7 +95,6 @@ function App() {
               <Route path='settings' element={withSuspense(<Settings />, 'Loading settings...')} />
               <Route path='resource-highlights' element={withSuspense(<ResourceHighlights />, 'Loading highlights...')} />
               <Route path='skills' element={withSuspense(<SkillsSummaryPage />, 'Loading skills analysis...')} />
-              <Route path='analytics' element={withSuspense(<FullAnalytics />, 'Loading analytics...')} />
               <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
             </Route>
           </Route>

@@ -18,8 +18,8 @@ const ClientMask = ({ onBack }) => (
                 <Lock size={28} className="text-slate-400" />
             </div>
             <div>
-                <h2 className="text-xl font-bold text-mainTheme">Client Dashboard</h2>
-                <p className="mt-1 text-sm text-slate-500">This section is currently unavailable.</p>
+                <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Client Dashboard</h1>
+                <p className="text-sm font-medium text-gray-500">This section is currently unavailable.</p>
                 <p className="mt-0.5 text-sm font-semibold text-CD_Blue">Coming Soon</p>
             </div>
         </div>
@@ -173,8 +173,8 @@ const Client = () => {
               <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Client Dashboard</h1>
-            <p className="text-slate-400 text-sm font-normal mt-1">Manage client relationships, track budgets, and monitor project health</p>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Client Dashboard</h1>
+            <p className="text-sm font-medium text-gray-500">Manage client relationships, track budgets, and monitor project health</p>
           </div>
         </div>
 

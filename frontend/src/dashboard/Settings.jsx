@@ -248,7 +248,7 @@ const FeedbackSection = ({ employeeData }) => {
                         onChange={handleChange}
                         required
                         rows={5}
-                        placeholder="Describe the issue in detail — steps to reproduce, expected vs actual behavior..."
+                        placeholder="Describe the issue in detail — steps to reproduce, expected vs actual behavior"
                         className={`${inputCls} resize-none`}
                     />
                 </div>
@@ -331,45 +331,10 @@ const AutoReportsSection = () => (
 // Section E — Admin (Admin/HR only)
 // ─────────────────────────────────────────────
 
-const AdminSection = ({ employeeData }) => {
+const AdminSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync }) => {
     const { showArchived, setShowArchived, showDeleted, setShowDeleted } = useEmployees();
-    const [showBulkModal, setShowBulkModal] = useState(false);
-    const [showExportModal, setShowExportModal] = useState(false);
-    const [exportData, setExportData] = useState([]);
-    const [isExporting, setIsExporting] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
 
-    const handleSyncAll = async () => {
-        if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
-        
-        setIsSyncing(true);
-        try {
-            await api.post('/employees/sync-all');
-            clearDashboardCache();
-            alert("Global data synchronization completed successfully.");
-            window.location.reload(); // Refresh to show fresh data
-        } catch (err) {
-            console.error("Sync all failed", err);
-            alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
-        } finally {
-            setIsSyncing(false);
-        }
-    };
 
-    const handleExportClick = async () => {
-        setIsExporting(true);
-        try {
-            // Specifically fetch active employees only (no resigned/deleted) as requested
-            const data = await getEmployeeList(true, false, false); 
-            setExportData(data);
-            setShowExportModal(true);
-        } catch (err) {
-            console.error("Export fetch failed", err);
-            alert("Failed to prepare export data. Please try again.");
-        } finally {
-            setIsExporting(false);
-        }
-    };
 
     return (
         <div className="space-y-6 max-w-4xl">
@@ -426,7 +391,7 @@ const AdminSection = ({ employeeData }) => {
                 </h3>
                 <div className="flex flex-wrap gap-4">
                     <button
-                        onClick={() => setShowBulkModal(true)}
+                        onClick={onImport}
                         className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors text-left"
                     >
                         <div className="p-3 bg-blue-600 text-white rounded-xl">
@@ -439,7 +404,7 @@ const AdminSection = ({ employeeData }) => {
                     </button>
 
                     <button
-                        onClick={handleExportClick}
+                        onClick={onExport}
                         disabled={isExporting}
                         className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl hover:bg-emerald-100 transition-colors text-left disabled:opacity-50"
                     >
@@ -453,7 +418,7 @@ const AdminSection = ({ employeeData }) => {
                     </button>
 
                     <button
-                        onClick={handleSyncAll}
+                        onClick={onSync}
                         disabled={isSyncing}
                         className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-colors text-left disabled:opacity-50"
                     >
@@ -468,13 +433,6 @@ const AdminSection = ({ employeeData }) => {
                 </div>
             </div>
 
-            {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
-            {showExportModal && (
-                <ExportPreviewModal 
-                    employees={exportData} 
-                    onClose={() => setShowExportModal(false)} 
-                />
-            )}
         </div>
     );
 };
@@ -494,6 +452,11 @@ const Settings = () => {
     const [activeTab, setActiveTab] = useState('profile');
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
+    const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportData, setExportData] = useState([]);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [empNotLinked, setEmpNotLinked] = useState(false);
 
     const isAdminPrivileged = true; // Enabled for all users as requested
@@ -529,6 +492,39 @@ const Settings = () => {
         };
         fetchEmployee();
     }, []);
+
+    const handleExportClick = async () => {
+        setIsExporting(true);
+        try {
+            console.log("Settings: Fetching employees for export...");
+            const data = await getEmployeeList(true, false, false); 
+            console.log("Settings: Received export data, count:", data?.length);
+            setExportData(data);
+            setShowExportModal(true);
+        } catch (err) {
+            console.error("Export fetch failed", err);
+            alert("Failed to prepare export data. Please try again.");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleSyncAll = async () => {
+        if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
+        
+        setIsSyncing(true);
+        try {
+            await api.post('/employees/sync-all');
+            clearDashboardCache();
+            alert("Global data synchronization completed successfully.");
+            window.location.reload(); 
+        } catch (err) {
+            console.error("Sync all failed", err);
+            alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     if (empLoading && !employeeData && activeTab === 'profile') {
         return <ModuleLoader label="Loading Settings" />;
@@ -579,7 +575,24 @@ const Settings = () => {
             )}
             {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
             {activeTab === 'reports' && <AutoReportsSection />}
-            {activeTab === 'admin' && isAdminPrivileged && <AdminSection employeeData={employeeData} />}
+            {activeTab === 'admin' && isAdminPrivileged && (
+                <AdminSection 
+                    employeeData={employeeData} 
+                    onExport={handleExportClick}
+                    onImport={() => setShowBulkModal(true)}
+                    onSync={handleSyncAll}
+                    isExporting={isExporting}
+                    isSyncing={isSyncing}
+                />
+            )}
+
+            {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
+            {showExportModal && (
+                <ExportPreviewModal 
+                    employees={exportData} 
+                    onClose={() => setShowExportModal(false)} 
+                />
+            )}
         </div>
     );
 }

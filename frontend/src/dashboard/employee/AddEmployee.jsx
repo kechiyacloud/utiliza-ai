@@ -588,6 +588,8 @@ const AddEmployee = () => {
     // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     // Auto-calculate status and allocation based on project selection.
     // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
+    // Auto-calculate status and allocation based on project selection.
+    // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     useEffect(() => {
         const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
         const totalAllocation = formData.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
@@ -605,6 +607,7 @@ const AddEmployee = () => {
             }
             
             // If current status is an auto-type (Bench/Allocated) but doesn't match projects, enforce the rule
+            // We only enforce if the status isn't already "Notice/PIP/Resign"
             if (prev.employee_status !== autoStatus || prev.employee_allocations !== totalAllocation) {
                 return { 
                     ...prev, 
@@ -614,7 +617,7 @@ const AddEmployee = () => {
             }
             return prev;
         });
-    }, [formData.projects, formData.employee_status]);
+    }, [formData.projects]); // REMOVED formData.employee_status from dependencies to prevent immediate reversion during manual selection
 
     const handleSubmit = async () => {
         // Run all validations as a final check
@@ -992,10 +995,10 @@ const AddEmployee = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <optgroup label="Auto-calculated (based on projects)">
-                                <option value="Bench" disabled={formData.projects.length > 0}>Bench</option>
-                                <option value="Partially bench" disabled={formData.projects.length === 0}>Partially bench</option>
-                                <option value="Partially allocated" disabled={formData.projects.length === 0}>Partially allocated</option>
-                                <option value="Allocated" disabled={formData.projects.length === 0}>Allocated</option>
+                                <option value="Bench" disabled={formData.projects.length > 0 && formData.projects.some(p => p.project_allocation > 0)}>Bench</option>
+                                <option value="Partially bench" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially bench</option>
+                                <option value="Partially allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially allocated</option>
+                                <option value="Allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Allocated</option>
                             </optgroup>
                             <optgroup label="Manually set">
                                 <option value="Notice period">Notice period</option>
@@ -1008,9 +1011,9 @@ const AddEmployee = () => {
                             {formData.employee_status}
                         </div>
                     )}
-                    {!isEditMode && (
-                        <p className="text-xs text-gray-500 mt-1">Auto-calculated based on project allocation</p>
-                    )}
+                    <p className="text-[10px] text-gray-400 mt-1 font-medium italic">
+                        * Bench/Allocated statuses are auto-calculated based on project details in Section 3.
+                    </p>
                     {formData.employee_status === 'Notice period' && (
                         <div className="mt-2 space-y-2">
                             <div>
@@ -1517,8 +1520,8 @@ const AddEmployee = () => {
                         <ArrowLeft size={20} className="text-gray-600" />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">{isEditMode ? 'Edit Employee' : 'Add New Employee'}</h1>
-                        <p className="text-gray-500 text-sm">{isEditMode ? 'Update employee details' : 'Fill in the details to onboard a new team member'}</p>
+                        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{isEditMode ? 'Edit Employee' : 'Add New Employee'}</h1>
+                        <p className="text-sm font-medium text-gray-500">{isEditMode ? 'Update employee details' : 'Fill in the details to onboard a new team member'}</p>
                     </div>
                 </div>
             </div>

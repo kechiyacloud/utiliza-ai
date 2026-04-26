@@ -519,7 +519,7 @@ const SearchableDropdown = ({
                                     type="text"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder={`Search ${label}...`}
+                                    placeholder={`Search ${label}`}
                                     className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-xl outline-none focus:bg-white focus:border-blue-200 transition-all"
                                     autoFocus
                                 />
@@ -1431,8 +1431,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                             </button>
                         )}
                         <div>
-                            <h2 className="text-xl font-bold text-gray-800">Add New Project</h2>
-                            <p className="text-xs text-gray-500 mt-1">Configure project details and allocate team members</p>
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Add New Project</h1>
+                            <p className="text-sm font-medium text-gray-500">Configure project details and allocate team members</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white rounded-full text-gray-500 shadow-sm border border-transparent hover:border-gray-200 transition-all">
@@ -1646,7 +1646,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                     const selectedSkill = item?.isCreateOption ? item.skillName : item.name;
                                                     void addSkillToForm(selectedSkill);
                                                 }}
-                                                placeholder="Search or add skills..."
+                                                placeholder="Search or add skills"
                                                 label="skills"
                                                 noResultsText="Skill not found. Select Add or use + Add Skill."
                                             />
@@ -1665,7 +1665,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                         void handleAddSkillClick();
                                                     }
                                                 }}
-                                                placeholder="Type a new skill..."
+                                                placeholder="Type a new skill"
                                                 className="flex-1 h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                             />
                                             <button

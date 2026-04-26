@@ -48,6 +48,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     if not token:
+        print("DEBUG: No token provided in Authorization header")
         raise credentials_exception
         
     try:
@@ -55,7 +56,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         user_id: str = payload.get("sub")
         email: str = payload.get("email")
         if user_id is None:
+            print("DEBUG: Token payload missing 'sub'")
             raise credentials_exception
         return {"user_id": user_id, "email": email}
-    except JWTError:
+    except JWTError as e:
+        print(f"DEBUG: JWT validation failed: {str(e)}")
         raise credentials_exception
