@@ -60,8 +60,14 @@ export const getEmployeeList = async (forceUpdate = false, includeResigned = fal
                 normalizedType = 'Full Time';
             }
 
+            let normalizedRole = emp.role_designation || emp.designation || 'Specialist';
+            if (normalizedRole.toUpperCase() === 'CSE') {
+                normalizedRole = 'Cloud Solution Engineer';
+            }
+
             return {
                 ...emp,
+                role_designation: normalizedRole,
                 skills: emp.skills || [],
                 billable: emp.billable || derivedBillable,
                 employee_type: normalizedType,
@@ -233,7 +239,9 @@ export const getDepartments = async () => {
 
 export const getDesignations = async () => {
     const res = await api.get('/dashboard/designations');
-    return res.data;
+    const raw = Array.isArray(res.data) ? res.data : [];
+    const normalized = raw.map(r => r.toUpperCase() === 'CSE' ? 'Cloud Solution Engineer' : r);
+    return [...new Set(normalized)].sort();
 };
 
 export const getLocations = async () => {

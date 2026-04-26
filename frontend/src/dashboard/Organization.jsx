@@ -168,7 +168,7 @@ const Organization = () => {
                             </span>
                         </div>
                         <p className="text-sm font-medium text-gray-500">
-                            As of {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })} • {activeDeptId ? 'Focused team hierarchy' : 'Department hierarchy'}
+                            Visualize structural hierarchy and employee distribution across departments.
                         </p>
                     </div>
                 </div>
@@ -194,7 +194,7 @@ const Organization = () => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                             <input
                                 type="text"
-                                placeholder="Search departments..."
+                                placeholder="Search departments"
                                 className="pl-9 pr-4 py-1.5 bg-slate-100 border border-slate-200 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 w-56 transition-all"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}

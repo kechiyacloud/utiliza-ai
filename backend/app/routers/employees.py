@@ -177,7 +177,7 @@ router = APIRouter()
 @router.get("/employees/count")
 def get_total_employee_count():
     with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
+        cur.execute("SELECT COUNT(*) FROM employee_master WHERE (date_of_resign IS NULL OR date_of_resign > CURRENT_DATE) AND (is_deleted IS FALSE OR is_deleted IS NULL)")
         result = cur.fetchone()
         return {"total_employees": result[0]}
 
@@ -189,7 +189,8 @@ def get_bench_employee_count():
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+            AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) 
+            AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0
         """)
         result = cur.fetchone()
@@ -212,7 +213,17 @@ def get_employee_roles():
     with db_cursor() as cur:
         cur.execute("SELECT DISTINCT role_designation FROM employee_master ORDER BY role_designation")
         roles = [row[0] for row in cur.fetchall()]
-        return {"roles": roles}
+        
+        # Unify CSE / Cloud Solution Engineer
+        unified = set()
+        for r in roles:
+            norm = r.strip()
+            if norm.upper() == 'CSE':
+                unified.add('Cloud Solution Engineer')
+            else:
+                unified.add(norm)
+        
+        return {"roles": sorted(list(unified))}
 
 @router.post("/employees/sync-all")
 def sync_all_employees():
@@ -309,13 +320,19 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
             "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
             "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
-            "WHERE (m.date_of_resign IS NULL OR %s = TRUE) "
+            "WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE OR %s = TRUE) "
             "  AND " + is_deleted_expr + " "
             "ORDER BY m.employee_name ASC"
         )
         cur.execute(query, (include_resigned, include_deleted))
         columns = [desc[0] for desc in cur.description]
-        results = [dict(zip(columns, row)) for row in cur.fetchall()]
+        
+        results = []
+        for row in cur.fetchall():
+            d = dict(zip(columns, row))
+            if d.get('role_designation', '').strip().upper() == 'CSE':
+                d['role_designation'] = 'Cloud Solution Engineer'
+            results.append(d)
         return results
 
 @router.get("/employees/upcoming-bench")
@@ -546,6 +563,10 @@ def get_departments_roles_mapping():
             if not dep or not role: continue
             if dep not in mapping:
                 mapping[dep] = set()
+            
+            # Normalize CSE
+            if role.upper() == 'CSE':
+                role = 'Cloud Solution Engineer'
             mapping[dep].add(role)
         
         # Convert sets to sorted lists
@@ -692,6 +713,9 @@ def get_employee_by_id(employee_id: str):
 
         columns = [desc[0] for desc in cur.description]
         employee = dict(zip(columns, employee_row))
+
+        if employee.get('role_designation', '').strip().upper() == 'CSE':
+            employee['role_designation'] = 'Cloud Solution Engineer'
 
         # Real employee_id for downstream queries (even if we fetched by email)
         real_employee_id = employee.get("employee_id")

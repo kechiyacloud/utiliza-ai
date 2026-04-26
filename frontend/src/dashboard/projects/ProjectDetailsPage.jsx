@@ -491,7 +491,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input 
                                 type="text" 
-                                placeholder="Search employees or roles..." 
+                                placeholder="Search employees or roles" 
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all"
@@ -760,7 +760,7 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                                     <p className="text-sm font-semibold text-slate-700">Drag & drop or click to browse</p>
                                     <p className="text-xs text-slate-400 mt-1">Accepts .csv, .xlsx, .xls</p>
                                 </div>
-                                <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
+                                <input ref={fileInputRef} type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="hidden" onChange={handleFileChange} />
                             </div>
                             {parseError && <p className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{parseError}</p>}
                         </div>
@@ -2233,7 +2233,7 @@ const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate
                     {avatarLetter}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h1 className="text-2xl font-black text-slate-800 leading-tight truncate">{projectName}</h1>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight truncate">{projectName}</h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="px-2 py-1 rounded-full text-[11px] font-bold border bg-slate-50 text-slate-700 border-slate-200">
                             {projectTypeLabel}

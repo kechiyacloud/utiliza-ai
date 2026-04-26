@@ -419,7 +419,7 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
                                     <p className="text-sm font-medium text-slate-600">Drop your file here or <span className="text-blue-600">browse</span></p>
                                     <p className="text-xs text-slate-400 mt-0.5">Supports .csv and .xlsx</p>
                                 </div>
-                                <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileSelect} />
+                                <input ref={fileInputRef} type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="hidden" onChange={handleFileSelect} />
                             </div>
 
                             {/* Parse error */}

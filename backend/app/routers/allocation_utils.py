@@ -3,6 +3,7 @@ import uuid
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 from fastapi import HTTPException
+from app.routers.employees import _sync_employee_allocations
 
 HOURS_PER_FTE = 40
 
@@ -398,8 +399,7 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
             DO UPDATE SET allocated_hours = EXCLUDED.allocated_hours
         """, (allocation_id, w_year, w_num, hours))
 
-    capacity_status = "green"
-    if available_pct <= 0: capacity_status = "red"
-    elif available_pct < 20: capacity_status = "amber"
+    # Trigger cross-module synchronization for total percentage consistency
+    _sync_employee_allocations(cur, {employee_id})
 
-    return _build_resource_record(project_id, tm, allocation_id, employee_id, project_tag, allocation_pct, extra_meta={"available_capacity_pct": available_pct, "capacity_status": capacity_status})
+    return _build_resource_record(project_id, tm, allocation_id, employee_id, project_tag, allocation_pct, extra_meta={"available_capacity_pct": available_pct})

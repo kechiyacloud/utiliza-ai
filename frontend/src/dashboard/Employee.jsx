@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, UserSearch } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, MoreHorizontal, ArrowLeft, UserSearch } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -9,7 +9,6 @@ import SkillsOverview from './employee/insights/SkillsOverview'
 import { getEmployeeList } from '../api/employeeApi'
 import { normalizeSkillName } from '../utils/skillTopics'
 import MultiSelectDropdown from '../components/MultiSelectDropdown'
-import { exportToCSV } from '../utils/exportUtils'
 import { useDataRefresh } from '../context'
 import ModuleLoader from '../components/ModuleLoader'
 
@@ -187,9 +186,18 @@ function Employee() {
 
       {/* Header & Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">{contextLabel} Management</h1>
-          <p className="text-gray-500">See how your {contextLabel.toLowerCase()} is doing and manage people records.</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
+            title="Go Back"
+          >
+            <ArrowLeft size={20} className="text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{contextLabel} Management</h1>
+            <p className="text-sm font-medium text-gray-500">See how your {contextLabel.toLowerCase()} is doing and manage employee records.</p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

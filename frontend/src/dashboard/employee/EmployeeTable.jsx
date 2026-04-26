@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check, Undo2 } from 'lucide-react';
+import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check, Undo2, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { deleteEmployee, restoreEmployee } from '../../api/employeeApi';
+import ExportPreviewModal from './ExportPreviewModal';
 
 // AllocationBar — color matches EmployeeStatusTag palette
 const AllocationBar = ({ percentage, status }) => {
@@ -62,6 +63,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
         const saved = localStorage.getItem('employeeRowsPerPage');
         return saved ? parseInt(saved, 10) : 15;
     });
+    const [showExportModal, setShowExportModal] = useState(false);
 
     // Count active filters for badge
     const activeFilterCount = [
@@ -254,7 +256,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         <input
                             type="text"
                             placeholder="Find an employee or skill"
-                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-72 transition-all font-poppins"
+                            className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-80 transition-all font-poppins"
                             value={searchValue || ''}
                             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
                         />
@@ -316,9 +318,19 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                             onClick={() => navigate('/info/allocation', { state: { showForecastOnly: true, showBack: true } })}
                             className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center gap-2"
                         >
-                            View Upcoming Bench
+                         View Upcoming Bench
                         </button>
                     )}
+
+                    {/* Export Button */}
+                    <button
+                        onClick={() => setShowExportModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition-all shadow-sm"
+                        title="Export Filtered List"
+                    >
+                        <Download size={18} />
+                        Export
+                    </button>
                 </div>
             </div>
 
@@ -502,6 +514,13 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 itemName={deleteTarget?.employee_name}
                 isDeleting={isDeleting}
             />
+
+            {showExportModal && (
+                <ExportPreviewModal 
+                    employees={filteredEmployees}
+                    onClose={() => setShowExportModal(false)}
+                />
+            )}
         </div>
     );
 };

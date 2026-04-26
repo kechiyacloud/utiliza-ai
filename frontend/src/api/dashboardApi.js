@@ -21,9 +21,10 @@ export const fetchDepartments = async () => {
     }
 };
 
-export const fetchDashboardData = async (forceUpdate = false, department = 'Overall') => {
+export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
     try {
-        const cacheKey = department || 'Overall';
+        const department = Array.isArray(filters.departments) && filters.departments.length > 0 ? filters.departments.join(',') : 'Overall';
+        const cacheKey = JSON.stringify(filters) || 'Overall';
         const cacheEntry = dashboardCaches[cacheKey];
 
         // Reduced cache to 1 minute for better syncing
@@ -31,19 +32,26 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
             return { data: cacheEntry.data, todos: cacheEntry.todos };
         }
 
-        const params = department && department !== 'Overall' ? { department } : {};
+        const params = {
+            department: department !== 'Overall' ? department : undefined,
+            designations: Array.isArray(filters.designations) && filters.designations.length > 0 ? filters.designations.join(',') : undefined,
+            locations: Array.isArray(filters.locations) && filters.locations.length > 0 ? filters.locations.join(',') : undefined,
+            employment_types: Array.isArray(filters.types) && filters.types.length > 0 ? filters.types.join(',') : undefined,
+            skills: Array.isArray(filters.skills) && filters.skills.length > 0 ? filters.skills.join(',') : undefined,
+            status: Array.isArray(filters.statusTags) && filters.statusTags.length > 0 ? filters.statusTags.join(',') : undefined
+        };
         const megaRes = await api.get('/dashboard/all', { params });
         const mega = megaRes?.data || {};
 
         const info = mega?.infocards || {};
-        const forecast = Array.isArray(mega?.allocation_3m) ? mega.allocation_3m : [];
-        const highAlloc = Array.isArray(mega?.high_allocation) ? mega.high_allocation : [];
-        const performers = Array.isArray(mega?.top_performers) ? mega.top_performers : [];
-        const availability = Array.isArray(mega?.availability) ? mega.availability : [];
-        const executive = mega?.executive || {};
-        const skillsGap = Array.isArray(mega?.skills_gap) ? mega.skills_gap : [];
-        const transitions = Array.isArray(mega?.transitions) ? mega.transitions : [];
-        const certs = Array.isArray(mega?.certifications) ? mega.certifications : [];
+        const forecast = Array.isArray(mega?.resourceForecast) ? mega.resourceForecast : [];
+        const highAlloc = Array.isArray(mega?.highAllocationProjects) ? mega.highAllocationProjects : [];
+        const performers = Array.isArray(mega?.topPerformers) ? mega.topPerformers : [];
+        const availability = Array.isArray(mega?.resourceAvailability) ? mega.resourceAvailability : [];
+        const executive = mega?.executiveMetrics || {};
+        const skillsGap = Array.isArray(mega?.skillsGap) ? mega.skillsGap : [];
+        const transitions = Array.isArray(mega?.recentTransitions) ? mega.recentTransitions : [];
+        const certs = Array.isArray(mega?.certificationExpiry) ? mega.certificationExpiry : [];
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_DASHBOARD_DATA = {
@@ -63,7 +71,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
                 id: idx,
                 name: p?.project_name || "Unknown",
                 resources: p?.resource_count ?? 0,
-                utilization: Math.min(100, Math.round(((p?.resource_count || 0) / Math.max(info?.total_employees || 1, 1)) * 100))
+                utilization: Math.min(100, Math.round(((p?.resource_count || 0) / Math.max(info?.totalEmployees?.value || 1, 1)) * 100))
             })),
             topPerformers: performers.map((p) => ({
                 id: p?.employee_id,
@@ -99,7 +107,7 @@ export const fetchDashboardData = async (forceUpdate = false, department = 'Over
             })),
             certificationExpiry: certs,
             executiveMetrics: executive,
-            riskInsights: mega?.risk_insights || []
+            actionableTodos: mega?.actionable_todos || []
         };
 
         dashboardCaches[cacheKey] = {
