@@ -117,19 +117,19 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                     case 'billable': {
                         const s = (emp.employee_status || '').toLowerCase();
                         const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && !isSpecialStatus; 
+                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
                         break;
                     }
                     case 'non-billable': {
                         const s = (emp.employee_status || '').toLowerCase();
                         const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && !isSpecialStatus; 
+                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
                         break;
                     }
                     case 'bench': {
                         const s = (emp.employee_status || '').toLowerCase();
                         const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.employee_allocations || 0) <= 0 && !isSpecialStatus; 
+                        matchesCardFilter = (emp.employee_allocations || 0) <= 0 && !isSpecialStatus;
                         break;
                     }
                     case 'notice': {
@@ -140,7 +140,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
                         const s = (emp.employee_status || '').toLowerCase();
                         const isLeaving = s.includes('notice') || emp.date_of_resign;
-                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo && !isLeaving; 
+                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo && !isLeaving;
                         break;
                     }
                     case 'top-performer':
@@ -240,7 +240,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     if (loading) return <div className="p-10 text-center font-medium text-gray-400">Loading Employees...</div>;
 
     return (
-        <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col h-full">
+        <div className="bg-white rounded-[1.5rem] shadow-lg shadow-slate-200/40 border border-slate-100 overflow-hidden flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
@@ -318,7 +318,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                             onClick={() => navigate('/info/allocation', { state: { showForecastOnly: true, showBack: true } })}
                             className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center gap-2"
                         >
-                         View Upcoming Bench
+                            View Upcoming Bench
                         </button>
                     )}
 
@@ -351,97 +351,97 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         {currentEmployees.length > 0 ? (
                             currentEmployees.map((emp) => {
                                 const isArchived = emp.date_of_resign || emp.is_deleted;
-                                
+
                                 return (
-                                <tr
-                                    key={emp.employee_id}
-                                    onClick={() => onEmployeeClick && onEmployeeClick(emp)}
-                                    className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${isArchived ? 'bg-gray-50/60 opacity-80' : ''}`}
-                                >
-                                    <td className="px-6 py-2">
-                                        <div className="flex items-center gap-2">
-                                            {emp.photo_url ? (
-                                                <img
-                                                    src={emp.photo_url}
-                                                    alt={emp.employee_name}
-                                                    className="w-8 h-8 rounded-full object-cover border border-gray-200"
-                                                />
-                                            ) : (
-                                                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100 uppercase">
-                                                    {(emp.employee_name || 'Unknown Name').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'UN'}
+                                    <tr
+                                        key={emp.employee_id}
+                                        onClick={() => onEmployeeClick && onEmployeeClick(emp)}
+                                        className={`hover:bg-gray-50/50 transition-colors group cursor-pointer ${isArchived ? 'bg-gray-50/60 opacity-80' : ''}`}
+                                    >
+                                        <td className="px-6 py-2">
+                                            <div className="flex items-center gap-2">
+                                                {emp.photo_url ? (
+                                                    <img
+                                                        src={emp.photo_url}
+                                                        alt={emp.employee_name}
+                                                        className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                    />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100 uppercase">
+                                                        {(emp.employee_name || 'Unknown Name').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'UN'}
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-col justify-center">
+                                                    <span className="font-bold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
+                                                        {emp.employee_name || 'Unknown Name'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500 font-mono">{emp.employee_id || 'N/A'}</span>
                                                 </div>
-                                            )}
-                                            <div className="flex flex-col justify-center">
-                                                <span className="font-bold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
-                                                    {emp.employee_name || 'Unknown Name'}
-                                                </span>
-                                                <span className="text-xs text-gray-500 font-mono">{emp.employee_id || 'N/A'}</span>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2">
-                                        <div className="text-sm text-gray-700 font-medium">{emp.role_designation}</div>
-                                        <div className="text-xs text-gray-400">{emp.department}</div>
-                                    </td>
-                                    <td className="px-6 py-2">
-                                        <div className="flex flex-col gap-1">
-                                            <EmployeeStatusTag status={emp.employee_status} />
-                                            <BillableStatusTag billable={emp.billable} />
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2">
-                                        <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
-                                    </td>
-                                    <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
-                                    <td className="px-6 py-2 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    onEmployeeEdit && onEmployeeEdit(emp);
-                                                }}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-600 transition-colors hover:bg-blue-100"
-                                            >
-                                                <SquarePen size={13} />
-                                                Edit
-                                            </button>
-                                            {!isArchived ? (
+                                        </td>
+                                        <td className="px-6 py-2">
+                                            <div className="text-sm text-gray-700 font-medium">{emp.role_designation}</div>
+                                            <div className="text-xs text-gray-400">{emp.department}</div>
+                                        </td>
+                                        <td className="px-6 py-2">
+                                            <div className="flex flex-col gap-1">
+                                                <EmployeeStatusTag status={emp.employee_status} />
+                                                <BillableStatusTag billable={emp.billable} />
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-2">
+                                            <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
+                                        </td>
+                                        <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
+                                        <td className="px-6 py-2 text-right">
+                                            <div className="flex items-center justify-end gap-2">
                                                 <button
                                                     type="button"
                                                     onClick={(event) => {
                                                         event.stopPropagation();
-                                                        setDeleteTarget(emp);
+                                                        onEmployeeEdit && onEmployeeEdit(emp);
                                                     }}
-                                                    className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-600 transition-colors hover:bg-blue-100"
                                                 >
-                                                    <Trash2 size={13} />
-                                                    Delete
+                                                    <SquarePen size={13} />
+                                                    Edit
                                                 </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={async (event) => {
-                                                        event.stopPropagation();
-                                                        try {
-                                                            await restoreEmployee(emp.employee_id);
-                                                            if (onRestore) onRestore();
-                                                        } catch (err) {
-                                                            alert('Failed to restore employee');
-                                                        }
-                                                    }}
-                                                    className="inline-flex items-center gap-1 rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-100"
-                                                >
-                                                    <Undo2 size={13} />
-                                                    Restore
-                                                </button>
-                                            )}
-                                            <ChevronRight size={16} className="text-gray-300 group-hover:text-blue-500 transition-colors inline-block" />
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })
+                                                {!isArchived ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setDeleteTarget(emp);
+                                                        }}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                        Delete
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={async (event) => {
+                                                            event.stopPropagation();
+                                                            try {
+                                                                await restoreEmployee(emp.employee_id);
+                                                                if (onRestore) onRestore();
+                                                            } catch (err) {
+                                                                alert('Failed to restore employee');
+                                                            }
+                                                        }}
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-100"
+                                                    >
+                                                        <Undo2 size={13} />
+                                                        Restore
+                                                    </button>
+                                                )}
+                                                <ChevronRight size={16} className="text-gray-300 group-hover:text-blue-500 transition-colors inline-block" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
                         ) : (
                             <tr>
                                 <td colSpan="7" className="px-6 py-12 text-center">
@@ -516,7 +516,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             />
 
             {showExportModal && (
-                <ExportPreviewModal 
+                <ExportPreviewModal
                     employees={filteredEmployees}
                     onClose={() => setShowExportModal(false)}
                 />

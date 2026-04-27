@@ -70,24 +70,23 @@ export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
             highAllocationProjects: highAlloc.map((p, idx) => ({
                 id: idx,
                 name: p?.project_name || "Unknown",
-                resources: p?.resource_count ?? 0,
-                utilization: Math.min(100, Math.round(((p?.resource_count || 0) / Math.max(info?.totalEmployees?.value || 1, 1)) * 100))
+                resource_count: p?.resource_count ?? 0,
             })),
             topPerformers: performers.map((p) => ({
                 id: p?.employee_id,
-                name: p?.employee_name || "Unknown",
+                name: p?.name || "Unknown",
                 role: p?.role || "Employee",
                 allocation: p?.allocation ?? 0,
-                avatar: p?.employee_name
-                    ? p.employee_name.split(' ').map(n => n[0]).slice(0, 2).join('')
+                avatar: p?.name
+                    ? p.name.split(' ').map(n => n[0]).slice(0, 2).join('')
                     : "U"
             })),
             resourceAvailability: availability.map((a, idx) => ({
                 id: idx.toString(),
-                name: a?.employee || "Unknown",
+                name: a?.name || "Unknown",
                 project: a?.project || "Unknown",
-                releaseDate: a?.release_date,
-                availability: a?.allocation_percent ?? 0
+                releaseDate: a?.releaseDate,
+                allocation: a?.allocation ?? 0
             })),
             skillsGap: skillsGap.map((s, idx) => ({
                 id: idx,

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign, Clock, UserCheck, UserMinus,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft, Building2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -32,11 +32,11 @@ import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
 import AddProjectPanel from './projects/AddProjectPanel';
 import AddClientModal from './clients/AddClientModal';
-import DashboardTables from './landing-dashboard/DashboardTables';
+import OrganizationHighlights from './landing-dashboard/OrganizationHighlights';
 import WorkforceSplitView from './landing-dashboard/WorkforceSplitView';
 import NominationModal from './employee/NominationModal';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
-import { Building2 } from 'lucide-react';
+
 import { useDataRefresh } from '../context';
 
 
@@ -67,9 +67,7 @@ function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [forcedTab] = useState(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Interaction States
   const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
@@ -177,7 +175,7 @@ function Dashboard() {
   const handleToggleTodo = async (id) => {
     try {
       const updated = await toggleTodo(id);
-      setTodos(prev => prev.map(t => t.id === id ? { ...t, status: updated.status } : t));
+      setActionableTodos(prev => prev.map(t => t.id === id ? { ...t, status: updated.status } : t));
     } catch (e) { console.error(e); }
   };
 
@@ -190,7 +188,7 @@ function Dashboard() {
     setIsDeletingTodo(true);
     try {
       await clearTodo(todoToDelete.id);
-      setTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
+      setActionableTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
     } catch (e) {
       console.error(e);
       alert("Failed to delete task.");
@@ -208,11 +206,11 @@ function Dashboard() {
       if (editingTodoId) {
         const realId = editingTodoId.toString().replace('manual-', '');
         const updated = await updateTodo(realId, { message: msg, type: 'info' });
-        setTodos(prev => prev.map(todo => todo.id === editingTodoId ? { ...todo, ...updated } : todo));
+        setActionableTodos(prev => prev.map(todo => todo.id === editingTodoId ? { ...todo, ...updated } : todo));
         setEditingTodoId(null);
       } else {
         const created = await addTodo(msg, 'info');
-        setTodos(prev => [created, ...prev]);
+        setActionableTodos(prev => [created, ...prev]);
       }
       setNewTodoText('');
     } catch (e) { console.error(e); }
@@ -277,7 +275,7 @@ function Dashboard() {
       const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
-      if (res.todos) setTodos(res.todos);
+      if (res.todos) setActionableTodos(res.todos);
     } catch (e) {
       console.error("Failed to add project", e);
       alert("Failed to create project");
@@ -292,7 +290,7 @@ function Dashboard() {
       const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
-      if (res.todos) setTodos(res.todos);
+      if (res.todos) setActionableTodos(res.todos);
     } catch (e) {
       console.error("Failed to add client", e);
       alert("Failed to create client");
@@ -791,18 +789,14 @@ function Dashboard() {
 
           {/* Operational Insights Tables */}
           <div className="w-full mt-2 pb-8">
-            <DashboardTables
+            <OrganizationHighlights
               contextLabel={contextLabel}
               availability={data?.resourceAvailability || []}
-              skillsGap={data?.skillsGap || []}
               transitions={data?.recentTransitions || []}
               certifications={data?.certificationExpiry || []}
               benchAging={data?.executiveMetrics?.benchAging || []}
               highUtilizationEmployee={data?.topPerformers || []}
               highUtilizationProject={data?.highAllocationProjects || []}
-              trends={data?.executiveMetrics?.utilizationTrends || []}
-              forecast={data?.executiveMetrics?.forecast || []}
-              forcedTab={forcedTab}
             />
           </div>
         </div>
@@ -836,7 +830,7 @@ function Dashboard() {
             // Manual refresh of dashboard data without reloading page
             fetchDashboardData(true, filters).then(res => {
               if (res.data) setData(res.data);
-              if (res.todos) setTodos(res.todos);
+              if (res.todos) setActionableTodos(res.todos);
             }).catch(console.error);
           }}
         />
