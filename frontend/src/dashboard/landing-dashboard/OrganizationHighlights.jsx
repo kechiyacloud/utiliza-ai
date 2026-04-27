@@ -133,7 +133,7 @@ const OrganizationHighlights = ({
                         </div>
                         <div className="flex-1 min-w-0">
                             <h5 className="text-[10px] font-black text-slate-800 uppercase truncate">{item.name}</h5>
-                            <p className="text-[8px] text-slate-500 truncate font-medium">{item.project}</p>
+                            <p className="text-[8px] text-slate-500 font-medium">{item.project}</p>
                         </div>
                         <div className="text-right">
                             <p className="text-[8px] font-black text-blue-600 uppercase">Roll-off</p>
@@ -160,9 +160,9 @@ const OrganizationHighlights = ({
                         <div className="flex-1">
                             <h5 className="text-[10px] font-black text-slate-800 uppercase">{item.employee}</h5>
                             <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[8px] font-bold text-slate-400 uppercase truncate max-w-[80px]">{item.fromProject || 'Bench'}</span>
+                                <span className="text-[8px] font-bold text-slate-400 uppercase">{item.fromProject || 'Bench'}</span>
                                 <ArrowRight size={10} className="text-slate-300" />
-                                <span className="text-[8px] font-bold text-indigo-600 uppercase truncate max-w-[80px]">{item.toProject}</span>
+                                <span className="text-[8px] font-bold text-indigo-600 uppercase">{item.toProject}</span>
                             </div>
                         </div>
                         <div className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">
