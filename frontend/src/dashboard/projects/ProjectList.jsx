@@ -95,7 +95,7 @@ const getStatusBadgeStyle = (status, pct) => {
     if (s.includes('overdue')) return { backgroundColor: '#FEF2F2', color: '#991B1B' }; // Red
     if (s.includes('ending soon')) return { backgroundColor: '#FFF7ED', color: '#C2410C' }; // Orange
     if (s === 'completed') return { backgroundColor: '#F0FDF4', color: '#166534' }; // Green
-    
+
     if (pct <= 30) return { backgroundColor: '#DCFCE7', color: '#166534' };
     if (pct <= 60) return { backgroundColor: '#FFFBEB', color: '#B45309' };
     return { backgroundColor: '#FEF2F2', color: '#991B1B' };
@@ -108,15 +108,15 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
         <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full">
             {/* Action Buttons - Absolute positioned to avoid title overlap */}
             <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onEdit(project); }} 
+                <button
+                    onClick={(e) => { e.stopPropagation(); onEdit(project); }}
                     className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-emerald-100 shadow-sm"
                     title="Edit Project"
                 >
                     <Pencil size={14} />
                 </button>
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onDelete(project); }} 
+                <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(project); }}
                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-rose-100 shadow-sm"
                     title="Delete Project"
                 >
@@ -211,12 +211,12 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
     );
 };
 
-const ProjectList = ({ 
-    projects, 
-    activeCardFilter, 
-    onRefresh, 
-    allEmployeeNames, 
-    filters, 
+const ProjectList = ({
+    projects,
+    activeCardFilter,
+    onRefresh,
+    allEmployeeNames,
+    filters,
     onFilterChange,
     departments = [],
     sortBy,
@@ -281,7 +281,7 @@ const ProjectList = ({
             if (filters?.status && filters.status !== 'All Status') {
                 const pStatus = normalizeStatus(project.status || project.project_status);
                 const fStatus = normalizeStatus(filters.status);
-                
+
                 if (fStatus === 'in progress') {
                     matchesSidebarStatus = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => pStatus.includes(s));
                 } else if (fStatus === 'completed') {
@@ -356,20 +356,20 @@ const ProjectList = ({
             if (deptFilter && deptFilter !== 'All Department' && deptFilter !== 'All Departments') {
                 const pDeptId = project.department_id || project.department;
                 const pDeptName = project.department_name || project.department;
-                matchesDepartment = String(pDeptId) === String(deptFilter) || 
-                                    String(pDeptName).toLowerCase() === String(deptFilter).toLowerCase();
+                matchesDepartment = String(pDeptId) === String(deptFilter) ||
+                    String(pDeptName).toLowerCase() === String(deptFilter).toLowerCase();
             }
-            
-            return matchesSearchTerm && 
-                   matchesSidebarStatus && 
-                   matchesCardFilter && 
-                   matchesResourceType && 
-                   matchesProjectName && 
-                   matchesResourceName && 
-                   matchesSowStatus && 
-                   matchesDateFilter &&
-                   matchesSortFilter &&
-                   matchesDepartment;
+
+            return matchesSearchTerm &&
+                matchesSidebarStatus &&
+                matchesCardFilter &&
+                matchesResourceType &&
+                matchesProjectName &&
+                matchesResourceName &&
+                matchesSowStatus &&
+                matchesDateFilter &&
+                matchesSortFilter &&
+                matchesDepartment;
         });
 
         // Debug logging for filter verification as requested
@@ -822,8 +822,8 @@ const ProjectList = ({
                                     {filters?.department || activeCardFilter ? 'No projects found for this filter' : 'No Projects Found'}
                                 </h3>
                                 <p className="text-slate-500 text-sm mt-1">
-                                    {filters?.department 
-                                        ? `No projects found for the selected department. Try a different one or "All Departments".` 
+                                    {filters?.department
+                                        ? `No projects found for the selected department. Try a different one or "All Departments".`
                                         : 'Try adjusting your filters or search term'}
                                 </p>
                             </div>
@@ -855,8 +855,8 @@ const ProjectList = ({
                 departments={departments}
                 currentFilters={{
                     ...filters,
-                    allResourceNames: allEmployeeNames && allEmployeeNames.length > 0 
-                        ? allEmployeeNames.join(', ') 
+                    allResourceNames: allEmployeeNames && allEmployeeNames.length > 0
+                        ? allEmployeeNames.join(', ')
                         : Array.from(new Set(projects.map(p => p.resource_names).filter(Boolean))).join(', ')
                 }}
             />

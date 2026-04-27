@@ -14,26 +14,28 @@ import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className={`bg-white p-4 rounded-2xl shadow-sm border flex items-center justify-between transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${isActive ? 'border-blue-500 ring-4 ring-blue-50 ring-offset-0' : 'border-slate-100 hover:border-slate-200'}`}
+    className={`bg-white p-4 rounded-2xl border relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col items-start shadow-sm ${isActive ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
     onClick={onClick}
   >
-    <div className="flex-1">
-      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-      <div className="flex items-center">
-        <h3 className={`font-semibold text-slate-800 tracking-tight ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-3xl'}`}>
-          {loading ? (
-            <span className="text-slate-300 animate-pulse">...</span>
-          ) : error ? (
-            <span className="text-rose-500">—</span>
-          ) : (
-            <span>{value ?? '—'}</span>
-          )}
-        </h3>
+    <div className="flex w-full items-start justify-between z-10 mb-2">
+      <div className={`p-1.5 rounded-lg transition-colors ${colorClass} bg-opacity-10 ${colorClass.replace('bg-', 'text-').replace('500', '600')}`}>
+        <Icon size={18} strokeWidth={2.5} />
       </div>
     </div>
-    <div className={`p-3 rounded-xl ${colorClass} bg-opacity-10 transition-colors`}>
-      <Icon size={24} className={colorClass.replace('bg-', 'text-').replace('500', '600')} />
+    <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
+      <h3 className={`text-xl font-bold text-slate-900 tracking-tight mb-0.5 leading-none`}>
+        {loading ? (
+          <span className="text-slate-200 animate-pulse">...</span>
+        ) : error ? (
+          <span className="text-rose-500">—</span>
+        ) : (
+          <span>{value ?? '—'}</span>
+        )}
+      </h3>
+      <p className="text-slate-500 text-[10px] font-bold tracking-tight uppercase mb-0.5 whitespace-nowrap">{label}</p>
     </div>
+    {/* Subtle Background Accent */}
+    <div className={`absolute -right-6 -top-6 w-16 h-16 rounded-full blur-3xl opacity-10 transition-opacity ${colorClass}`}></div>
   </div>
 )
 
@@ -141,12 +143,12 @@ function EmployeeMasterList() {
 
       const sv = combinedFilters.search?.toLowerCase().trim();
       const matchesSearch = !sv || (
-          emp.employee_name?.toLowerCase().includes(sv) ||
-          emp.employee_id?.toLowerCase().includes(sv) ||
-          emp.role_designation?.toLowerCase().includes(sv) ||
-          emp.location?.toLowerCase().includes(sv) ||
-          emp.department?.toLowerCase().includes(sv) ||
-          (emp.skills && emp.skills.some(skill => skill && typeof skill === 'string' && skill.toLowerCase().includes(sv)))
+        emp.employee_name?.toLowerCase().includes(sv) ||
+        emp.employee_id?.toLowerCase().includes(sv) ||
+        emp.role_designation?.toLowerCase().includes(sv) ||
+        emp.location?.toLowerCase().includes(sv) ||
+        emp.department?.toLowerCase().includes(sv) ||
+        (emp.skills && emp.skills.some(skill => skill && typeof skill === 'string' && skill.toLowerCase().includes(sv)))
       );
 
       return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
@@ -156,7 +158,7 @@ function EmployeeMasterList() {
   const contextLabel = combinedFilters.departments?.length > 0 ? 'Team' : 'Organization';
 
   const totalEmployeesCount = baseGroup.length;
-  
+
   const billableCount = baseGroup.filter(e => {
     const s = (e.employee_status || '').toLowerCase();
     const isSpecialStatus = s.includes('notice') || s.includes('pip');
@@ -327,20 +329,28 @@ function EmployeeMasterList() {
       {error && !allEmployees.length && (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-red-100 shadow-sm gap-6">
           <div className="flex flex-col items-center text-center gap-3">
-             <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500">
-               <Users size={32} />
-             </div>
-             <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
-             <p className="text-gray-500 max-w-sm text-sm">
-               We couldn't reach the organization records. Please ensure the backend server and its matching containers are running.
-             </p>
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500">
+              <Users size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">Backend Connection Error</h3>
+            <p className="text-gray-500 max-w-sm text-sm">
+              We couldn't reach the organization records. Please ensure the backend server and its matching containers are running.
+            </p>
           </div>
           <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
             {error}
           </div>
-          <button 
-             onClick={() => getEmployeeList(false, showArchived, showArchived).then(setAllEmployees).catch(err => setError(err.message))} 
-             className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
+          <button
+            onClick={async () => {
+              try {
+                const data = await getEmployeeList(false, showArchived, showDeleted);
+                setAllEmployees(data);
+                setError(null);
+              } catch (err) {
+                setError(err.message);
+              }
+            }}
+            className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
           >
             Retry Connection
           </button>
@@ -350,34 +360,34 @@ function EmployeeMasterList() {
       {/* Employee Table */}
       {(!error || allEmployees.length > 0) && (
         <div className='flex-1 w-full mt-4'>
-        <EmployeeTable
-          contextLabel={contextLabel}
-          employees={allEmployees}
-          loading={loading}
-          onEmployeeClick={(emp) => navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, { state: { employee: emp } })}
-          onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
-          onEmployeeDelete={(deletedId) => {
-            // If we are in "Archived" mode, we don't necessarily want to remove it from UI immediately
-            // because it just becomes a soft-deleted record which IS archived.
-            // But for responsiveness, if we AREN'T showing archived, remove it.
-            if (!showArchived) {
-              setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
-            } else {
-              // Refresh data to show it as archived
-              getEmployeeList(true, true, true).then(setAllEmployees);
-            }
-          }}
-          showArchived={showArchived}
-          onRestore={() => {
-            // Re-fetch everything after a restore
-            getEmployeeList(true, showArchived, showArchived).then(setAllEmployees);
-          }}
-          filters={combinedFilters}
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          onFilterClick={() => setIsFilterOpen(true)}
-        />
-      </div>
+          <EmployeeTable
+            contextLabel={contextLabel}
+            employees={allEmployees}
+            loading={loading}
+            onEmployeeClick={(emp) => navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, { state: { employee: emp } })}
+            onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
+            onEmployeeDelete={(deletedId) => {
+              // If we are in "Archived" mode, we don't necessarily want to remove it from UI immediately
+              // because it just becomes a soft-deleted record which IS archived.
+              // But for responsiveness, if we AREN'T showing archived, remove it.
+              if (!showArchived) {
+                setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
+              } else {
+                // Refresh data to show it as archived
+                getEmployeeList(true, true, true).then(setAllEmployees);
+              }
+            }}
+            showArchived={showArchived}
+            onRestore={() => {
+              // Re-fetch everything after a restore
+              getEmployeeList(true, showArchived, showDeleted).then(setAllEmployees);
+            }}
+            filters={combinedFilters}
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            onFilterClick={() => setIsFilterOpen(true)}
+          />
+        </div>
       )}
 
 

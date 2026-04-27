@@ -402,7 +402,10 @@ def get_dashboard_all(
                     SELECT 
                         e.employee_name, 
                         e.role_designation,
-                        CURRENT_DATE - COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE) as total_days
+                        CURRENT_DATE - GREATEST(
+                            COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE),
+                            DATE_TRUNC('year', CURRENT_DATE)::DATE
+                        ) as total_days
                     FROM employee_master e
                     LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
@@ -412,7 +415,7 @@ def get_dashboard_all(
                     {e_filter}
                     GROUP BY e.employee_name, e.role_designation, e.date_of_joining
                 )
-                SELECT employee_name, role_designation, total_days, LEAST(total_days, 365) as days_in_year
+                SELECT employee_name, role_designation, total_days, total_days as days_in_year
                 FROM BenchStats ORDER BY total_days DESC LIMIT 5
             """, dept_params)
             bench_aging = [{"name": r[0], "designation": r[1], "bench_days": int(r[2]), "days_in_year": int(r[3])} for r in cur.fetchall()]
