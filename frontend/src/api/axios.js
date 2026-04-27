@@ -40,7 +40,7 @@ api.interceptors.response.use(
       try {
         // Refresh token is in the httpOnly cookie — no body needed
         const { data } = await axios.post(`${BASE_URL}/refresh`, {}, { withCredentials: true });
-        sessionStorage.setItem("token", data.token);
+        localStorage.setItem("token", data.token);
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${data.token}`;
         return api(config);

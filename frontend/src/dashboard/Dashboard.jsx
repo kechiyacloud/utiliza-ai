@@ -27,7 +27,6 @@ import { createProject } from '../api/projectsApi';
 import { createClient } from '../api/clientApi';
 
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
-import ExecutiveDashboardCards from './landing-dashboard/ExecutiveDashboardCards';
 import ModuleLoader from '../components/ModuleLoader';
 import ResourceForecastChart from './landing-dashboard/ResourceForecastChart';
 
@@ -51,6 +50,9 @@ const CustomTooltip = ({ active, payload, label }) => {
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
             <span className="text-gray-600">{entry.name}:</span>
             <span className="text-gray-900 font-semibold">{entry.value}</span>
+            {entry.name === 'Allocate' && entry.payload.ratio !== undefined && (
+              <span className="text-blue-600 text-[10px] font-bold ml-auto">({entry.payload.ratio}% Ratio)</span>
+            )}
           </div>
         ))}
       </div>
@@ -76,27 +78,42 @@ function Dashboard() {
   const [isNominationModalOpen, setIsNominationModalOpen] = useState(false);
 
   // Filter States
-  const [selectedDepartments, setSelectedDepartments] = useState(() => {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState(() => {
     try {
-      const saved = localStorage.getItem('dashboard_department_filter_v2');
+      const saved = localStorage.getItem('dashboard_filters_v1');
       if (saved) return JSON.parse(saved);
-      // Fallback to old single selection if exists
-      const old = localStorage.getItem('dashboard_department_filter');
-      if (old && old !== 'Overall') return [old];
+      
+      // Migration from old department-only filter
+      const oldDepts = localStorage.getItem('dashboard_department_filter_v2');
+      if (oldDepts) return { departments: JSON.parse(oldDepts), types: [], skills: [], locations: [], statusTags: [], designations: [] };
     } catch (err) {
-      console.error('Failed to parse active tab:', err);
+      console.error('Failed to parse dashboard filters:', err);
     }
-    return [];
+    return {
+      departments: [],
+      types: [],
+      skills: [],
+      locations: [],
+      statusTags: [],
+      designations: []
+    };
   });
-  const [allEmployees, setAllEmployees] = useState([]);
-  const [departmentOptions, setDepartmentOptions] = useState([]);
+
+  const selectedDepartments = filters.departments;
+  const setSelectedDepartments = (depts) => setFilters(prev => ({ ...prev, departments: depts }));
 
   useEffect(() => {
-    localStorage.setItem('dashboard_department_filter_v2', JSON.stringify(selectedDepartments));
-  }, [selectedDepartments]);
+    localStorage.setItem('dashboard_filters_v1', JSON.stringify(filters));
+  }, [filters]);
+
+  const [allEmployees, setAllEmployees] = useState([]);
+  const allDepts = useMemo(() =>
+    [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()
+    , [allEmployees]);
 
   // Actionable Todo States
-  const [todos, setTodos] = useState([]);
+  const [actionableTodos, setActionableTodos] = useState([]);
   const [newTodoText, setNewTodoText] = useState('');
   const [todoLoading, setTodoLoading] = useState(false);
   const [todoToDelete, setTodoToDelete] = useState(null);
@@ -113,11 +130,10 @@ function Dashboard() {
       
       try {
         setLoading(true);
-        const deptParam = selectedDepartments.length > 0 ? selectedDepartments.join(',') : 'Overall';
         
         // Pass signal to fetchDashboardData if possible, or handle post-fetch cancellation
         const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
-          fetchDashboardData(forceRefresh, deptParam),
+          fetchDashboardData(forceRefresh, filters),
           getEmployeeList(forceRefresh),
           fetchTodos(),
           fetchDepartments()
@@ -127,6 +143,7 @@ function Dashboard() {
 
         if (dashRes.status === 'fulfilled') {
           setData(dashRes.value.data);
+          setActionableTodos(dashRes.value.todos);
         }
 
         if (empListRes.status === 'fulfilled') {
@@ -134,12 +151,9 @@ function Dashboard() {
         }
 
         if (todosRes.status === 'fulfilled') {
-          setTodos(todosRes.value);
+          setActionableTodos(todosRes.value);
         }
 
-        if (deptsRes.status === 'fulfilled') {
-          setDepartmentOptions(deptsRes.value);
-        }
         if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && todosRes.status === 'rejected') {
           setError("Connection failed. Please ensure the backend is running.");
         }
@@ -156,7 +170,7 @@ function Dashboard() {
     };
     loadData();
     return () => controller.abort();
-  }, [selectedDepartments, refreshKey]);
+  }, [filters, refreshKey]);
 
   // Standalone loadTodos effect removed because fetchDashboardData already provides both dynamic and manual todos
 
@@ -381,7 +395,7 @@ function Dashboard() {
     }
   ];
 
-  const dynamicDemandCapacityData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
+  const allocateAvailableData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
 
   const dynamicAllocationData = [
     { name: 'Billable', value: _metrics.billableHeadcount || 0, color: '#3b82f6' },
@@ -393,22 +407,54 @@ function Dashboard() {
   const totalAllocationCount = dynamicAllocationData.reduce((sum, item) => sum + item.value, 0);
 
   // Filtered dataset for dashboard employees
-  const filteredDashboardEmployees = useMemo(() => (
-    selectedDepartments.length === 0
-      ? allEmployees
-      : allEmployees.filter((employee) => selectedDepartments.includes(employee.department))
-  ), [allEmployees, selectedDepartments]);
+  const filteredDashboardEmployees = useMemo(() => {
+    return allEmployees.filter((emp) => {
+      const matchesDept = !filters.departments?.length || filters.departments.includes(emp.department);
+      const matchesType = !filters.types?.length || filters.types.includes(emp.employee_type);
+      const matchesLocation = !filters.locations?.length || filters.locations.includes(emp.location);
+      const matchesDesig = !filters.designations?.length || filters.designations.includes(emp.role_designation);
+
+      const matchesSkills = !filters.skills?.length || (
+        Array.isArray(emp.skills) && filters.skills.some(fs =>
+          emp.skills.some(s => s.toLowerCase().includes(fs.toLowerCase()))
+        )
+      );
+
+      // Status filtering logic (matching backend logic roughly)
+      const matchesStatus = !filters.statusTags?.length || (
+        filters.statusTags.some(tag => {
+          const lowerTag = tag.toLowerCase();
+          const alloc = emp.employee_allocations || 0;
+          if (lowerTag === 'bench') return alloc <= 0;
+          if (lowerTag === 'allocated') return alloc >= 100;
+          if (lowerTag === 'partially allocated') return alloc > 0 && alloc < 100;
+          return true;
+        })
+      );
+
+      return matchesDept && matchesType && matchesLocation && matchesDesig && matchesSkills && matchesStatus;
+    });
+  }, [allEmployees, filters]);
 
   // Derive bench employees with their skills from the filtered employee list
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
       .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
       .slice(0, 4)
-      .map(emp => ({
+          .map(emp => ({
         name: emp.employee_name,
         skills: emp.skills.join(', ')
       }));
   }, [filteredDashboardEmployees]);
+
+  const deptCounts = useMemo(() => {
+    return allEmployees.reduce((acc, emp) => {
+      if (emp.department) {
+        acc[emp.department] = (acc[emp.department] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [allEmployees]);
 
   if (error && !data) {
     return (
@@ -473,11 +519,12 @@ function Dashboard() {
 
           <div className="flex gap-3">
             <MultiSelectDropdown
-              options={departmentOptions}
+              options={allDepts}
               selectedValues={selectedDepartments}
               onChange={setSelectedDepartments}
               placeholder="Select Departments"
               icon={Building2}
+              counts={deptCounts}
             />
             <button
               onClick={() => navigate('/info/projects/add')}
@@ -534,9 +581,9 @@ function Dashboard() {
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
-                {dynamicDemandCapacityData.length > 0 ? (
+                {allocateAvailableData.length > 0 ? (
                   <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
-                    <BarChart data={dynamicDemandCapacityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <BarChart data={allocateAvailableData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
                       <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} />
@@ -562,7 +609,7 @@ function Dashboard() {
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <ListTodo size={18} className="text-blue-500" />
                   Actionable Todo List
-                  <span className="ml-auto text-xs font-bold text-slate-400">3 pending</span>
+                  <span className="ml-auto text-xs font-bold text-slate-400">{actionableTodos.length} pending</span>
                 </h2>
                 <div className="flex gap-2">
                   <div className="flex-1 h-8 bg-slate-100 rounded-lg" />
@@ -700,17 +747,17 @@ function Dashboard() {
                 <table className="w-full">
                   <thead className="sticky top-0 z-10">
                     <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
-                      <th className="text-left py-2 px-5 bg-white">Employee</th>
-                      <th className="text-left py-2 px-5 bg-white">Skill Set</th>
+                      <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee</th>
+                      <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skill Set</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
                       <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
-                        <td className="py-2.5 px-5">
+                        <td className="py-2.5 px-3">
                           <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
                         </td>
-                        <td className="py-2.5 px-5">
+                        <td className="py-2.5 px-3">
                           <div className="flex flex-wrap gap-1">
                             {row.skills.split(', ').map((skill, sIdx) => (
                               <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
@@ -754,6 +801,7 @@ function Dashboard() {
               highUtilizationEmployee={data?.topPerformers || []}
               highUtilizationProject={data?.highAllocationProjects || []}
               trends={data?.executiveMetrics?.utilizationTrends || []}
+              forecast={data?.executiveMetrics?.forecast || []}
               forcedTab={forcedTab}
             />
           </div>
@@ -786,14 +834,14 @@ function Dashboard() {
           onClose={() => setIsNominationModalOpen(false)}
           onSuccess={() => {
             // Manual refresh of dashboard data without reloading page
-            const deptParam = (selectedDepartments && selectedDepartments.length > 0) ? selectedDepartments.join(',') : 'Overall';
-            fetchDashboardData(true, deptParam).then(res => {
+            fetchDashboardData(true, filters).then(res => {
               if (res.data) setData(res.data);
               if (res.todos) setTodos(res.todos);
             }).catch(console.error);
           }}
         />
       )}
+
     </div>
   );
 }

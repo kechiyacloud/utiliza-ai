@@ -556,9 +556,7 @@ const ProjectList = ({
                     <div className="flex items-center gap-5 shrink-0">
                         <button
                             onClick={() => onViewChange('table')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                            onClick={() => setActiveView('table')}
-                            className={`text-base font-bold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-sm font-bold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tableTitle} ({filteredProjects.length})
                         </button>
@@ -617,7 +615,7 @@ const ProjectList = ({
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
                             <input
                                 type="text"
-                                placeholder="Search projects by name, client or description..."
+                                placeholder="Search Project"
                                 className="w-full pl-10 pr-4 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all"
                                 value={searchTerm}
                                 onChange={(e) => onSearchChange(e.target.value)}

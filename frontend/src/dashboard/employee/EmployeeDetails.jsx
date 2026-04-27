@@ -379,8 +379,8 @@ const EmployeeDetails = () => {
 
                 {/* Info */}
                 <div className="flex-grow text-center md:text-left">
-                    <h1 className="text-2xl font-bold text-slate-900">{userData.name}</h1>
-                    <p className="text-slate-500 font-medium mb-2">{userData.designation}</p>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{userData.name}</h1>
+                    <p className="text-sm font-medium text-gray-500 mb-2">{userData.designation}</p>
                     <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
                         <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
                             {userData.id}

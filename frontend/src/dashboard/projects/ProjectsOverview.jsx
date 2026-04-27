@@ -66,18 +66,18 @@ const ProjectsOverview = ({
     return (
         <div className="w-full flex flex-col gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header with Title and Actions */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate(-1)}
-                        className="p-2.5 hover:bg-slate-200 bg-white shadow-md border border-slate-100 rounded-full transition-all hover:scale-110 active:scale-95 flex-shrink-0"
+                        className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                         title="Go Back"
                     >
-                        <ArrowLeft size={22} className="text-slate-700" />
+                        <ArrowLeft size={20} className="text-gray-600" />
                     </button>
-                    <div className="flex flex-col gap-0.5">
-                        <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">Projects Overview</h1>
-                        <p className="text-slate-500 text-sm font-medium">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Projects Overview</h1>
+                        <p className="text-sm font-medium text-gray-500">
                             {(() => {
                                 if (!selectedDepartment || selectedDepartment === 'All Departments' || selectedDepartment === '') {
                                     return 'Complete Organizational Project Insights';

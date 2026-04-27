@@ -542,7 +542,7 @@ function ImportResourcesPage() {
 
     return (
         <div className="p-6 h-full w-full overflow-y-auto bg-slate-50/30">
-            <div className="mb-5 flex items-center gap-4">
+            <div className="flex items-center gap-4 mb-6">
                 <button
                     onClick={() => navigate('/info/projects')}
                     className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
@@ -550,48 +550,48 @@ function ImportResourcesPage() {
                 >
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Import Project Resources</h1>
+                    <p className="text-sm font-medium text-gray-500">Configure resource allocations and roles for {projectName}</p>
+                </div>
+            </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-2xl flex-shrink-0">
-                                {(project?.icon || projectName?.substring(0, 1)).toUpperCase()}
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-800 leading-tight">{projectName}</h1>
-                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium">
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
-                                        <Briefcase size={12} /> {project?.type || 'Project'}
-                                    </span>
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
-                                        <CalendarDays size={12} /> {project?.startDate || project?.start_date || 'Not set'} - {project?.endDate || project?.end_date || 'TBD'}
-                                    </span>
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
-                                        <Users size={12} /> {(resources || []).length} resources
-                                    </span>
-                                </div>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 mb-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-2xl flex-shrink-0">
+                            {(project?.icon || projectName?.substring(0, 1)).toUpperCase()}
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800 leading-tight">{projectName}</h2>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
+                                    <Briefcase size={12} /> {project?.type || 'Project'}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
+                                    <CalendarDays size={12} /> {project?.startDate || project?.start_date || 'Not set'} - {project?.endDate || project?.end_date || 'TBD'}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100">
+                                    <Users size={12} /> {(resources || []).length} resources
+                                </span>
                             </div>
                         </div>
+                    </div>
                     <button
                         onClick={handleSave}
                         disabled={saving}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-60 transition-colors"
-                        >
-                            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                            Save Resources
-                        </button>
-                    </div>
-
-                    <p className="text-sm text-slate-600">
-                        Select employee names and roles, then save the imported resources back to the project.
-                    </p>
-
-                    {(error || statusMessage) && (
-                        <div className={`rounded-xl border px-4 py-3 text-sm ${error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
-                            {error || statusMessage}
-                        </div>
-                    )}
+                    >
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                        Save Resources
+                    </button>
                 </div>
+
+                {(error || statusMessage) && (
+                    <div className={`rounded-xl border px-4 py-3 text-sm ${error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
+                        {error || statusMessage}
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">

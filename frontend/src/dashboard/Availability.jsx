@@ -517,12 +517,15 @@ const Availability = () => {
                     <div className="flex items-center gap-3 min-w-0">
                         <button
                             onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-slate-200 bg-white shadow-md rounded-full transition-colors flex-shrink-0"
+                            className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
                             title="Go Back"
                         >
                             <ArrowLeft size={20} className="text-gray-600" />
                         </button>
-                        <h1 className="text-2xl font-bold leading-tight text-mainTheme truncate">Resource Availability</h1>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Resource Availability</h1>
+                            <p className="text-sm font-medium text-gray-500">Monitor organization-wide resource releases and upcoming availability.</p>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 justify-end flex-shrink-0">

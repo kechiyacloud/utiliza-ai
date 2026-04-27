@@ -191,6 +191,15 @@ function EmployeeMasterList() {
     }).length;
   }, [baseGroup]);
 
+  const deptCounts = useMemo(() => {
+    return allEmployees.reduce((acc, emp) => {
+      if (emp.department) {
+        acc[emp.department] = (acc[emp.department] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [allEmployees]);
+
   return (
     <div className="p-6 flex flex-col gap-6 w-full h-full overflow-y-auto relative">
       <FilterOverlay
@@ -255,6 +264,7 @@ function EmployeeMasterList() {
             onChange={setSelectedDepts}
             placeholder="Select Departments"
             icon={Building2}
+            counts={deptCounts}
           />
         </div>
       </div>
