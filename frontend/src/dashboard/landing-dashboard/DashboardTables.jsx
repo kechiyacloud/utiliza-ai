@@ -75,7 +75,7 @@ const DashboardTables = ({
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Upcoming Releases</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                        {availability.length > 0 ? availability.slice(0, 10).map((row, idx) => {
+                        {availability.length > 0 ? availability.map((row, idx) => {
                             const days = getDaysRemaining(row.releaseDate);
                             return (
                                 <div key={idx} className="p-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
@@ -97,7 +97,7 @@ const DashboardTables = ({
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Top Utilization</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                        {highUtilizationEmployee.length > 0 ? highUtilizationEmployee.slice(0, 10).map((row, idx) => (
+                        {highUtilizationEmployee.length > 0 ? highUtilizationEmployee.slice(0, 5).map((row, idx) => (
                             <div key={idx} className="space-y-1">
                                 <div className="flex justify-between items-end">
                                     <span className="font-bold text-slate-800 text-[11px] truncate w-24" title={row.name}>{row.name}</span>
@@ -118,7 +118,7 @@ const DashboardTables = ({
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Recent Movements</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
-                        {transitions.length > 0 ? transitions.slice(0, 8).map((row, idx) => (
+                        {transitions.length > 0 ? transitions.map((row, idx) => (
                             <div key={idx} className="relative pl-4 border-l border-indigo-100">
                                 <div className="absolute -left-1 top-0 w-2 h-2 rounded-full bg-indigo-500"></div>
                                 <h5 className="font-bold text-slate-800 text-[10px] leading-none mb-1">{row.employee}</h5>
@@ -139,7 +139,7 @@ const DashboardTables = ({
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Bench Aging</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                        {benchAging.length > 0 ? benchAging.slice(0, 10).map((row, idx) => (
+                        {benchAging.length > 0 ? benchAging.map((row, idx) => (
                             <div key={idx} className="group">
                                 <div className="flex justify-between items-end mb-1">
                                     <span className="font-bold text-slate-800 text-[11px] truncate w-24" title={row.name}>{row.name}</span>
@@ -160,7 +160,7 @@ const DashboardTables = ({
                         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Certificates</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                        {certifications.length > 0 ? certifications.slice(0, 10).map((row, idx) => (
+                        {certifications.length > 0 ? certifications.map((row, idx) => (
                             <div key={idx} className="p-2 rounded-xl bg-teal-50/30 border border-teal-100">
                                 <h5 className="font-bold text-slate-800 text-[10px] truncate" title={row.name}>{row.name}</h5>
                                 <p className="text-[9px] font-bold text-teal-600 mt-0.5 truncate" title={row.certificate}>{row.certificate}</p>

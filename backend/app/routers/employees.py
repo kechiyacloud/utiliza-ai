@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
 import uuid
+import textwrap
 
 
 def _ensure_employee_columns(cur):
@@ -81,51 +82,37 @@ def _sync_employee_allocations(cur, employee_ids):
           AND m.date_of_resign IS NULL
     """, (list(employee_ids),))
 
+    # Single-pass update for allocations and status
     cur.execute("""
+        WITH LiveAllocations AS (
+            SELECT 
+                p.employee_id,
+                COALESCE(SUM(pa.allocation_percentage), 0) as total_pct
+            FROM employee_master_pro p
+            LEFT JOIN projects_allocation pa ON p.employee_id = pa.employee_id
+            LEFT JOIN projects pj ON pa.project_id = pj.project_id
+            WHERE p.employee_id = ANY(%s)
+              AND (pa.allocation_id IS NULL OR (
+                  pa.allocation_start_date <= CURRENT_DATE
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing'))
+                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+              ))
+            GROUP BY p.employee_id
+        )
         UPDATE employee_master_pro p
-        SET employee_allocations = COALESCE((
-            SELECT SUM(pa.allocation_percentage)
-            FROM projects_allocation pa
-            JOIN projects pj ON pa.project_id = pj.project_id
-            WHERE pa.employee_id = p.employee_id
-              AND pa.allocation_start_date <= CURRENT_DATE
-              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-              AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-        ), 0),
-        employee_status = CASE
-            WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
-            WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
-            WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
-            WHEN COALESCE((
-                SELECT SUM(pa2.allocation_percentage)
-                FROM projects_allocation pa2
-                JOIN projects pj2 ON pa2.project_id = pj2.project_id
-                WHERE pa2.employee_id = p.employee_id
-                  AND pa2.allocation_start_date <= CURRENT_DATE
-                  AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
-                  AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-            ), 0) <= 0 THEN 'Bench'
-            WHEN COALESCE((
-                SELECT SUM(pa3.allocation_percentage)
-                FROM projects_allocation pa3
-                JOIN projects pj3 ON pa3.project_id = pj3.project_id
-                WHERE pa3.employee_id = p.employee_id
-                  AND pa3.allocation_start_date <= CURRENT_DATE
-                  AND (pa3.allocation_end_date IS NULL OR pa3.allocation_end_date >= CURRENT_DATE)
-                  AND LOWER(pj3.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-            ), 0) BETWEEN 1 AND 40 THEN 'Partially bench'
-            WHEN COALESCE((
-                SELECT SUM(pa4.allocation_percentage)
-                FROM projects_allocation pa4
-                JOIN projects pj4 ON pa4.project_id = pj4.project_id
-                WHERE pa4.employee_id = p.employee_id
-                  AND pa4.allocation_start_date <= CURRENT_DATE
-                  AND (pa4.allocation_end_date IS NULL OR pa4.allocation_end_date >= CURRENT_DATE)
-                  AND LOWER(pj4.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-            ), 0) BETWEEN 41 AND 80 THEN 'Partially allocated'
-            ELSE 'Allocated'
-        END
-        WHERE p.employee_id = ANY(%s)
+        SET 
+            employee_allocations = la.total_pct,
+            employee_status = CASE
+                WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
+                WHEN la.total_pct <= 0 THEN 'Bench'
+                WHEN la.total_pct BETWEEN 1 AND 40 THEN 'Partially bench'
+                WHEN la.total_pct BETWEEN 41 AND 80 THEN 'Partially allocated'
+                ELSE 'Allocated'
+            END
+        FROM LiveAllocations la
+        WHERE p.employee_id = la.employee_id
     """, (list(employee_ids),))
 
 
@@ -191,7 +178,19 @@ def get_bench_employee_count():
             WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
             AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) 
             AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-            AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+            AND COALESCE((
+                SELECT SUM(pa.allocation_percentage) 
+                FROM projects_allocation pa 
+                LEFT JOIN projects pj ON pa.project_id = pj.project_id
+                WHERE pa.employee_id = m.employee_id 
+                  AND pa.allocation_start_date <= CURRENT_DATE
+                  AND (
+                      pa.allocation_end_date IS NULL 
+                      OR pa.allocation_end_date >= CURRENT_DATE 
+                      OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                  )
+                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+            ), 0) <= 0
         """)
         result = cur.fetchone()
         return {"bench_employees": result[0]}
@@ -285,8 +284,12 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "    FROM projects_allocation pa "
             "    LEFT JOIN projects pj ON pa.project_id = pj.project_id "
             "    WHERE pa.allocation_start_date <= CURRENT_DATE "
-            "      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) "
-            "      AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
+            "      AND ( "
+            "          pa.allocation_end_date IS NULL "
+            "          OR pa.allocation_end_date >= CURRENT_DATE "
+            "          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') "
+            "      ) "
+            "      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
             "    GROUP BY pa.employee_id"
             ") "
             "SELECT "
@@ -636,73 +639,80 @@ def get_employee_by_id(employee_id: str):
         is_email = "@" in employee_id
         id_filter = "WHERE LOWER(m.email_id) = LOWER(%s)" if is_email else "WHERE m.employee_id = %s"
 
-        employee_query = (
-            "WITH AllocationPriority AS ("
-            "    SELECT "
-            "        employee_id, "
-            "        MAX(CASE "
-            "            WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3 "
-            "            WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2 "
-            "            WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1 "
-            "            ELSE 0 "
-            "        END) as priority_rank "
-            "    FROM projects_allocation "
-            "    WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE) "
-            "    GROUP BY employee_id"
-            "), "
-            "DynAlloc AS ("
-            "    SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc "
-            "        FROM projects_allocation "
-            "        WHERE allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE "
-            "        GROUP BY employee_id "
-            ") "
-            "SELECT "
-            "    m.employee_id, "
-            "    m.employee_name, "
-            "    m.role_designation, "
-            "    m.department, "
-            "    m.location, "
-            "    m.photo_url, "
-            "    m.email_id, "
-            "    m.phone_number, "
-            "    m.date_of_joining, "
-            "    m.total_experience, "
-            "    m.experience_in_cd, "
-            "    m.shift, "
-            "    m.mode_of_work, "
-            "    CASE " +
-            "        " + notice_status_expr + " "
-            "        WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status "
-            "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
-            "        WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench' "
-            "        WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' "
-            "        WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' "
-            "        WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated' "
-            "        ELSE p.employee_status "
-            "    END as employee_status, "
-            "    CASE "
-            "        WHEN ap.priority_rank = 3 THEN 'billable' "
-            "        WHEN ap.priority_rank = 2 THEN 'non-billable' "
-            "        WHEN ap.priority_rank = 1 THEN 'billable' "
-            "        ELSE 'non-billable' "
-            "    END as billable, "
-            "    COALESCE(da.total_alloc, 0) as employee_allocations, "
-            "    m.date_of_resign, "
-            "    " + pip_start_expr + " as pip_start_date, "
-            "    " + pip_end_expr + " as pip_end_date, "
-            "    " + notice_start_expr + " as notice_start_date, "
-            "    " + notice_end_expr + " as notice_end_date, "
-            "    p.reporting_manager_id, "
-            "    mgr.employee_name as reporting_manager_name, "
-            "    " + dob_expr + " as date_of_birth, "
-            "    " + address_expr + " as address "
-            "FROM employee_master m "
-            "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
-            "LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id "
-            "LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id "
-            "LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id "
-            f"{id_filter}"
-        )
+        employee_query = textwrap.dedent(f"""
+            WITH AllocationPriority AS (
+                SELECT 
+                    employee_id, 
+                    MAX(CASE 
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 3 
+                        WHEN coalesce(allocation_percentage, 0) > 0 AND (LOWER(project_tags) LIKE '%%non%%' OR LOWER(project_tags) = 'no') THEN 2 
+                        WHEN coalesce(allocation_percentage, 0) = 0 AND LOWER(project_tags) IN ('billable', 'yes') THEN 1 
+                        ELSE 0 
+                    END) as priority_rank 
+                FROM projects_allocation 
+                WHERE (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE) 
+                GROUP BY employee_id
+            ), 
+            DynAlloc AS (
+                SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) as total_alloc 
+                    FROM projects_allocation pa 
+                    JOIN projects pj ON pa.project_id = pj.project_id 
+                    WHERE pa.allocation_start_date <= CURRENT_DATE 
+                      AND ( 
+                          pa.allocation_end_date IS NULL 
+                          OR pa.allocation_end_date >= CURRENT_DATE 
+                          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') 
+                      ) 
+                      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
+                    GROUP BY employee_id 
+            ) 
+            SELECT 
+                m.employee_id, 
+                m.employee_name, 
+                m.role_designation, 
+                m.department, 
+                m.location, 
+                m.photo_url, 
+                m.email_id, 
+                m.phone_number, 
+                m.date_of_joining, 
+                m.total_experience, 
+                m.experience_in_cd, 
+                m.shift, 
+                m.mode_of_work, 
+                CASE 
+                    {notice_status_expr} 
+                    WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status 
+                    WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status 
+                    WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench' 
+                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' 
+                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' 
+                    WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated' 
+                    ELSE p.employee_status 
+                END as employee_status, 
+                CASE 
+                    WHEN ap.priority_rank = 3 THEN 'billable' 
+                    WHEN ap.priority_rank = 2 THEN 'non-billable' 
+                    WHEN ap.priority_rank = 1 THEN 'billable' 
+                    ELSE 'non-billable' 
+                END as billable, 
+                COALESCE(da.total_alloc, 0) as employee_allocations, 
+                m.date_of_resign, 
+                {pip_start_expr} as pip_start_date, 
+                {pip_end_expr} as pip_end_date, 
+                {notice_start_expr} as notice_start_date, 
+                {notice_end_expr} as notice_end_date, 
+                p.reporting_manager_id, 
+                mgr.employee_name as reporting_manager_name, 
+                {dob_expr} as date_of_birth, 
+                {address_expr} as address 
+            FROM employee_master m 
+            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id 
+            LEFT JOIN AllocationPriority ap ON m.employee_id = ap.employee_id 
+            LEFT JOIN DynAlloc da ON m.employee_id = da.employee_id 
+            LEFT JOIN employee_master mgr ON p.reporting_manager_id = mgr.employee_id 
+            {id_filter}
+        """)
 
         cur.execute(employee_query, (employee_id,))
         employee_row = cur.fetchone()

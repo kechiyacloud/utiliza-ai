@@ -81,10 +81,6 @@ function Dashboard() {
     try {
       const saved = localStorage.getItem('dashboard_filters_v1');
       if (saved) return JSON.parse(saved);
-      
-      // Migration from old department-only filter
-      const oldDepts = localStorage.getItem('dashboard_department_filter_v2');
-      if (oldDepts) return { departments: JSON.parse(oldDepts), types: [], skills: [], locations: [], statusTags: [], designations: [] };
     } catch (err) {
       console.error('Failed to parse dashboard filters:', err);
     }
@@ -130,10 +126,9 @@ function Dashboard() {
         setLoading(true);
         
         // Pass signal to fetchDashboardData if possible, or handle post-fetch cancellation
-        const [dashRes, empListRes, todosRes, deptsRes] = await Promise.allSettled([
+        const [dashRes, empListRes, deptsRes] = await Promise.allSettled([
           fetchDashboardData(forceRefresh, filters),
           getEmployeeList(forceRefresh),
-          fetchTodos(),
           fetchDepartments()
         ]);
 
@@ -148,9 +143,6 @@ function Dashboard() {
           setAllEmployees(empListRes.value);
         }
 
-        if (todosRes.status === 'fulfilled') {
-          setActionableTodos(todosRes.value);
-        }
 
         if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && todosRes.status === 'rejected') {
           setError("Connection failed. Please ensure the backend is running.");

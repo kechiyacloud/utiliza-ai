@@ -74,88 +74,6 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
         ...(filters?.designations || [])
     ].length;
 
-    const employeeHasMatchingSkill = (employeeSkills = [], selectedSkills = []) => {
-        if (!selectedSkills.length) return true;
-
-        const normalizedEmployeeSkills = new Set(
-            (employeeSkills || []).map((skill) => normalizeSkillName(skill).toLowerCase()).filter(Boolean)
-        );
-
-        return selectedSkills.some((skill) => normalizedEmployeeSkills.has(normalizeSkillName(skill).toLowerCase()));
-    };
-
-    const filteredEmployees = employees.filter(emp => {
-        const sv = filters.search?.toLowerCase().trim();
-        const tagLabel = getEmployeeTag(emp.employee_status)?.label?.toLowerCase();
-        const matchesSearch = !sv || (
-            emp.employee_name?.toLowerCase().includes(sv) ||
-            emp.employee_id?.toLowerCase().includes(sv) ||
-            emp.role_designation?.toLowerCase().includes(sv) ||
-            emp.location?.toLowerCase().includes(sv) ||
-            emp.department?.toLowerCase().includes(sv) ||
-            tagLabel?.includes(sv) ||
-            (emp.employee_allocations !== null && emp.employee_allocations !== undefined && String(emp.employee_allocations).includes(sv)) ||
-            (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
-        );
-        const matchesDept = !filters?.departments?.length || filters.departments.includes(emp.department);
-        const matchesLocation = !filters?.locations?.length || filters.locations.includes(emp.location);
-        const matchesType = !filters?.types?.length || filters.types.includes(emp.employee_type);
-        const matchesSkills = employeeHasMatchingSkill(emp.skills, filters?.skills || []);
-        const matchesStatusTag = !filters?.statusTags?.length ||
-            filters.statusTags.includes(getEmployeeTag(emp.employee_status)?.label);
-        const matchesDesignation = !filters?.designations?.length ||
-            filters.designations.includes(emp.role_designation);
-
-        let matchesCardFilter = true;
-        if (filters?.cardFilter) {
-            if (typeof filters.cardFilter === 'object' && filters.cardFilter.type === 'employee-of-month') {
-                matchesCardFilter = emp.employee_id === filters.cardFilter.employeeId;
-            } else if (typeof filters.cardFilter === 'string') {
-                const now = new Date();
-                const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                switch (filters.cardFilter) {
-                    case 'billable': {
-                        const s = (emp.employee_status || '').toLowerCase();
-                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
-                        break;
-                    }
-                    case 'non-billable': {
-                        const s = (emp.employee_status || '').toLowerCase();
-                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
-                        break;
-                    }
-                    case 'bench': {
-                        const s = (emp.employee_status || '').toLowerCase();
-                        const isSpecialStatus = s.includes('notice') || s.includes('pip');
-                        matchesCardFilter = (emp.employee_allocations || 0) <= 0 && !isSpecialStatus;
-                        break;
-                    }
-                    case 'notice': {
-                        const s = (emp.employee_status || '').toLowerCase();
-                        matchesCardFilter = s.includes('notice') || s.includes('pip'); break;
-                    }
-                    case 'new-joiner': {
-                        const joiningDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                        const s = (emp.employee_status || '').toLowerCase();
-                        const isLeaving = s.includes('notice') || emp.date_of_resign;
-                        matchesCardFilter = joiningDate && joiningDate >= thirtyDaysAgo && !isLeaving;
-                        break;
-                    }
-                    case 'top-performer':
-                        matchesCardFilter = emp.employee_allocations >= 100; break;
-                    case 'overallocated':
-                        matchesCardFilter = (emp.employee_allocations || 0) > 100; break;
-                    default: matchesCardFilter = true;
-                }
-            }
-        }
-
-        return matchesSearch && matchesDept && matchesLocation && matchesType &&
-            matchesSkills && matchesCardFilter && matchesStatusTag && matchesDesignation;
-    });
-
     // Sort State with "Long Term Memory" (localStorage)
     const [sortConfig, setSortConfig] = useState(() => {
         const saved = localStorage.getItem('employee_sort_config');
@@ -176,7 +94,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
     ];
 
     const sortedEmployees = useMemo(() => {
-        const sortableItems = [...filteredEmployees];
+        const sortableItems = [...employees];
         if (sortConfig !== null) {
             sortableItems.sort((a, b) => {
                 let aVal = a[sortConfig.key];
@@ -191,28 +109,23 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
 
                 // Date logic
                 if (sortConfig.key === 'date_of_joining') {
-                    // YYYY-MM-DD strings sort perfectly as strings
-                    // We just need to handle the direction
                     if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
                     if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
                     return a.employee_name.localeCompare(b.employee_name);
                 }
 
-                // Numerical or String logic
+                // Numeric vs String
                 if (typeof aVal === 'number' && typeof bVal === 'number') {
-                    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-                    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-                } else {
-                    const strA = String(aVal).toLowerCase();
-                    const strB = String(bVal).toLowerCase();
-                    if (strA < strB) return sortConfig.direction === 'asc' ? -1 : 1;
-                    if (strA > strB) return sortConfig.direction === 'asc' ? 1 : -1;
+                    return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
                 }
-                return a.employee_name.localeCompare(b.employee_name);
+
+                const sA = String(aVal).toLowerCase();
+                const sB = String(bVal).toLowerCase();
+                return sortConfig.direction === 'asc' ? sA.localeCompare(sB) : sB.localeCompare(sA);
             });
         }
         return sortableItems;
-    }, [filteredEmployees, sortConfig]);
+    }, [employees, sortConfig]);
 
     const totalPages = Math.ceil(sortedEmployees.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -246,7 +159,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold text-gray-800">Organization Directory</h3>
                     <span className="text-sm font-medium text-gray-500 whitespace-nowrap">
-                        {filteredEmployees.length} employees
+                        {sortedEmployees.length} employees
                     </span>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -460,11 +373,11 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             </div>
 
             {/* Pagination Footer */}
-            {filteredEmployees.length > 0 && (
+            {employees.length > 0 && (
                 <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <div className="text-xs text-gray-500">
-                            Showing <span className="font-bold text-gray-700">{startIndex + 1}</span> to <span className="font-bold text-gray-700">{Math.min(startIndex + itemsPerPage, filteredEmployees.length)}</span> of <span className="font-bold text-gray-700">{filteredEmployees.length}</span>
+                            Showing <span className="font-bold text-gray-700">{startIndex + 1}</span> to <span className="font-bold text-gray-700">{Math.min(startIndex + itemsPerPage, employees.length)}</span> of <span className="font-bold text-gray-700">{employees.length}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Rows:</label>
@@ -517,7 +430,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
 
             {showExportModal && (
                 <ExportPreviewModal
-                    employees={filteredEmployees}
+                    employees={employees}
                     onClose={() => setShowExportModal(false)}
                 />
             )}

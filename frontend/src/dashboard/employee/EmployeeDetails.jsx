@@ -277,8 +277,10 @@ const EmployeeDetails = () => {
             sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
             eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
 
-            // If the project ends before today — exclude from timeline
-            if (eWeekRaw <= 0) {
+            // If the project status is NOT Ended/Completed, keep it visible even if date passed
+            const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
+            
+            if (eWeekRaw <= 0 && isEndedStatus) {
                 isVisibleInTimeline = false;
             }
             // If the project starts after the 90-day window — exclude
@@ -286,8 +288,9 @@ const EmployeeDetails = () => {
                 isVisibleInTimeline = false;
             } else {
                 // Clamp both ends to the visible [0, TOTAL_WEEKS] window
+                // If it ended in the past but is still active, show it as starting at week 0 and having at least 1 week duration
                 const sWeekClamped = Math.max(0, sWeekRaw);
-                const eWeekClamped = Math.min(TOTAL_WEEKS, eWeekRaw);
+                const eWeekClamped = Math.max(sWeekClamped + 1, Math.min(TOTAL_WEEKS, eWeekRaw));
 
                 startWeek = Math.floor(sWeekClamped);
                 durationWeeks = Math.max(1, Math.ceil(eWeekClamped - sWeekClamped));
@@ -301,7 +304,9 @@ const EmployeeDetails = () => {
         }
 
         // Determine if project is current (active as of today)
-        const isCurrent = sWeekRaw <= 0 && eWeekRaw >= 0;
+        // A project is current if it's currently running OR if its end date passed but it's not marked as Ended/Completed
+        const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
+        const isCurrent = sWeekRaw <= 0 && (eWeekRaw >= 0 || !isEndedStatus);
         const isFuture = sWeekRaw > 0;
 
         return {

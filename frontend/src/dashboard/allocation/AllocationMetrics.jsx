@@ -35,4 +35,6 @@ const AllocationMetrics = ({ metrics, highlightTag, onOverallocatedClick }) => {
     );
 };
 
+
+
 export default AllocationMetrics;
