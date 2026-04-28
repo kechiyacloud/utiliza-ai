@@ -110,6 +110,12 @@ const EmployeeDetails = () => {
         : 'Go Back';
 
     const handleGoBack = () => {
+        // Explicitly handle return to highlights for auto-scroll
+        if (location.state?.from === 'highlights') {
+            navigate('/info/dashboard', { state: { from: 'highlights' } });
+            return;
+        }
+
         if (returnTarget?.pathname) {
             const targetPath = `${returnTarget.pathname}${returnTarget.search || ''}${returnTarget.hash || ''}`;
             navigate(targetPath, { state: returnTarget.state || null });
@@ -265,20 +271,28 @@ const EmployeeDetails = () => {
         const rawStartDate = p?.start_date || p?.allocation_start_date || p?.project_start_date;
         const rawEndDate = p?.end_date || p?.allocation_end_date || p?.project_end_date;
 
+        const parseDateLocal = (str) => {
+            if (!str) return null;
+            const d = new Date(str);
+            if (isNaN(d.getTime())) return null;
+            // Normalize to local midnight to match TODAY's anchor
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        };
+
         if (rawStartDate || rawEndDate) {
             const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-            const pStart = rawStartDate && !isNaN(new Date(rawStartDate).getTime()) ? new Date(rawStartDate) : new Date(TODAY);
-            const pEnd = rawEndDate && !isNaN(new Date(rawEndDate).getTime())
-                ? new Date(rawEndDate)
-                : new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
+            const pStart = parseDateLocal(rawStartDate) || TODAY;
+            const pEnd = parseDateLocal(rawEndDate) || new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
 
             // Week offsets relative to TODAY
             sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
             eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
 
-            // If the project ends before today — exclude from timeline
-            if (eWeekRaw <= 0) {
+            // If the project status is NOT Ended/Completed, keep it visible even if date passed
+            const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
+            
+            if (eWeekRaw <= 0 && isEndedStatus) {
                 isVisibleInTimeline = false;
             }
             // If the project starts after the 90-day window — exclude
@@ -286,8 +300,9 @@ const EmployeeDetails = () => {
                 isVisibleInTimeline = false;
             } else {
                 // Clamp both ends to the visible [0, TOTAL_WEEKS] window
+                // If it ended in the past but is still active, show it as starting at week 0 and having at least 1 week duration
                 const sWeekClamped = Math.max(0, sWeekRaw);
-                const eWeekClamped = Math.min(TOTAL_WEEKS, eWeekRaw);
+                const eWeekClamped = Math.max(sWeekClamped + 1, Math.min(TOTAL_WEEKS, eWeekRaw));
 
                 startWeek = Math.floor(sWeekClamped);
                 durationWeeks = Math.max(1, Math.ceil(eWeekClamped - sWeekClamped));
@@ -301,8 +316,13 @@ const EmployeeDetails = () => {
         }
 
         // Determine if project is current (active as of today)
-        const isCurrent = sWeekRaw <= 0 && eWeekRaw >= 0;
-        const isFuture = sWeekRaw > 0;
+        // A project is current if it's currently running (starts today or earlier) 
+        // AND if its end date hasn't passed (or it's not marked as Ended/Completed)
+        const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
+        
+        // Use a small epsilon (0.01) to handle floating point precision and ensure "Today" is current
+        const isCurrent = sWeekRaw <= 0.01 && (eWeekRaw >= -0.01 || !isEndedStatus);
+        const isFuture = sWeekRaw > 0.01;
 
         return {
             name: p.project_name || p.name,

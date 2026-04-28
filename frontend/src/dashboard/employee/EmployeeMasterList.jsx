@@ -61,8 +61,6 @@ function EmployeeMasterList() {
   const location = useLocation();
   const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
   const { showArchived, showDeleted } = useEmployees();
-  const [showArchivedLocal, setShowArchivedLocal] = useState(false); // We still need this for internal table filtering if we don't want to re-fetch? 
-  // Wait, let's use the context ones for the fetch.
 
   // Department chip selector
   const [selectedDepts, setSelectedDepts] = useState(() => {
@@ -154,6 +152,36 @@ function EmployeeMasterList() {
       return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig && matchesSearch;
     });
   }, [allEmployees, combinedFilters]);
+
+  const finalEmployees = useMemo(() => {
+    if (!cardFilter) return baseGroup;
+
+    const thirtyDaysAgo = new Date(new Date().getTime() - (30 * 24 * 60 * 60 * 1000));
+
+    return baseGroup.filter(emp => {
+      const s = (emp.employee_status || '').toLowerCase();
+      const isSpecialStatus = s.includes('notice') || s.includes('pip');
+      const billable = (emp.billable || '').toLowerCase();
+
+      switch (cardFilter) {
+        case 'billable':
+          return billable === 'billable' && !isSpecialStatus;
+        case 'non-billable':
+          return billable.includes('non') && !isSpecialStatus;
+        case 'bench':
+          return (emp.employee_allocations || 0) <= 0 && !isSpecialStatus;
+        case 'notice':
+          return isSpecialStatus;
+        case 'new-joiner': {
+          const joinDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
+          const isLeaving = isSpecialStatus || emp.date_of_resign;
+          return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
+        }
+        default:
+          return true;
+      }
+    });
+  }, [baseGroup, cardFilter]);
 
   const contextLabel = combinedFilters.departments?.length > 0 ? 'Team' : 'Organization';
 
@@ -362,7 +390,7 @@ function EmployeeMasterList() {
         <div className='flex-1 w-full mt-4'>
           <EmployeeTable
             contextLabel={contextLabel}
-            employees={allEmployees}
+            employees={finalEmployees}
             loading={loading}
             onEmployeeClick={(emp) => navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, { state: { employee: emp } })}
             onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}

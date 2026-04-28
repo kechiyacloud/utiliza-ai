@@ -4,7 +4,7 @@ import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
 import PhoneInputField from '../../components/PhoneInputField';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
-import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
@@ -55,7 +55,8 @@ const AddEmployee = () => {
         project_allocation: 0,
         daily_hours: 0,
         project_start_date: '',
-        project_end_date: ''
+        project_end_date: '',
+        project_tags: 'billable'
     });
     const [showPreview, setShowPreview] = useState(false); // Track if preview tab should be visible
     const [completedSections, setCompletedSections] = useState([]); // Track which sections are completed
@@ -67,6 +68,10 @@ const AddEmployee = () => {
     const [shiftPreset, setShiftPreset] = useState('');
     const [shiftStart, setShiftStart] = useState('');
     const [shiftEnd, setShiftEnd] = useState('');
+    const [isAddingNewDept, setIsAddingNewDept] = useState(false);
+    const [isAddingNewDesig, setIsAddingNewDesig] = useState(false);
+    const [newDeptName, setNewDeptName] = useState('');
+    const [newDesigName, setNewDesigName] = useState('');
 
     const SHIFT_PRESETS = [
         { label: 'General',    start: '10:00', end: '19:00' },
@@ -176,7 +181,8 @@ const AddEmployee = () => {
                     project_role: p.project_role || '',
                     project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation, 10) || 0),
                     project_start_date: normalizeDate(p.project_start_date || p.allocation_start_date || p.start_date),
-                    project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date)
+                    project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date),
+                    project_tags: p.project_tags || p.billable || 'billable'
                 }))
             });
 
@@ -209,19 +215,10 @@ const AddEmployee = () => {
         };
 
         const loadEditData = async () => {
-            if (!isEditMode) return;
-
-            const hasRequiredIdentity = editData?.employee_name || editData?.name;
-            const hasJoiningDate = editData?.date_of_joining || editData?.joiningDate;
-
-            if (hasRequiredIdentity && hasJoiningDate) {
-                applyEditData(editData);
-                return;
-            }
-
-            if (!editEmployeeId) return;
+            if (!isEditMode || !editEmployeeId) return;
 
             try {
+                // Always fetch fresh data from API to ensure we have the latest record
                 const fullEmployee = await getEmployeeById(editEmployeeId);
                 applyEditData(fullEmployee);
             } catch (error) {
@@ -246,16 +243,26 @@ const AddEmployee = () => {
 
     useEffect(() => {
         const loadMetadata = async () => {
-            try {
-                const [depts, locs] = await Promise.all([
-                    getDepartments(),
-                    getLocations()
-                ]);
-                setDynamicDepartments(depts || []);
-                setDynamicLocations(locs || []);
-            } catch (err) {
-                console.error('Failed to load metadata lists', err);
-            }
+            // Load each metadata list independently so one failure doesn't block others
+            
+            // 1. Load Departments
+            getDepartments()
+                .then(depts => setDynamicDepartments(depts || []))
+                .catch(e => console.error("Cloud: Department load failed", e));
+                
+            // 2. Load Locations
+            getLocations()
+                .then(locs => setDynamicLocations(locs || []))
+                .catch(e => console.error("Cloud: Location load failed", e));
+                
+            // 3. Load Projects (The 'Same Process' as project page)
+            fetchProjectsData()
+                .then(projRes => {
+                    const list = projRes?.data?.projects || [];
+                    console.log(`Cloud: Loaded ${list.length} projects for assignment`);
+                    setAllProjects(list);
+                })
+                .catch(e => console.error("Cloud: Project load failed", e));
         };
         loadMetadata();
     }, []);
@@ -423,21 +430,30 @@ const AddEmployee = () => {
         }));
     };
 
+    const stripLeadingZeros = (val) => {
+        if (val === '' || val === null || val === undefined) return '';
+        const str = String(val);
+        // Remove leading zeros but keep one if followed by a digit (e.g. 01 -> 1, 001 -> 1, 0 -> 0)
+        return str.replace(/^0+(?=\d)/, '');
+    };
+
     const handleProjectChange = (field, value) => {
         if (field === 'project_allocation') {
-            const pct = parseInt(value) || 0;
+            const cleanValue = stripLeadingZeros(value);
+            const pct = parseInt(cleanValue) || 0;
             const hours = (pct / 100) * 8;
             setCurrentProject(prev => ({ 
                 ...prev, 
-                project_allocation: pct,
+                project_allocation: cleanValue === '' ? '' : pct,
                 daily_hours: Math.round(hours * 100) / 100
             }));
         } else if (field === 'daily_hours') {
-            const hours = parseFloat(value) || 0;
+            const cleanValue = stripLeadingZeros(value);
+            const hours = parseFloat(cleanValue) || 0;
             const pct = (hours / 8) * 100;
             setCurrentProject(prev => ({ 
                 ...prev, 
-                daily_hours: hours,
+                daily_hours: cleanValue === '' ? '' : hours,
                 project_allocation: Math.round(pct)
             }));
         } else {
@@ -633,6 +649,16 @@ const AddEmployee = () => {
 
         setLoading(true);
         try {
+            // Handle new metadata creation first if needed
+            if (isAddingNewDept && newDeptName.trim()) {
+                await createDepartment(newDeptName.trim());
+                formData.department = newDeptName.trim();
+            }
+            if (isAddingNewDesig && newDesigName.trim()) {
+                await createDesignation(newDesigName.trim());
+                formData.role_designation = newDesigName.trim();
+            }
+
             const payload = {
                 employee_id: formData.employee_id,
                 employee_name: formData.employee_name,
@@ -673,7 +699,10 @@ const AddEmployee = () => {
 
             triggerRefresh(); // global signal that data changed
             clearDashboardCache(); // Sync dashboard
-            navigate('/info/employee');
+            
+            // Redirect to the newly created/updated employee details page
+            const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id;
+            navigate(`/info/employee/${targetId}`);
         } catch (error) {
             console.error('Error saving employee:', error);
             const detail = error.response?.data?.detail;
@@ -859,18 +888,55 @@ const AddEmployee = () => {
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Department *</label>
-                    <select
-                        name="department"
-                        value={formData.department}
-                        onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.department ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        required
-                    >
-                        <option value="">Select Department</option>
-                        {departments.map(dept => (
-                            <option key={dept} value={dept}>{dept}</option>
-                        ))}
-                    </select>
+                    {!isAddingNewDept ? (
+                        <div className="flex gap-2">
+                            <select
+                                name="department"
+                                value={formData.department}
+                                onChange={(e) => {
+                                    if (e.target.value === 'ADD_NEW') {
+                                        setIsAddingNewDept(true);
+                                        setFormData(prev => ({ ...prev, department: '' }));
+                                    } else {
+                                        handleInputChange(e);
+                                    }
+                                }}
+                                className={`flex-1 px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.department ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                                required
+                            >
+                                <option value="">Select Department</option>
+                                {departments.map(dept => (
+                                    <option key={dept} value={dept}>{dept}</option>
+                                ))}
+                                <option value="ADD_NEW" className="text-blue-600 font-bold">+ Add New Department</option>
+                            </select>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                placeholder="Enter new department"
+                                value={newDeptName}
+                                onChange={(e) => {
+                                    setNewDeptName(e.target.value);
+                                    setFormData(prev => ({ ...prev, department: e.target.value }));
+                                }}
+                                className="flex-1 px-3 py-2 border border-blue-300 bg-blue-50 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                                autoFocus
+                            />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsAddingNewDept(false);
+                                    setNewDeptName('');
+                                    setFormData(prev => ({ ...prev, department: '' }));
+                                }}
+                                className="px-2 py-1 text-xs text-gray-500 hover:text-red-500 font-bold"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
                     {errors.department && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.department}</p>}
                 </div>
             </div>
@@ -995,10 +1061,10 @@ const AddEmployee = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <optgroup label="Auto-calculated (based on projects)">
-                                <option value="Bench" disabled={formData.projects.length > 0 && formData.projects.some(p => p.project_allocation > 0)}>Bench</option>
-                                <option value="Partially bench" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially bench</option>
-                                <option value="Partially allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially allocated</option>
-                                <option value="Allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Allocated</option>
+                                <option value="Bench">Bench</option>
+                                <option value="Partially bench">Partially bench</option>
+                                <option value="Partially allocated">Partially allocated</option>
+                                <option value="Allocated">Allocated</option>
                             </optgroup>
                             <optgroup label="Manually set">
                                 <option value="Notice period">Notice period</option>
@@ -1249,21 +1315,28 @@ const AddEmployee = () => {
                 <div className="space-y-3">
                     <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1">Project <span className="text-red-500">*</span></label>
-                        <select
-                            value={currentProject.project_id}
-                            onChange={(e) => handleProjectChange('project_id', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                            <option value="">Select Project</option>
-                            {allProjects.map(proj => (
-                                <option key={proj.id} value={proj.id}>
-                                    {proj.name} ({proj.id})
-                                </option>
-                            ))}
-                        </select>
+                        {allProjects.length > 0 ? (
+                            <select
+                                value={currentProject.project_id}
+                                onChange={(e) => handleProjectChange('project_id', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Select Project</option>
+                                {allProjects.map(proj => (
+                                    <option key={proj.id} value={proj.id}>
+                                        {proj.name} {proj.client ? ` - ${proj.client}` : ''} {proj.status ? `(${proj.status})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
+                                <p className="font-bold mb-1">No Projects Found</p>
+                                <p>Please ensure projects are created in the database before assigning them.</p>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project <span className="text-red-500">*</span></label>
                             <input
@@ -1273,6 +1346,17 @@ const AddEmployee = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Developer, Lead, etc."
                             />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Billability <span className="text-red-500">*</span></label>
+                            <select
+                                value={currentProject.project_tags}
+                                onChange={(e) => handleProjectChange('project_tags', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="billable">Billable</option>
+                                <option value="non-billable">Non-billable</option>
+                            </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day <span className="text-red-500">*</span></label>
@@ -1355,7 +1439,7 @@ const AddEmployee = () => {
                                         {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
                                     </p>
                                     <p className="text-xs text-gray-600">
-                                        {project.project_role} · {project.project_allocation}% allocation 
+                                        {project.project_role} · <span className={project.project_tags === 'billable' ? 'text-blue-600 font-medium' : 'text-amber-600 font-medium'}>{project.project_tags === 'billable' ? 'Billable' : 'Non-billable'}</span> · {project.project_allocation}% allocation 
                                         ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)
                                     </p>
                                 </div>

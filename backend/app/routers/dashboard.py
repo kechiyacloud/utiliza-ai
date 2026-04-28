@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
-from typing import Optional
+from typing import Optional, List
 from app.database import get_db_connection, release_db_connection, db_cursor
 from pydantic import BaseModel
 import io
 import csv
 import traceback
-from datetime import datetime
+import textwrap
+from datetime import datetime, date
 from app.auth_utils import get_current_user
 
 class TodoItem(BaseModel):
@@ -16,6 +17,12 @@ class TodoItem(BaseModel):
 class TodoUpdate(BaseModel):
     message: str
     type: str = "info"
+
+class DepartmentCreate(BaseModel):
+    name: str
+
+class DesignationCreate(BaseModel):
+    name: str
 
 router = APIRouter()
 
@@ -31,6 +38,17 @@ async def get_departments():
             cur.execute("SELECT DISTINCT department FROM employee_master WHERE department IS NOT NULL AND department != '' ORDER BY department")
         depts = [r[0] for r in cur.fetchall()]
         return depts
+
+@router.post("/dashboard/departments")
+async def create_department(dept: DepartmentCreate):
+    with db_cursor() as cur:
+        # Check if already exists
+        cur.execute("SELECT 1 FROM departments WHERE LOWER(department_name) = LOWER(%s)", (dept.name,))
+        if cur.fetchone():
+            return {"message": "Department already exists"}
+        
+        cur.execute("INSERT INTO departments (department_name) VALUES (%s)", (dept.name,))
+        return {"message": "Department created successfully"}
 
 @router.get("/dashboard/designations")
 async def get_designations():
@@ -53,6 +71,17 @@ async def get_designations():
                 unified.add(norm)
         
         return sorted(list(unified))
+
+@router.post("/dashboard/designations")
+async def create_designation(desig: DesignationCreate):
+    with db_cursor() as cur:
+        # Check if already exists
+        cur.execute("SELECT 1 FROM designations WHERE LOWER(designation_name) = LOWER(%s)", (desig.name,))
+        if cur.fetchone():
+            return {"message": "Designation already exists"}
+        
+        cur.execute("INSERT INTO designations (designation_name) VALUES (%s)", (desig.name,))
+        return {"message": "Designation created successfully"}
 
 @router.get("/dashboard/all")
 def get_dashboard_all(
@@ -88,7 +117,7 @@ def get_dashboard_all(
             'desig': desig_list,
             'loc': loc_list,
             'type': type_list,
-            'skills': [f"%{s}%" for s in skill_list]
+            'skills': skill_list
         }
         
         # Base filters: only show active, non-deleted employees
@@ -98,7 +127,7 @@ def get_dashboard_all(
         m_filter = m_base
         e_filter = e_base
 
-        if department and department != 'All Departments':
+        if dept_list:
             m_filter += " AND m.department = ANY(%(dept)s) "
             e_filter += " AND e.department = ANY(%(dept)s) "
         
@@ -119,13 +148,6 @@ def get_dashboard_all(
             m_filter += " AND EXISTS (SELECT 1 FROM UNNEST(m.skills) s WHERE s ILIKE ANY(%(skills)s)) "
             e_filter += " AND EXISTS (SELECT 1 FROM UNNEST(e.skills) s WHERE s ILIKE ANY(%(skills)s)) "
 
-        # Forecast needs to allow NULL employee_id rows to show empty months
-        e_filter_with_null = e_filter.replace("e.department", "(e.department")
-        if "ANY(%(dept)s)" in e_filter_with_null:
-             e_filter_with_null = e_filter_with_null.replace("ANY(%(dept)s)", "ANY(%(dept)s) OR pa.employee_id IS NULL)")
-        else:
-             e_filter_with_null = e_filter # Fallback
-
         if status_list:
             status_clauses = []
             if 'bench' in status_list:
@@ -140,11 +162,6 @@ def get_dashboard_all(
                 e_status_clauses = [c.replace("m.employee_id", "e.employee_id") for c in status_clauses]
                 e_filter += " AND (" + " OR ".join(e_status_clauses) + ") "
 
-        e_filter_with_null = ""
-        if e_filter.strip():
-            # For the Forecast query, we need to allow pa.employee_id IS NULL to show months with no allocations
-            e_filter_with_null = " AND ((" + e_filter.strip()[4:] + ") OR pa.employee_id IS NULL) "
-            
         # Standardize params for all queries
         dept_params = named_params
 
@@ -153,10 +170,12 @@ def get_dashboard_all(
         # ==============================================================
         print(" -> Batch 1: Core Metrics")
         try:
-            # Fetch all core headcounts in one go using named params
-            cur.execute(f"""
+            core_metrics_query = textwrap.dedent(f"""
                 SELECT
-                    (SELECT COUNT(*) FROM employee_master m WHERE 1=1 {m_filter}),
+                    (SELECT COUNT(*) FROM employee_master m 
+                     WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                       AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
+                       {m_filter}),
                     (SELECT COUNT(*) FROM employee_master m JOIN employee_master_pro p ON m.employee_id=p.employee_id
                      WHERE (p.employee_status ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status ILIKE CHR(37)||'pip'||CHR(37)) {m_filter}),
                     (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
@@ -164,7 +183,11 @@ def get_dashboard_all(
                      JOIN employee_master m ON pa.employee_id=m.employee_id
                      LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                      WHERE pa.allocation_start_date <= CURRENT_DATE
-                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date>=CURRENT_DATE)
+                       AND (
+                           pa.allocation_end_date IS NULL 
+                           OR pa.allocation_end_date >= CURRENT_DATE
+                           OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                       )
                        AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') 
                        AND (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
@@ -179,7 +202,11 @@ def get_dashboard_all(
                            JOIN projects pj_sub ON pa_sub.project_id = pj_sub.project_id
                            WHERE pa_sub.employee_id = m.employee_id 
                              AND pa_sub.allocation_start_date <= CURRENT_DATE
-                             AND (pa_sub.allocation_end_date IS NULL OR pa_sub.allocation_end_date >= CURRENT_DATE)
+                             AND (
+                                 pa_sub.allocation_end_date IS NULL 
+                                 OR pa_sub.allocation_end_date >= CURRENT_DATE
+                                 OR LOWER(pj_sub.project_status) IN ('in-progress', 'active', 'ongoing')
+                             )
                              AND COALESCE(LOWER(pj_sub.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        ), 0) <= 0),
                     (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
@@ -187,11 +214,24 @@ def get_dashboard_all(
                      JOIN employee_master m ON pa.employee_id=m.employee_id
                      LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                      WHERE pa.allocation_start_date <= CURRENT_DATE
-                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date>=CURRENT_DATE)
+                       AND (
+                           pa.allocation_end_date IS NULL 
+                           OR pa.allocation_end_date >= CURRENT_DATE
+                           OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                       )
                        AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags)='no') 
                        AND (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
-                       {m_filter} AND pa.allocation_percentage > 0),
+                       {m_filter} AND pa.allocation_percentage > 0
+                       AND NOT EXISTS (
+                           SELECT 1 FROM projects_allocation pa2
+                           JOIN projects pj2 ON pa2.project_id = pj2.project_id
+                           WHERE pa2.employee_id = pa.employee_id
+                             AND (LOWER(pa2.project_tags)='billable' OR LOWER(pa2.project_tags)='yes' OR LOWER(pa2.project_tags)='y')
+                             AND pa2.allocation_start_date <= CURRENT_DATE
+                             AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                             AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                       )),
                     (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
                      LEFT JOIN projects pj ON pa.project_id = pj.project_id
                      JOIN employee_master m ON pa.employee_id=m.employee_id
@@ -214,13 +254,14 @@ def get_dashboard_all(
                     (SELECT COUNT(*) FROM employee_master m 
                      WHERE m.date_of_joining >= CURRENT_DATE - INTERVAL '30 days'
                      {m_filter})
-            """, dept_params)
+            """)
+            cur.execute(core_metrics_query, dept_params)
             core_row = cur.fetchone()
             total_emp, notice_p, billable_hc, bench_hc, non_billable_hc, upcoming_bench, new_join_hc = core_row
             
             infocards = {
                 "totalEmployees": {"value": total_emp, "label": "Total Employees", "change": "+0% this month"},
-                "activeClients": {"value": (SELECT_COUNT_CLIENTS := 0), "label": "Active Clients", "change": "Stable"}, # Placeholder for next fetch
+                "activeClients": {"value": 0, "label": "Active Clients", "change": "Stable"},
                 "runningProjects": {"value": 0, "label": "Running Projects", "change": "Active now"},
                 "benchEmployees": {"value": bench_hc, "label": "Employees on Bench", "change": "Available"},
                 "newJoiners": {"value": new_join_hc, "label": "New Joiners", "change": "Last 30 days"}
@@ -250,31 +291,61 @@ def get_dashboard_all(
                         DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
                         INTERVAL '1 month'
                     ) AS month_start
+                ),
+                ActiveEmployees AS (
+                    -- Total HC: same filter as totalEmployees KPI card.
+                    -- Notice/PIP employees are still headcount, so they are included here.
+                    -- allocate + available for any month = HC for that month.
+                    SELECT m.employee_id, m.date_of_resign, m.date_of_joining
+                    FROM employee_master m
+                    WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                      {m_filter}
+                ),
+                MonthEmployeeStatus AS (
+                    SELECT
+                        mo.month_start,
+                        ae.employee_id,
+                        (
+                            SELECT COALESCE(SUM(pa.allocation_percentage), 0)
+                            FROM projects_allocation pa
+                            JOIN projects pj ON pa.project_id = pj.project_id
+                            WHERE pa.employee_id = ae.employee_id
+                              AND pa.allocation_start_date <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+                              AND (
+                                  pa.allocation_end_date IS NULL
+                                  OR pa.allocation_end_date >= mo.month_start
+                                  OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                              )
+                              AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                        ) AS total_alloc
+                    FROM months mo
+                    CROSS JOIN ActiveEmployees ae
+                    -- Reduce HC in future months when someone's resign date falls before that month.
+                    -- date_of_resign in m_filter already excludes resigned-today employees;
+                    -- this per-month check drops future leavers from the correct month onward.
+                    WHERE (ae.date_of_resign IS NULL OR ae.date_of_resign >= mo.month_start)
+                      AND (ae.date_of_joining IS NULL OR ae.date_of_joining <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day'))
                 )
-                SELECT TO_CHAR(mo.month_start, 'Mon'),
-                    COUNT(DISTINCT pa.employee_id)
-                FROM months mo
-                LEFT JOIN projects_allocation pa
-                  ON pa.allocation_start_date <= (CASE WHEN DATE_TRUNC('month', mo.month_start) = DATE_TRUNC('month', CURRENT_DATE) THEN CURRENT_DATE ELSE (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day') END)
-                 AND (pa.allocation_end_date >= (CASE WHEN DATE_TRUNC('month', mo.month_start) = DATE_TRUNC('month', CURRENT_DATE) THEN CURRENT_DATE ELSE mo.month_start END) OR pa.allocation_end_date IS NULL)
-                LEFT JOIN projects pj ON pa.project_id = pj.project_id
-                LEFT JOIN employee_master e ON pa.employee_id = e.employee_id
-                WHERE (e.is_deleted IS FALSE OR e.is_deleted IS NULL OR pa.employee_id IS NULL)
-                  AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE OR pa.employee_id IS NULL)
-                  AND (pa.allocation_id IS NULL OR (pa.allocation_percentage > 0 AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')))
-                {e_filter_with_null}
-                GROUP BY mo.month_start ORDER BY mo.month_start
+                SELECT
+                    TO_CHAR(month_start, 'Mon'),
+                    COUNT(*) FILTER (WHERE total_alloc > 0)  AS allocate_count,
+                    COUNT(*) FILTER (WHERE total_alloc <= 0) AS available_count
+                FROM MonthEmployeeStatus
+                GROUP BY month_start
+                ORDER BY month_start
             """, dept_params)
             
             forecast = []
             for r in cur.fetchall():
                 allocate_count = int(r[1])
-                ratio = round((allocate_count / max(1, total_emp)) * 100, 1)
+                available_count = int(r[2])
+                total_active = allocate_count + available_count
+                ratio = round((allocate_count / max(1, total_active)) * 100, 1) if total_active > 0 else 0
                 forecast.append({
                     "month": r[0], 
                     "allocate": allocate_count, 
                     "allocations": allocate_count,
-                    "available": max(total_emp - allocate_count, 0),
+                    "available": available_count,
                     "ratio": ratio
                 })
             allocation_3m = forecast # Shared with high-level allocation card
@@ -294,40 +365,56 @@ def get_dashboard_all(
                 FROM projects p
                 JOIN projects_allocation pa ON p.project_id = pa.project_id
                 JOIN employee_master e ON pa.employee_id = e.employee_id
-                WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                WHERE (
+                    pa.allocation_end_date IS NULL 
+                    OR pa.allocation_end_date >= CURRENT_DATE
+                    OR LOWER(p.project_status) IN ('in-progress', 'active', 'ongoing')
+                )
                   AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                   {e_filter}
                 GROUP BY p.project_name ORDER BY resource_count DESC LIMIT 5
             """, dept_params)
             high_allocation = [{"project_name": r[0], "resource_count": r[1]} for r in cur.fetchall()]
 
-            # Top Performers
+            # Top Performers (Dynamic calculation to avoid cache lag)
             cur.execute(f"""
-                SELECT e.employee_id, e.employee_name, e.role_designation, COALESCE(p.employee_allocations,0)
+                WITH AllocAgg AS (
+                    SELECT 
+                        pa.employee_id, 
+                        SUM(pa.allocation_percentage) as total_alloc
+                    FROM projects_allocation pa
+                    JOIN projects pj ON pa.project_id = pj.project_id
+                    WHERE pa.allocation_start_date <= CURRENT_DATE
+                      AND (
+                          pa.allocation_end_date IS NULL 
+                          OR pa.allocation_end_date >= CURRENT_DATE
+                          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                      )
+                      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                    GROUP BY pa.employee_id
+                )
+                SELECT e.employee_id, e.employee_name, e.role_designation, COALESCE(aa.total_alloc, 0)
                 FROM employee_master e
-                LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
+                LEFT JOIN AllocAgg aa ON e.employee_id = aa.employee_id
                 WHERE (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE)
                   AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
                   {e_filter}
-                ORDER BY p.employee_allocations DESC NULLS LAST LIMIT 5
+                ORDER BY COALESCE(aa.total_alloc, 0) DESC NULLS LAST LIMIT 5
             """, dept_params)
             top_performers = [{"employee_id": r[0],"name": r[1],"role": r[2].replace('CSE','Cloud Solution Engineer') if r[2] else 'Resource',"allocation": r[3]} for r in cur.fetchall()]
 
             # Upcoming Availability
             cur.execute(f"""
-                SELECT e.employee_name, COALESCE(p.project_name, 'Internal'), pa.allocation_end_date, pa.allocation_percentage
-                FROM projects_allocation pa
-                JOIN employee_master e ON pa.employee_id = e.employee_id
-                LEFT JOIN projects p ON pa.project_id = p.project_id
+                SELECT m.employee_name, pj.project_name, pa.allocation_end_date, pa.allocation_percentage, m.employee_id
+                FROM employee_master m
+                JOIN projects_allocation pa ON m.employee_id = pa.employee_id
+                JOIN projects pj ON pa.project_id = pj.project_id
                 WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-                  AND pa.allocation_start_date <= CURRENT_DATE
-                  AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
-                  AND e.date_of_resign IS NULL
-                  AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                  {e_filter}
-                ORDER BY pa.allocation_end_date ASC LIMIT 10
+                  AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                  {m_filter}
+                ORDER BY pa.allocation_end_date ASC
             """, dept_params)
-            availability = [{"name": r[0], "project": r[1], "releaseDate": r[2].isoformat() if r[2] else None, "allocation": r[3]} for r in cur.fetchall()]
+            availability = [{"name": r[0], "project": r[1], "releaseDate": r[2].isoformat() if r[2] else None, "allocation": r[3], "id": r[4]} for r in cur.fetchall()]
 
         except Exception as e:
             print("Error in Batch 3 Lists:")
@@ -338,29 +425,74 @@ def get_dashboard_all(
         # BATCH 4: Transitions & Skills
         # ==============================================================
         try:
-            # Transitions (Resilient tracking for last 90 days)
+            # Transitions (Resilient tracking for last 30 days)
             cur.execute(f"""
-                SELECT 
-                    e.employee_name,
-                    (SELECT COALESCE(prev_p.project_name, 'Bench') 
-                     FROM projects_allocation pa_prev 
-                     LEFT JOIN projects prev_p ON pa_prev.project_id = prev_p.project_id
-                     WHERE pa_prev.employee_id = pa.employee_id 
-                       AND pa_prev.allocation_start_date < pa.allocation_start_date
-                     ORDER BY pa_prev.allocation_start_date DESC LIMIT 1) as from_project,
-                    COALESCE(p.project_name, 'Bench') as to_project,
-                    pa.allocation_start_date,
-                    e.role_designation
-                FROM projects_allocation pa
-                JOIN employee_master e ON e.employee_id = pa.employee_id
-                LEFT JOIN projects p ON p.project_id = pa.project_id
-                WHERE pa.allocation_start_date >= CURRENT_DATE - INTERVAL '90 days'
-                  AND pa.allocation_start_date < CURRENT_DATE
-                  AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
-                  {e_filter}
-                ORDER BY pa.allocation_start_date DESC LIMIT 10
+                WITH Transitions AS (
+                    SELECT 
+                        e.employee_name,
+                        (SELECT COALESCE(prev_p.project_name, 'Bench') 
+                         FROM projects_allocation pa_prev 
+                         LEFT JOIN projects prev_p ON pa_prev.project_id = prev_p.project_id
+                         WHERE pa_prev.employee_id = pa.employee_id 
+                           AND pa_prev.allocation_start_date < pa.allocation_start_date
+                         ORDER BY pa_prev.allocation_start_date DESC LIMIT 1) as from_project,
+                        COALESCE(p.project_name, 'Bench') as to_project,
+                        pa.allocation_start_date,
+                        e.role_designation,
+                        CASE 
+                            WHEN (SELECT COUNT(*) FROM projects_allocation pa_cnt WHERE pa_cnt.employee_id = e.employee_id AND pa_cnt.allocation_start_date < pa.allocation_start_date) = 0 
+                                 AND COALESCE(p.project_name, 'Bench') != 'Bench' THEN 'New Assignment'
+                            WHEN (SELECT COALESCE(prev_p.project_name, 'Bench') FROM projects_allocation pa_prev LEFT JOIN projects prev_p ON pa_prev.project_id = prev_p.project_id WHERE pa_prev.employee_id = pa.employee_id AND pa_prev.allocation_start_date < pa.allocation_start_date ORDER BY pa_prev.allocation_start_date DESC LIMIT 1) = 'Bench' 
+                                 AND COALESCE(p.project_name, 'Bench') != 'Bench' THEN 'Project Entry'
+                            WHEN (SELECT COALESCE(prev_p.project_name, 'Bench') FROM projects_allocation pa_prev LEFT JOIN projects prev_p ON pa_prev.project_id = prev_p.project_id WHERE pa_prev.employee_id = pa.employee_id AND pa_prev.allocation_start_date < pa.allocation_start_date ORDER BY pa_prev.allocation_start_date DESC LIMIT 1) != 'Bench' 
+                                 AND COALESCE(p.project_name, 'Bench') = 'Bench' THEN 'Roll-off'
+                            ELSE 'Transfer'
+                        END as movement_type,
+                        e.employee_id
+                    FROM projects_allocation pa
+                    JOIN employee_master e ON e.employee_id = pa.employee_id
+                    LEFT JOIN projects p ON p.project_id = pa.project_id
+                    WHERE pa.allocation_start_date >= CURRENT_DATE - INTERVAL '30 days'
+                      AND pa.allocation_start_date <= CURRENT_DATE
+                      AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
+                      {e_filter}
+                ),
+                Resignations AS (
+                    -- Includes both people who just left (Exit) and people currently in Notice Period (Notice)
+                    SELECT 
+                        e.employee_name,
+                        'Active' as from_project,
+                        CASE 
+                            WHEN p.employee_status ILIKE '%%notice%%' OR e.date_of_resign > CURRENT_DATE THEN 'Notice Period'
+                            ELSE 'Resigned'
+                        END as to_project,
+                        -- Use NULL for active Notice period so frontend can show "Current" status instead of a fake date.
+                        -- Use the actual date_of_resign only if it is in the past (actual Exit).
+                        CASE 
+                            WHEN p.employee_status ILIKE '%%notice%%' OR e.date_of_resign > CURRENT_DATE THEN NULL
+                            ELSE e.date_of_resign
+                        END as allocation_start_date,
+                        e.role_designation,
+                        CASE 
+                            WHEN p.employee_status ILIKE '%%notice%%' OR e.date_of_resign > CURRENT_DATE THEN 'Notice'
+                            ELSE 'Exit'
+                        END as movement_type,
+                        e.employee_id
+                    FROM employee_master e
+                    LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
+                    WHERE (
+                        (e.date_of_resign >= CURRENT_DATE - INTERVAL '30 days' AND e.date_of_resign <= CURRENT_DATE + INTERVAL '60 days')
+                        OR p.employee_status ILIKE '%%notice%%'
+                    )
+                      AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
+                      {e_filter}
+                )
+                SELECT * FROM Transitions
+                UNION ALL
+                SELECT DISTINCT ON (employee_name) * FROM Resignations
+                ORDER BY allocation_start_date DESC NULLS FIRST -- Show active status at the top
             """, dept_params)
-            transitions = [{"employee": r[0], "from_project": r[1], "to_project": r[2], "date": r[3], "role": r[4]} for r in cur.fetchall()]
+            transitions = [{"employee": r[0], "from_project": r[1], "to_project": r[2], "date": r[3], "role": r[4], "type": r[5], "id": r[6]} for r in cur.fetchall()]
 
             # Skills Gap (Optimized)
             cur.execute(f"""
@@ -370,7 +502,7 @@ def get_dashboard_all(
                 LEFT JOIN employee_master m ON es.employee_id = m.employee_id
                 LEFT JOIN project_skills ps ON s.skill_id = ps.skill_id
                 WHERE 1=1 {m_filter}
-                GROUP BY s.skill_name ORDER BY req DESC LIMIT 10
+                GROUP BY s.skill_name ORDER BY req DESC
             """, dept_params)
             skills_gap = [{"skill": r[0], "availability": r[1], "allocated": r[2], "gap": "high" if r[2]>r[1] else "low"} for r in cur.fetchall()]
 
@@ -383,18 +515,24 @@ def get_dashboard_all(
         # BATCH 5: Executive Summary & Bench Analysis
         # ==============================================================
         try:
-            # Certifications
+            # Certificates (Grouped by Employee)
             cur.execute(f"""
-                SELECT e.employee_name, c.certificate_name, ec.expiry_date
+                SELECT 
+                    e.employee_name, 
+                    JSON_AGG(JSON_BUILD_OBJECT('name', c.certificate_name, 'expiry', ec.expiry_date)) as certs,
+                    COUNT(*) as total_count,
+                    e.employee_id
                 FROM employee_certificates ec
                 JOIN employee_master e ON ec.employee_id = e.employee_id
                 JOIN certificates c ON ec.certificate_id = c.certificate_id
                 WHERE (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
                   AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE)
                   {e_filter}
-                ORDER BY ec.expiry_date ASC LIMIT 10
+                GROUP BY e.employee_id, e.employee_name
+                ORDER BY MIN(ec.expiry_date) ASC NULLS LAST
+                LIMIT 12
             """, dept_params)
-            certifications = [{"employee": r[0], "certificate_name": r[1], "expiry_date": r[2]} for r in cur.fetchall()]
+            certifications = [{"employee": r[0], "certs": r[1], "count": r[2], "id": r[3]} for r in cur.fetchall()]
 
             # Bench Aging
             cur.execute(f"""
@@ -405,20 +543,33 @@ def get_dashboard_all(
                         CURRENT_DATE - GREATEST(
                             COALESCE(MAX(pa.allocation_end_date) FILTER (WHERE pa.allocation_end_date <= CURRENT_DATE), e.date_of_joining, CURRENT_DATE),
                             DATE_TRUNC('year', CURRENT_DATE)::DATE
-                        ) as total_days
+                        ) as total_days,
+                        e.employee_id
                     FROM employee_master e
                     LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
                       AND e.date_of_resign IS NULL AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
-                      AND COALESCE((SELECT SUM(pa2.allocation_percentage) FROM projects_allocation pa2 WHERE pa2.employee_id = e.employee_id AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+                      AND COALESCE((
+                          SELECT SUM(pa2.allocation_percentage) 
+                          FROM projects_allocation pa2 
+                          LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
+                          WHERE pa2.employee_id = e.employee_id 
+                            AND pa2.allocation_start_date <= CURRENT_DATE
+                            AND (
+                                pa2.allocation_end_date IS NULL 
+                                OR pa2.allocation_end_date >= CURRENT_DATE
+                                OR LOWER(pj2.project_status) IN ('in-progress', 'active', 'ongoing')
+                            )
+                            AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                      ), 0) <= 0
                     {e_filter}
-                    GROUP BY e.employee_name, e.role_designation, e.date_of_joining
+                    GROUP BY e.employee_id, e.employee_name, e.role_designation, e.date_of_joining
                 )
-                SELECT employee_name, role_designation, total_days, total_days as days_in_year
-                FROM BenchStats ORDER BY total_days DESC LIMIT 5
+                SELECT employee_name, role_designation, total_days, total_days as days_in_year, employee_id
+                FROM BenchStats ORDER BY total_days DESC
             """, dept_params)
-            bench_aging = [{"name": r[0], "designation": r[1], "bench_days": int(r[2]), "days_in_year": int(r[3])} for r in cur.fetchall()]
+            bench_aging = [{"name": r[0], "designation": r[1], "bench_days": int(r[2]), "days_in_year": int(r[3]), "id": r[4]} for r in cur.fetchall()]
 
             # Bench Skills
             cur.execute(f"""
@@ -429,7 +580,19 @@ def get_dashboard_all(
                 LEFT JOIN employee_master_pro emp ON emp.employee_id = m.employee_id
                 WHERE (emp.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR emp.employee_status IS NULL)
                   AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                  AND COALESCE((SELECT SUM(pa.allocation_percentage) FROM projects_allocation pa WHERE pa.employee_id = m.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)), 0) <= 0
+                  AND COALESCE((
+                      SELECT SUM(pa_b.allocation_percentage) 
+                      FROM projects_allocation pa_b 
+                      LEFT JOIN projects pj_b ON pa_b.project_id = pj_b.project_id
+                      WHERE pa_b.employee_id = m.employee_id 
+                        AND pa_b.allocation_start_date <= CURRENT_DATE
+                        AND (
+                            pa_b.allocation_end_date IS NULL 
+                            OR pa_b.allocation_end_date >= CURRENT_DATE
+                            OR LOWER(pj_b.project_status) IN ('in-progress', 'active', 'ongoing')
+                        )
+                        AND LOWER(pj_b.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                  ), 0) <= 0
                   {m_filter}
                 GROUP BY s.skill_name ORDER BY c DESC LIMIT 5
             """, dept_params)
@@ -456,7 +619,11 @@ def get_dashboard_all(
             """, dept_params)
             utilization_trends = [{"month": r[0], "value": float(r[1])} for r in cur.fetchall()]
 
-            utilization = int((billable_hc * 100) / max(1, total_emp))
+            # Team Utilization: (Billable + Non-Billable) / Total
+            # We use the sum of distinct billable and distinct non-billable counts.
+            # If an employee is partially in both, they are counted as 'working' in both contexts.
+            utilization = int(((billable_hc + non_billable_hc) * 100) / max(1, total_emp))
+            utilization = min(100, utilization) # Cap at 100% for the main KPI
             executive = {
                 "companyUtilization": utilization,
                 "billableHeadcount": billable_hc,
@@ -504,90 +671,6 @@ def get_dashboard_all(
             "todos": todos
         }
 
-@router.get("/dashboard/infocards")
-def infocards():
-    """Fallback individual endpoint for infocards."""
-    with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
-        total_employees = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM clients")
-        total_clients = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM projects")
-        running_projects = cur.fetchone()[0]
-        cur.execute("""
-            SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
-            LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND COALESCE(p.employee_allocations, 0) <= 0
-        """)
-        bench_employees = cur.fetchone()[0]
-        return {
-            "total_employees": total_employees,
-            "total_clients": total_clients,
-            "running_projects": running_projects,
-            "bench_employees": bench_employees
-        }
-
-@router.get("/dashboard/skills-gap")
-def skills_gap():
-    with db_cursor() as cur:
-        cur.execute("""
-            SELECT s.skill_name, COUNT(DISTINCT es.employee_id), COUNT(DISTINCT ps.project_id)
-            FROM skills s
-            LEFT JOIN employee_skills es ON s.skill_id = es.skill_id
-            LEFT JOIN project_skills ps ON s.skill_id = ps.skill_id
-            GROUP BY s.skill_name
-        """)
-        rows = cur.fetchall()
-        result = []
-        for r in rows:
-            availability, allocated = r[1] or 0, r[2] or 0
-            gap = "high" if allocated > availability else "medium" if allocated == availability else "low"
-            result.append({"skill": r[0], "availability": availability, "allocated": allocated, "gap": gap})
-        return result
-
-@router.get("/dashboard/executive-metrics")
-def dashboard_executive_metrics():
-    with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM employee_master m WHERE date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)")
-        total_emp = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM employee_master_pro p JOIN employee_master m ON p.employee_id=m.employee_id WHERE (p.employee_status ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status ILIKE CHR(37)||'pip'||CHR(37)) AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)")
-        notice_p = cur.fetchone()[0]
-        cur.execute("""
-            SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
-            JOIN employee_master m ON pa.employee_id=m.employee_id
-            WHERE (pa.allocation_end_date IS NULL OR pa.allocation_end_date>=CURRENT_DATE)
-            AND LOWER(pa.project_tags)='billable' AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-        """)
-        billable_hc = cur.fetchone()[0]
-        cur.execute("""
-            SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
-            LEFT JOIN employee_master_pro p ON m.employee_id=p.employee_id
-            WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
-            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND COALESCE(p.employee_allocations,0)<=0
-        """)
-        bench_hc = cur.fetchone()[0]
-        cur.execute("""
-            SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
-            JOIN employee_master m ON pa.employee_id=m.employee_id
-            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
-            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-        """)
-        upcoming_bench = cur.fetchone()[0]
-        active_hc = max(1, total_emp - notice_p)
-
-        cur.execute("""
-            WITH months AS (
-                SELECT generate_series(DATE_TRUNC('month', CURRENT_DATE), DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months', INTERVAL '1 month') AS month_start
-            )
-            SELECT TO_CHAR(mo.month_start, 'Mon'), COALESCE(SUM(pa.allocation_percentage)/100.0, 0)
-            FROM months mo
-            LEFT JOIN projects_allocation pa ON pa.allocation_start_date<=(mo.month_start+INTERVAL '1 month'-INTERVAL '1 day') AND (pa.allocation_end_date>=mo.month_start OR pa.allocation_end_date IS NULL)
-            GROUP BY mo.month_start ORDER BY mo.month_start
-        """)
-        forecast = [{"month": r[0], "allocated": round(float(r[1]), 2), "availability": round(max(float(active_hc)-float(r[1]), 0), 2)} for r in cur.fetchall()]
-
-        return {"total_employees": total_emp, "billable_headcount": billable_hc, "bench_headcount": bench_hc, "notice_period": notice_p, "upcoming_bench": upcoming_bench, "forecast": forecast}
 
 @router.get("/dashboard/todos")
 def get_todos():
