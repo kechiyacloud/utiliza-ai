@@ -122,6 +122,7 @@ class ProjectAllocationInput(BaseModel):
     project_allocation: int
     project_start_date: date
     project_end_date: Optional[date] = None
+    project_tags: Optional[str] = 'billable'
 
 class CertificateInput(BaseModel):
     name: str
@@ -935,10 +936,10 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
             INSERT INTO projects_allocation (
                 allocation_id, employee_id, project_id, role_in_project,
                 allocation_percentage, allocation_start_date, allocation_end_date, project_tags
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             allocation_id, employee_id, proj.project_id, proj.project_role,
-            proj.project_allocation, proj.project_start_date, proj.project_end_date
+            proj.project_allocation, proj.project_start_date, proj.project_end_date, proj.project_tags or 'billable'
         ))
 
     # Sync
