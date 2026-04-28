@@ -209,19 +209,10 @@ const AddEmployee = () => {
         };
 
         const loadEditData = async () => {
-            if (!isEditMode) return;
-
-            const hasRequiredIdentity = editData?.employee_name || editData?.name;
-            const hasJoiningDate = editData?.date_of_joining || editData?.joiningDate;
-
-            if (hasRequiredIdentity && hasJoiningDate) {
-                applyEditData(editData);
-                return;
-            }
-
-            if (!editEmployeeId) return;
+            if (!isEditMode || !editEmployeeId) return;
 
             try {
+                // Always fetch fresh data from API to ensure we have the latest record
                 const fullEmployee = await getEmployeeById(editEmployeeId);
                 applyEditData(fullEmployee);
             } catch (error) {
@@ -247,14 +238,20 @@ const AddEmployee = () => {
     useEffect(() => {
         const loadMetadata = async () => {
             try {
-                const [depts, locs] = await Promise.all([
+                const [depts, locs, projRes] = await Promise.all([
                     getDepartments(),
-                    getLocations()
+                    getLocations(),
+                    fetchProjectsData()
                 ]);
                 setDynamicDepartments(depts || []);
                 setDynamicLocations(locs || []);
+                
+                // Extract projects from the nested response structure
+                const projectsList = projRes?.data?.projects || [];
+                setAllProjects(projectsList);
+                console.log('Loaded projects for dropdown:', projectsList.length);
             } catch (err) {
-                console.error('Failed to load metadata lists', err);
+                console.error('Failed to load metadata lists or projects', err);
             }
         };
         loadMetadata();
@@ -423,21 +420,30 @@ const AddEmployee = () => {
         }));
     };
 
+    const stripLeadingZeros = (val) => {
+        if (val === '' || val === null || val === undefined) return '';
+        const str = String(val);
+        // Remove leading zeros but keep one if followed by a digit (e.g. 01 -> 1, 001 -> 1, 0 -> 0)
+        return str.replace(/^0+(?=\d)/, '');
+    };
+
     const handleProjectChange = (field, value) => {
         if (field === 'project_allocation') {
-            const pct = parseInt(value) || 0;
+            const cleanValue = stripLeadingZeros(value);
+            const pct = parseInt(cleanValue) || 0;
             const hours = (pct / 100) * 8;
             setCurrentProject(prev => ({ 
                 ...prev, 
-                project_allocation: pct,
+                project_allocation: cleanValue === '' ? '' : pct,
                 daily_hours: Math.round(hours * 100) / 100
             }));
         } else if (field === 'daily_hours') {
-            const hours = parseFloat(value) || 0;
+            const cleanValue = stripLeadingZeros(value);
+            const hours = parseFloat(cleanValue) || 0;
             const pct = (hours / 8) * 100;
             setCurrentProject(prev => ({ 
                 ...prev, 
-                daily_hours: hours,
+                daily_hours: cleanValue === '' ? '' : hours,
                 project_allocation: Math.round(pct)
             }));
         } else {
@@ -995,10 +1001,10 @@ const AddEmployee = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <optgroup label="Auto-calculated (based on projects)">
-                                <option value="Bench" disabled={formData.projects.length > 0 && formData.projects.some(p => p.project_allocation > 0)}>Bench</option>
-                                <option value="Partially bench" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially bench</option>
-                                <option value="Partially allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Partially allocated</option>
-                                <option value="Allocated" disabled={formData.projects.length === 0 || formData.projects.reduce((s,p) => s+(parseInt(p.project_allocation)||0),0) === 0}>Allocated</option>
+                                <option value="Bench">Bench</option>
+                                <option value="Partially bench">Partially bench</option>
+                                <option value="Partially allocated">Partially allocated</option>
+                                <option value="Allocated">Allocated</option>
                             </optgroup>
                             <optgroup label="Manually set">
                                 <option value="Notice period">Notice period</option>

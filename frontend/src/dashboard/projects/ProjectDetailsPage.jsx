@@ -215,10 +215,8 @@ const WEEK_DEFAULT_HOURS = 40;
 function stripLeadingZeros(val) {
     if (val === '' || val === null || val === undefined) return '';
     const str = String(val);
-    if (str === '') return '';
-    // Keep empty, keep a single '0', strip leading zeros from multi-digit strings
-    const stripped = str.replace(/^0+(\d)/, '$1');
-    return stripped;
+    // Remove leading zeros but keep one if followed by a digit (e.g. 01 -> 1, 001 -> 1, 0 -> 0)
+    return str.replace(/^0+(?=\d)/, '');
 }
 
 /** Converts an allocation percentage to per-week hours (max 40) */

@@ -126,7 +126,7 @@ const OrganizationHighlights = ({
     const renderUpcomingReleases = () => {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {availability.length > 0 ? availability.slice(0, 6).map((item, idx) => (
+                {availability.length > 0 ? availability.map((item, idx) => (
                     <div key={idx} className="p-3 rounded-xl border border-slate-50 hover:border-blue-100 hover:shadow-sm transition-all group flex items-center gap-3 bg-white">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-[10px]">
                             {item.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
@@ -152,7 +152,7 @@ const OrganizationHighlights = ({
     const renderRecentMovements = () => {
         return (
             <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {transitions.length > 0 ? transitions.slice(0, 5).map((item, idx) => (
+                {transitions.length > 0 ? transitions.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 border border-slate-50 hover:bg-white hover:shadow-sm transition-all">
                         <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
                             <Activity size={14} />
@@ -181,7 +181,7 @@ const OrganizationHighlights = ({
     const renderBenchAging = () => {
         return (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {benchAging.length > 0 ? benchAging.slice(0, 9).map((item, idx) => (
+                {benchAging.length > 0 ? benchAging.map((item, idx) => (
                     <div key={idx} className="p-3 rounded-xl border border-slate-50 bg-white hover:border-rose-100 transition-all">
                         <div className="flex justify-between items-start mb-1.5">
                             <h5 className="text-[10px] font-black text-slate-800 uppercase truncate w-2/3">{item.name}</h5>
@@ -208,7 +208,7 @@ const OrganizationHighlights = ({
     const renderCertificates = () => {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {certifications.length > 0 ? certifications.slice(0, 6).map((item, idx) => (
+                {certifications.length > 0 ? certifications.map((item, idx) => (
                     <div key={idx} className="p-3 rounded-xl bg-teal-50/30 border border-teal-50 hover:bg-white hover:shadow-sm transition-all">
                         <div className="flex items-start gap-2">
                             <div className="p-1.5 bg-white rounded-lg text-teal-600 shadow-sm">
@@ -266,8 +266,8 @@ const OrganizationHighlights = ({
                 </div>
             </div>
 
-            {/* Main Content Area */}
-            <div className="min-h-[280px]">
+            {/* Main Content Area - Made scrollable for "View All" requirement */}
+            <div className="min-h-[280px] max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 {renderContent()}
             </div>
             
