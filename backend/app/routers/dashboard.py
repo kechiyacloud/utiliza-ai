@@ -89,7 +89,7 @@ def get_dashboard_all(
             'desig': desig_list,
             'loc': loc_list,
             'type': type_list,
-            'skills': [f"%{s}%" for s in skill_list]
+            'skills': skill_list
         }
         
         # Base filters: only show active, non-deleted employees
@@ -99,7 +99,7 @@ def get_dashboard_all(
         m_filter = m_base
         e_filter = e_base
 
-        if department and department != 'All Departments':
+        if dept_list:
             m_filter += " AND m.department = ANY(%(dept)s) "
             e_filter += " AND e.department = ANY(%(dept)s) "
         
@@ -265,42 +265,44 @@ def get_dashboard_all(
                     ) AS month_start
                 ),
                 ActiveEmployees AS (
-                    SELECT m.employee_id, m.date_of_resign, p.employee_status
+                    -- Total HC: same filter as totalEmployees KPI card.
+                    -- Notice/PIP employees are still headcount, so they are included here.
+                    -- allocate + available for any month = HC for that month.
+                    SELECT m.employee_id, m.date_of_resign, m.date_of_joining
                     FROM employee_master m
-                    LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                     WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
                       {m_filter}
                 ),
-                MonthAllocations AS (
-                    SELECT 
+                MonthEmployeeStatus AS (
+                    SELECT
                         mo.month_start,
                         ae.employee_id,
-                        COUNT(pa.allocation_id) as project_count
+                        (
+                            SELECT COALESCE(SUM(pa.allocation_percentage), 0)
+                            FROM projects_allocation pa
+                            JOIN projects pj ON pa.project_id = pj.project_id
+                            WHERE pa.employee_id = ae.employee_id
+                              AND pa.allocation_start_date <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day')
+                              AND (
+                                  pa.allocation_end_date IS NULL
+                                  OR pa.allocation_end_date >= mo.month_start
+                                  OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                              )
+                              AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                        ) AS total_alloc
                     FROM months mo
                     CROSS JOIN ActiveEmployees ae
-                    LEFT JOIN projects_allocation pa ON ae.employee_id = pa.employee_id
-                    LEFT JOIN projects pj2 ON pa.project_id = pj2.project_id
-                      AND pa.allocation_start_date <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day')
-                      AND (
-                          pa.allocation_end_date >= mo.month_start
-                          OR pa.allocation_end_date IS NULL
-                      )
-                      AND (
-                          pj2.project_end_date >= mo.month_start
-                          OR pj2.project_end_date IS NULL
-                      )
+                    -- Reduce HC in future months when someone's resign date falls before that month.
+                    -- date_of_resign in m_filter already excludes resigned-today employees;
+                    -- this per-month check drops future leavers from the correct month onward.
                     WHERE (ae.date_of_resign IS NULL OR ae.date_of_resign >= mo.month_start)
-                      AND (pa.allocation_id IS NULL OR (
-                          pa.allocation_percentage > 0 
-                          AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                      ))
-                    GROUP BY mo.month_start, ae.employee_id
+                      AND (ae.date_of_joining IS NULL OR ae.date_of_joining <= (mo.month_start + INTERVAL '1 month' - INTERVAL '1 day'))
                 )
-                SELECT 
+                SELECT
                     TO_CHAR(month_start, 'Mon'),
-                    COUNT(DISTINCT employee_id) FILTER (WHERE project_count > 0) as allocate_count,
-                    COUNT(DISTINCT employee_id) FILTER (WHERE project_count = 0) as available_count
-                FROM MonthAllocations
+                    COUNT(*) FILTER (WHERE total_alloc > 0)  AS allocate_count,
+                    COUNT(*) FILTER (WHERE total_alloc <= 0) AS available_count
+                FROM MonthEmployeeStatus
                 GROUP BY month_start
                 ORDER BY month_start
             """, dept_params)

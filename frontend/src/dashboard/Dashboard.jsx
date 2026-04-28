@@ -50,7 +50,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
             <span className="text-gray-600">{entry.name}:</span>
             <span className="text-gray-900 font-semibold">{entry.value}</span>
-            {entry.name === 'Allocate' && entry.payload.ratio !== undefined && (
+            {entry.name === 'Allocated' && entry.payload.ratio !== undefined && (
               <span className="text-blue-600 text-[10px] font-bold ml-auto">({entry.payload.ratio}% Ratio)</span>
             )}
           </div>
@@ -144,7 +144,7 @@ function Dashboard() {
         }
 
 
-        if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && todosRes.status === 'rejected') {
+        if (dashRes.status === 'rejected' && empListRes.status === 'rejected' && deptsRes.status === 'rejected') {
           setError("Connection failed. Please ensure the backend is running.");
         }
       } catch (err) {
@@ -565,7 +565,7 @@ function Dashboard() {
                 <div>
                   <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                     <BarChart2 size={18} className="text-blue-500" />
-                    Allocate vs Available
+                    Allocated vs Available
                   </h2>
                   <p className="text-sm font-medium text-gray-500 mt-1">Comparing how many people are working versus who is available</p>
                 </div>
@@ -580,7 +580,7 @@ function Dashboard() {
                       <RechartsTooltip content={<CustomTooltip />} />
                       <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#475569' }} />
                       <Bar dataKey="available" name="Available" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="allocate" name="Allocate" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="allocate" name="Allocated" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (

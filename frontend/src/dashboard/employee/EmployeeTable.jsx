@@ -93,8 +93,68 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
         { key: 'date_of_joining', direction: 'asc', label: 'Joined: Oldest First' }
     ];
 
+    // 1. First apply all filtering logic
+    const filteredEmployees = useMemo(() => {
+        return employees.filter(emp => {
+            // A. Search Query matching
+            const sv = (searchValue || '').toLowerCase().trim();
+            const matchesSearch = !sv || (
+                emp.employee_name?.toLowerCase().includes(sv) ||
+                emp.employee_id?.toLowerCase().includes(sv) ||
+                emp.role_designation?.toLowerCase().includes(sv) ||
+                emp.location?.toLowerCase().includes(sv) ||
+                emp.department?.toLowerCase().includes(sv) ||
+                (emp.skills && emp.skills.some(skill => skill.toLowerCase().includes(sv)))
+            );
+            if (!matchesSearch) return false;
+
+            // B. Filter drawer and Department selection
+            const matchesDept = !filters?.departments?.length || filters.departments.includes(emp.department);
+            const matchesType = !filters?.types?.length || filters.types.includes(emp.employee_type);
+            const matchesLocation = !filters?.locations?.length || filters.locations.includes(emp.location);
+            const matchesDesig = !filters?.designations?.length || filters.designations.includes(emp.role_designation);
+            
+            // Skill matching with normalization
+            const matchesSkills = !filters?.skills?.length || filters.skills.some(fs => 
+                emp.skills?.some(es => normalizeSkillName(es).toLowerCase() === normalizeSkillName(fs).toLowerCase())
+            );
+
+            // Status tag filtering (matches FilterOverlay logic)
+            const matchesStatus = !filters?.statusTags?.length || (
+                emp.employee_status && filters.statusTags.includes(getEmployeeTag(emp.employee_status).label)
+            );
+
+            if (!(matchesDept && matchesType && matchesLocation && matchesDesig && matchesStatus && matchesSkills)) {
+                return false;
+            }
+
+            // C. Special Card Filters (from Dashboard redirects)
+            const cf = filters?.cardFilter;
+            if (cf) {
+                const s = (emp.employee_status || '').toLowerCase();
+                const isNoticeOrPip = s.includes('notice') || s.includes('pip');
+
+                if (cf === 'bench') return !isNoticeOrPip && (emp.employee_allocations || 0) <= 0;
+                if (cf === 'billable') return !isNoticeOrPip && emp.billable === 'billable' && (emp.employee_allocations || 0) > 0;
+                if (cf === 'non-billable') return !isNoticeOrPip && emp.billable === 'non-billable' && (emp.employee_allocations || 0) > 0;
+                if (cf === 'notice') return isNoticeOrPip;
+                if (cf === 'overallocated') return (emp.employee_allocations || 0) > 100;
+                if (cf === 'new-joiner') {
+                    const now = new Date();
+                    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                    const joinDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
+                    const isLeaving = isNoticeOrPip || emp.date_of_resign;
+                    return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
+                }
+            }
+
+            return true;
+        });
+    }, [employees, filters, searchValue]);
+
+    // 2. Then sort the filtered list
     const sortedEmployees = useMemo(() => {
-        const sortableItems = [...employees];
+        const sortableItems = [...filteredEmployees];
         if (sortConfig !== null) {
             sortableItems.sort((a, b) => {
                 let aVal = a[sortConfig.key];
@@ -125,7 +185,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             });
         }
         return sortableItems;
-    }, [employees, sortConfig]);
+    }, [filteredEmployees, sortConfig]);
 
     const totalPages = Math.ceil(sortedEmployees.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
