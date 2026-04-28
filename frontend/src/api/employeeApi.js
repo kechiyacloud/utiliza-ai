@@ -249,3 +249,13 @@ export const getLocations = async () => {
     const res = await api.get('/employees/filter-options');
     return res.data?.locations || [];
 };
+
+export const createDepartment = async (name) => {
+    const res = await api.post('/dashboard/departments', { name });
+    return res.data;
+};
+
+export const createDesignation = async (name) => {
+    const res = await api.post('/dashboard/designations', { name });
+    return res.data;
+};

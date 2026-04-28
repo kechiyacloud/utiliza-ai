@@ -81,8 +81,8 @@ export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
                     ? p.name.split(' ').map(n => n[0]).slice(0, 2).join('')
                     : "U"
             })),
-            resourceAvailability: availability.map((a, idx) => ({
-                id: idx.toString(),
+            resourceAvailability: availability.map((a) => ({
+                id: a?.id || "0",
                 name: a?.name || "Unknown",
                 project: a?.project || "Unknown",
                 releaseDate: a?.releaseDate,
@@ -95,16 +95,20 @@ export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
                 allocated: s?.allocated ?? 0,
                 gap: s?.gap || "low"
             })),
-            recentTransitions: transitions.map((t, idx) => ({
-                id: idx,
+            recentTransitions: transitions.map((t) => ({
+                id: t?.id || "0",
                 employee: t?.employee || "Unknown",
                 fromProject: t?.from_project || 'Bench',
                 toProject: t?.to_project || "Unknown",
                 movement: `${t?.from_project || 'Bench'} -> ${t?.to_project || "Unknown"}`,
                 date: t?.date,
-                role: t?.role || "Resource"
+                role: t?.role || "Resource",
+                type: t?.type
             })),
-            certificationExpiry: certs,
+            certificationExpiry: certs.map((c) => ({
+                ...c,
+                id: c?.id || "0"
+            })),
             executiveMetrics: executive,
             actionableTodos: mega?.actionable_todos || []
         };
