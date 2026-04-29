@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDataRefresh } from '../../context';
-import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, Edit2, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard } from 'lucide-react';
+import { Target, Briefcase, ArrowLeft, Loader2, Save, Users, X, Check, Pencil, Edit2, CalendarDays, Plus, Trash2, Clock, Zap, Activity, CheckCircle, Download, FileText, FileSpreadsheet, Table as TableIcon, ChevronDown, Search, Upload, CreditCard, MoreVertical, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from '../../api/axios';
 import { clearDashboardCache } from '../../api/dashboardApi';
@@ -262,6 +262,27 @@ function isWeekWithinAllocationRange(weekDescriptor, row = {}) {
     if (startDate && startDate > weekEnd) return false;
     if (endDate && endDate < weekStart) return false;
     return true; // Partial overlaps count as valid
+}
+
+function computeProratedWeekHours(weekDescriptor, row = {}, pct) {
+    const resStart = parseDate(row.allocation_start_date);
+    const resEnd = parseDate(row.allocation_end_date);
+    const weekStart = new Date(weekDescriptor.start || weekDescriptor.monday);
+    const weekEnd = new Date(weekDescriptor.end || weekDescriptor.sunday);
+    if ((resStart && weekEnd < resStart) || (resEnd && weekStart > resEnd)) return 0;
+    const overlapStart = new Date(Math.max(weekStart.getTime(), resStart ? resStart.getTime() : weekStart.getTime()));
+    const overlapEnd = new Date(Math.min(weekEnd.getTime(), resEnd ? resEnd.getTime() : weekEnd.getTime()));
+    overlapStart.setHours(0, 0, 0, 0);
+    overlapEnd.setHours(0, 0, 0, 0);
+    let workingDays = 0;
+    const cur = new Date(overlapStart);
+    while (cur <= overlapEnd) {
+        const day = cur.getDay();
+        if (day !== 0 && day !== 6) workingDays += 1;
+        cur.setDate(cur.getDate() + 1);
+    }
+    const numericPct = Number(pct) || 0;
+    return Math.round(workingDays * 8 * (numericPct / 100) * 100) / 100;
 }
 
 function getWeeklyHoursForWeek(row = {}, weekDescriptor) {
@@ -1216,10 +1237,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         return 0;
     };
 
-    const generateWeeklyHours = (hours, row) => {
+    const generateWeeklyHours = (pct, row) => {
         const weekly = {};
         visibleWeeks.forEach(wk => {
-            weekly[wk.yearWeek] = isWeekWithinAllocationRange(wk, row) ? hours : '';
+            weekly[wk.yearWeek] = isWeekWithinAllocationRange(wk, row)
+                ? computeProratedWeekHours(wk, row, pct)
+                : '';
         });
         return weekly;
     };
@@ -1245,7 +1268,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         currentRow.allocation_pct = allocationPct;
         currentRow.weekly_hours = {
             ...currentRow.weekly_hours,
-            ...generateWeeklyHours(hours, currentRow)
+            ...generateWeeklyHours(allocationPct, currentRow)
         };
         newRows[rowIndex] = currentRow;
         setLocalRows(newRows);
@@ -1263,11 +1286,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             const num = Number(value);
             // Recalculate instantly on change
             if (!isNaN(num) && num >= 0) {
-                const hrs = clampHours((num / 100) * WEEK_DEFAULT_HOURS);
                 visibleWeeks.forEach(wk => {
                     if (!isWeekWithinAllocationRange(wk, currentRow)) return;
-                    if (wk.isPast) return; 
-                    currentRow.weekly_hours[wk.yearWeek] = hrs;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = computeProratedWeekHours(wk, currentRow, num);
                 });
             }
         } else if (field.startsWith('week_')) {
@@ -1361,11 +1383,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 setSaveError(""); // Clear error if valid
                 const pct = clampPct(value);
                 currentRow.allocation_pct = pct;
-                const hrs = clampHours((pct / 100) * WEEK_DEFAULT_HOURS);
                 visibleWeeks.forEach(wk => {
                     if (!isWeekWithinAllocationRange(wk, currentRow)) return;
-                    if (wk.isPast) return; 
-                    currentRow.weekly_hours[wk.yearWeek] = hrs;
+                    if (wk.isPast) return;
+                    currentRow.weekly_hours[wk.yearWeek] = computeProratedWeekHours(wk, currentRow, pct);
                 });
             }
         } else if (field.startsWith('week_')) {
@@ -2186,30 +2207,49 @@ const getStatusBadgeClasses = (status, pct) => {
     return 'bg-rose-50 text-rose-700 border-rose-100';
 };
 
-const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate }) => {
-    const headcount = resources.length;
+const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate, onEdit, onDelete }) => {
     const projectName = project?.name || project?.project_name || 'Untitled Project';
     const projectTypeRaw = project?.type || project?.project_type || '';
     const projectTypeLabel = projectTypeRaw.toLowerCase() === 'internal' ? 'Internal' : 'External';
     const projectStatus = project?.display_status || project?.status || project?.project_status || 'Not Set';
-    const projectSubStatus = project?.sub_status || project?.subStatus || project?.sowStatus || '';
     const avatarLetter = (projectName.trim()[0] || projectTypeLabel[0] || 'P').toUpperCase();
-    
+
     const [isEditingDept, setIsEditingDept] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef(null);
+
     const progressPct = calculateProjectProgress(project);
     const statusClasses = getStatusBadgeClasses(projectStatus, progressPct);
-    
-    const currentDept = departments.find(d => String(d.id) === String(project.department_id));
-    const deptDisplayName = currentDept ? currentDept.name : (project.department_name || 'No Department');
+
+    // Prioritize department_name from the backend JOIN; fall back to client-side lookup
+    const deptDisplayName = (() => {
+        if (project.department_name && project.department_name !== 'No Department') return project.department_name;
+        const rawId = project.department_id;
+        if (rawId == null) return null;
+        const idStr = String(rawId).trim();
+        if (!idStr) return null;
+        const byId = departments.find(d => d.id != null && String(d.id) === idStr);
+        if (byId) return byId.name;
+        const byName = departments.find(d => (d.name || '').toLowerCase() === idStr.toLowerCase());
+        if (byName) return byName.name;
+        // department_id may store a name string directly (employee_master-derived departments have id=null)
+        return idStr;
+    })();
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+        };
+        if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [menuOpen]);
 
     const handleDeptChange = async (newDeptId) => {
         if (!newDeptId || String(newDeptId) === String(project.department_id)) {
             setIsEditingDept(false);
             return;
         }
-        
         setIsSaving(true);
         try {
             await axios.put(`/projects/${project.project_id || project.id}/details`, {
@@ -2226,7 +2266,36 @@ const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col md:flex-row items-start gap-6 animate-in fade-in slide-in-from-top-4 duration-500 relative group/card flex-1 w-full">
-            <div className="flex items-start gap-4 flex-1 min-w-0 w-full">
+            {/* Three-dot action menu */}
+            <div className="absolute top-4 right-4" ref={menuRef}>
+                <button
+                    onClick={() => setMenuOpen(v => !v)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    title="Actions"
+                >
+                    <MoreVertical size={18} />
+                </button>
+                {menuOpen && (
+                    <div className="absolute right-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-slate-100 z-20 overflow-hidden">
+                        <button
+                            onClick={() => { setMenuOpen(false); onEdit && onEdit(); }}
+                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                        >
+                            <Edit2 size={14} className="text-slate-400" />
+                            Edit
+                        </button>
+                        <button
+                            onClick={() => { setMenuOpen(false); onDelete && onDelete(); }}
+                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors"
+                        >
+                            <Trash2 size={14} />
+                            Delete
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <div className="flex items-start gap-4 flex-1 min-w-0 w-full pr-8">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0 shadow-lg shadow-blue-100">
                     {avatarLetter}
                 </div>
@@ -2239,20 +2308,21 @@ const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate
                         <span className={`px-2 py-1 rounded-full text-[11px] font-bold border ${statusClasses}`}>
                             {projectStatus}
                         </span>
-                        <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-                            <Briefcase size={14} className="text-slate-400" />
-                            {project.client_name || project.client || 'No client selected'}
-                        </span>
-                        
-                        <div className="flex items-center gap-2 ml-1">
-                            {headcount > 0 && (
-                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 flex items-center gap-1.5">
-                                    <Users size={12} />
-                                    {headcount} Team Members
-                                </span>
-                            )}
+                        {(project.client_name || project.client) && (
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1.5 shadow-sm">
+                                <Briefcase size={12} className="text-indigo-500" />
+                                <span className="opacity-80 font-semibold">Client:</span> {project.client_name || project.client}
+                            </span>
+                        )}
+                        {project.partner_name && (
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-violet-50 text-violet-700 border-violet-200 flex items-center gap-1.5 shadow-sm">
+                                <Users size={12} className="text-violet-500" />
+                                <span className="opacity-80 font-semibold">Partner:</span> {project.partner_name}
+                            </span>
+                        )}
 
-                            {/* DEPARTMENT TAG - EDITABLE */}
+                        {/* DEPARTMENT TAG - EDITABLE */}
+                        {(deptDisplayName || departments.length > 0) && (
                             <div className="relative group/dept">
                                 {isEditingDept ? (
                                     <select
@@ -2275,24 +2345,41 @@ const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate
                                         title="Click to edit department"
                                     >
                                         <Activity size={12} className="text-indigo-400" />
-                                        {deptDisplayName}
+                                        {deptDisplayName || 'Set Department'}
                                         <Edit2 size={10} className="ml-0.5 opacity-0 group-hover/dept:opacity-100 transition-opacity" />
                                     </button>
                                 )}
                             </div>
-                        </div>
+                        )}
                     </div>
-                    {/* PROJECT SKILLS DISPLAY */}
-                    {project.skills && project.skills.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                            {project.skills.map(s => (
-                                <span key={s} className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm">
-                                    {s}
-                                </span>
-                            ))}
-                        </div>
-                    )}
                 </div>
+            </div>
+        </div>
+    );
+};
+
+const SkillsSection = ({ project }) => {
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full relative group w-full">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
+                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                    <Zap size={18} className="text-amber-500" />
+                    Project Skills
+                </h4>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {project.skills && project.skills.length > 0 ? (
+                    project.skills.map((skill, i) => (
+                        <span 
+                            key={`${skill}-${i}`}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-100 shadow-sm transition-all hover:bg-white hover:border-blue-200 hover:text-blue-600"
+                        >
+                            {skill}
+                        </span>
+                    ))
+                ) : (
+                    <p className="text-sm text-slate-400 italic">No skills specified for this project.</p>
+                )}
             </div>
         </div>
     );
@@ -2712,6 +2799,8 @@ const ProjectDetailsPage = () => {
     const [globalAllocations, setGlobalAllocations] = useState({});
     const [viewMode, setViewMode] = useState('current');
     const [isEditPanelOpen, setIsEditPanelOpen] = useState(false);
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [departments, setDepartments] = useState([]);
 
     const allocationStartBoundary = useMemo(() => {
@@ -2822,6 +2911,20 @@ const ProjectDetailsPage = () => {
         }
     };
 
+    const handleProjectDelete = async () => {
+        setIsDeleting(true);
+        try {
+            await axios.delete(`/projects/${project.uuid || project.project_id}`);
+            clearDashboardCache();
+            navigate('/info/projects');
+        } catch (error) {
+            const msg = error.response?.data?.detail || 'Failed to delete project.';
+            alert(msg);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     useEffect(() => {
         if (id) loadProjectData();
     }, [id, refreshKey]);
@@ -2873,11 +2976,13 @@ const ProjectDetailsPage = () => {
                     <ArrowLeft size={20} className="text-gray-600" />
                 </button>
 
-                <OngoingProjectInfoCard 
-                    project={project} 
-                    resources={resources} 
+                <OngoingProjectInfoCard
+                    project={project}
+                    resources={resources}
                     departments={departments}
                     onUpdate={loadProjectData}
+                    onEdit={() => setIsEditPanelOpen(true)}
+                    onDelete={() => setIsDeleteConfirmOpen(true)}
                 />
             </div>
 
@@ -2948,25 +3053,68 @@ const ProjectDetailsPage = () => {
                     />
                 </div>
 
-                {/* Scope & Commercial side-by-side below allocation */}
-                <div>
-                    <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Scope, Commercial & Skills below allocation */}
+                <div className="mt-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div key={`scope-${project.project_id || project.id}`}>
                             <ScopeSection project={project} resources={resources} onUpdate={loadProjectData} />
                         </div>
                         <div key={`commercial-${project.project_id || project.id}`}>
                             <CommercialSection project={project} onUpdate={loadProjectData} />
                         </div>
+                        <div key={`skills-${project.project_id || project.id}`}>
+                            <SkillsSection project={project} />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <EditProjectPanel 
+            <EditProjectPanel
                 isOpen={isEditPanelOpen}
                 onClose={() => setIsEditPanelOpen(false)}
                 project={project}
                 onSave={handleProjectSave}
             />
+
+            {/* Delete Confirmation Modal */}
+            {isDeleteConfirmOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-4 text-rose-600 mb-6">
+                            <div className="p-4 bg-rose-50 rounded-2xl">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 leading-tight">Delete Project</h3>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">Irreversible Action</p>
+                            </div>
+                        </div>
+                        <p className="text-slate-600 mb-8 font-medium border-l-4 border-rose-100 pl-4 py-2">
+                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 uppercase tracking-tight">{project.project_name || project.name}</span>? This action cannot be undone and all associated data will be lost.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsDeleteConfirmOpen(false)}
+                                disabled={isDeleting}
+                                className="px-6 py-3 text-slate-500 font-bold uppercase tracking-widest text-[10px] hover:bg-slate-50 rounded-2xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleProjectDelete}
+                                disabled={isDeleting}
+                                className="px-6 py-3 bg-rose-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center gap-2"
+                            >
+                                {isDeleting ? (
+                                    <><Loader2 size={14} className="animate-spin" /> Deleting...</>
+                                ) : (
+                                    'Delete Project'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
