@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, MoreHorizontal, ArrowLeft, UserSearch } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, MoreHorizontal, ArrowLeft, UserSearch, UserCheck, Activity } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -169,6 +169,8 @@ function Employee() {
     const s = (e.employee_status || '').toLowerCase();
     return s.includes('notice') || s.includes('pip');
   }).length;
+  const billableCount = baseGroup.filter(e => e.billable === 'billable' && (e.employee_allocations || 0) > 0).length;
+  const nonBillableCount = baseGroup.filter(e => e.billable === 'non-billable' && (e.employee_allocations || 0) > 0).length;
 
   if (loading && !allEmployees.length) {
     return <ModuleLoader label="Loading Employees" />;
@@ -241,7 +243,7 @@ function Employee() {
 
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard
           label={`Total ${contextLabel === 'Team' ? 'Team' : 'Talent'}`}
           value={totalEmployeesCount}
@@ -251,6 +253,26 @@ function Employee() {
           error={error}
           isActive={cardFilter === null}
           onClick={() => setCardFilter(null)}
+        />
+        <StatCard
+          label="Billable"
+          value={billableCount}
+          icon={UserCheck}
+          colorClass="bg-blue-600"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'billable'}
+          onClick={() => setCardFilter('billable')}
+        />
+        <StatCard
+          label="Non-Billable"
+          value={nonBillableCount}
+          icon={Activity}
+          colorClass="bg-emerald-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'non-billable'}
+          onClick={() => setCardFilter('non-billable')}
         />
         <StatCard
           label="Available Now"

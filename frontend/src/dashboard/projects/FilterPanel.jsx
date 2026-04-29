@@ -51,7 +51,7 @@ const FilterPanel = ({
                 const bLower = b.toLowerCase();
                 const aStarts = aLower.startsWith(query);
                 const bStarts = bLower.startsWith(query);
-                
+
                 if (aStarts && !bStarts) return -1;
                 if (!aStarts && bStarts) return 1;
                 return aLower.localeCompare(bLower);
@@ -72,9 +72,9 @@ const FilterPanel = ({
         } else {
             newFilters = { ...filters, [name]: value };
         }
-        
+
         setFilters(newFilters);
-        
+
         // Trigger immediate filtering for a snappier experience as requested
         const finalFiltersForApply = {
             ...newFilters,
@@ -110,8 +110,8 @@ const FilterPanel = ({
                             <h2 className="text-xl font-bold text-slate-800 tracking-tight">Filter Projects</h2>
                             <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Refine List</p>
                         </div>
-                        <button 
-                            onClick={onClose} 
+                        <button
+                            onClick={onClose}
                             className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all border border-transparent hover:border-slate-100"
                             aria-label="Close Filter Panel"
                         >
@@ -124,22 +124,24 @@ const FilterPanel = ({
                         <div className="flex flex-col gap-6">
 
                             {/* Department */}
-                            {departments.length > 0 && (
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Department</label>
-                                    <select
-                                        name="department"
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
-                                        value={filters.department}
-                                        onChange={handleChange}
-                                    >
-                                        <option value="">All Departments</option>
-                                        {departments.map((d) => (
-                                            <option key={d.id || d} value={d.id || d}>{d.name || d}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Department</label>
+                                <select
+                                    name="department"
+                                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white cursor-pointer"
+                                    value={filters.department}
+                                    onChange={handleChange}
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map((d) => {
+                                        const optionValue = d?.id ?? d?.name ?? d;
+                                        const optionLabel = d?.name ?? d;
+                                        return (
+                                            <option key={optionValue} value={optionValue}>{optionLabel}</option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
 
                             {/* Project Name */}
                             <div className="flex flex-col gap-1.5">
@@ -258,7 +260,7 @@ const FilterPanel = ({
                         <div className="flex gap-3">
                             <button
                                 onClick={() => {
-                                    setFilters({
+                                    const cleared = {
                                         department: '',
                                         projectName: '',
                                         resourceName: '',
@@ -267,9 +269,9 @@ const FilterPanel = ({
                                         resourceType: '',
                                         startDate: '',
                                         endDate: ''
-                                    });
-                                    // Removed onClearFilters?() and onClose() to keep panel open 
-                                    // and prevent unwanted navigation/reload per user request
+                                    };
+                                    setFilters(cleared);
+                                    onApplyFilters(cleared);
                                 }}
                                 className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
                                 type="button"

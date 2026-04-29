@@ -207,13 +207,17 @@ function Allocations() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-sm"
-          >
-            <Upload size={15} />
-            Import Allocations
-          </button>
+          <div className="relative group/soon overflow-hidden rounded-xl">
+            <button
+              className="flex items-center gap-2 bg-slate-100 text-slate-400 text-sm font-bold px-5 py-2.5 rounded-xl cursor-not-allowed"
+            >
+              <Upload size={15} strokeWidth={2.5} />
+              Import Allocations
+            </button>
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] cursor-not-allowed" />
+
+          </div>
+
           <AllocationFilters filters={filters} setFilters={setFilters} />
         </div>
       </div>

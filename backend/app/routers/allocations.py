@@ -128,7 +128,7 @@ def allocation_metrics(
                         COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END)
                     ) * 100.0 / NULLIF(COUNT(DISTINCT eb.employee_id), 0),
                 1)                                                                                      AS avg_utilization,
-                COUNT(DISTINCT CASE WHEN COALESCE(aa.billable_pct, 0) > 100
+                COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) > 100
                                     THEN eb.employee_id END)                                            AS overallocated
             FROM EmpBase eb
             JOIN EmpStatus es ON eb.employee_id = es.employee_id
@@ -484,42 +484,6 @@ def get_forecast_bench(
     try:
         # Improved query: identifies employees whose maximum allocation end date falls within the next 30 days.
         # This ensures we don't show someone as 'Upcoming Bench' if they have another project starting later.
-        query = """
-            SELECT 
-                m.employee_id,
-                m.employee_name,
-                m.role_designation as role,
-                m.photo_url,
-                p.project_name,
-                pa.allocation_end_date as end_date
-            FROM projects_allocation pa
-            JOIN employee_master m ON pa.employee_id = m.employee_id
-            JOIN projects p ON pa.project_id = p.project_id
-            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-              AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-              AND m.date_of_resign IS NULL
-              AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              -- Ensure this is their LAST project roll-off in the near future
-              AND NOT EXISTS (
-                  SELECT 1 FROM projects_allocation pa2
-                  JOIN projects p2 ON pa2.project_id = p2.project_id
-                  WHERE pa2.employee_id = m.employee_id
-                    AND pa2.allocation_id <> pa.allocation_id
-                    AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
-                    AND COALESCE(LOWER(p2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              )
-            ORDER BY pa.allocation_end_date ASC
-        """
-        params = []
-        if department and department != 'All Departments':
-            dept_list = [d.strip() for d in department.split(',')]
-            query = query.replace("AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)", 
-                                 "AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND m.department = ANY(%s)")
-            params.append(dept_list)
-        
-        # We need to re-wrap the query if we modified it, or just use a more flexible construction
-        # Actually, let's just rewrite the query construction for safety.
-        
         base_query = """
             SELECT 
                 m.employee_id,
@@ -535,14 +499,6 @@ def get_forecast_bench(
               AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND m.date_of_resign IS NULL
               AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              AND NOT EXISTS (
-                  SELECT 1 FROM projects_allocation pa2
-                  JOIN projects p2 ON pa2.project_id = p2.project_id
-                  WHERE pa2.employee_id = m.employee_id
-                    AND pa2.allocation_id <> pa.allocation_id
-                    AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
-                    AND COALESCE(LOWER(p2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              )
         """
         
         where_params = []
@@ -717,12 +673,11 @@ def import_allocations(payload: ImportAllocationsRequest = Body(...)):
             raise HTTPException(status_code=422, detail=f"Invalid selected_month format: {selected_month}")
 
     summary = {
-        "total": len(records),
-        "new": 0,
-        "updated": 0,
-        "over": 0,    # over-allocated (warning/error)
-        "invalid": 0, # not found in DB
-        "details": []
+        "new_records": [],
+        "updated_records": [],
+        "over_allocated": [],
+        "invalid_records": [],
+        "can_save": True
     }
 
     conn = get_db_connection()
@@ -751,7 +706,6 @@ def import_allocations(payload: ImportAllocationsRequest = Body(...)):
         for idx, rec in enumerate(records):
             try:
                 # Prepare TeamMemberCreate payload
-                # Map frontend fields to model fields if different
                 tm_data = {
                     "employee_id": str(rec.get("employee_id", "")),
                     "name": rec.get("employee_name", rec.get("name", "Unknown")),
@@ -768,60 +722,77 @@ def import_allocations(payload: ImportAllocationsRequest = Body(...)):
                 
                 p_id = rec.get("project_id") or (scope_value if import_scope == "project" else None)
                 if not p_id:
-                    summary["invalid"] += 1
-                    summary["details"].append({"row": idx+1, "status": "error", "message": "Project ID missing"})
+                    summary["invalid_records"].append({"row": idx+1, "error": "Project ID missing", "row_data": rec})
+                    summary["can_save"] = False
                     continue
 
                 # Resolve employee
                 emp_id = _resolve_employee_id(cur, tm)
                 if not emp_id:
-                    summary["invalid"] += 1
-                    summary["details"].append({"row": idx+1, "status": "error", "message": f"Employee {tm.name} ({tm.employee_id}) not found"})
+                    summary["invalid_records"].append({"row": idx+1, "error": f"Employee {tm.name} ({tm.employee_id}) not found", "row_data": rec})
+                    summary["can_save"] = False
                     continue
 
                 # Check Project & Billability
-                cur.execute("SELECT billable, start_date, end_date FROM projects WHERE project_id = %s", (p_id,))
+                cur.execute("SELECT project_name, billable, start_date, end_date FROM projects WHERE project_id = %s", (p_id,))
                 proj_row = cur.fetchone()
                 if not proj_row:
-                    summary["invalid"] += 1
-                    summary["details"].append({"row": idx+1, "status": "error", "message": f"Project {p_id} not found"})
+                    summary["invalid_records"].append({"row": idx+1, "error": f"Project {p_id} not found", "row_data": rec})
+                    summary["can_save"] = False
                     continue
                 
-                project_billable = proj_row[0] or "Billable"
-                p_start, p_end = proj_row[1], proj_row[2]
+                p_name = proj_row[0]
+                project_billable = proj_row[1] or "Billable"
+                p_start, p_end = proj_row[2], proj_row[3]
 
-                # Capacity Check (Dry Run)
+                # Capacity Check
                 a_start = month_start or p_start or date.today()
                 a_end = month_end or p_end
                 
                 load = _fetch_existing_weekly_load(cur, emp_id, a_start, a_end)
                 available = _available_capacity_pct(load)
                 
-                status_msg = "new"
                 # Check if already exists in this project
-                cur.execute("SELECT allocation_id FROM projects_allocation WHERE employee_id = %s AND project_id = %s", (emp_id, p_id))
+                cur.execute("SELECT allocation_id, allocation_percentage FROM projects_allocation WHERE employee_id = %s AND project_id = %s", (emp_id, p_id))
                 exist_alloc = cur.fetchone()
+
+                record_info = {
+                    "employee_id": emp_id,
+                    "employee_name": tm.name,
+                    "project_id": p_id,
+                    "project_name": p_name,
+                    "allocation_percentage": tm.allocation_pct,
+                    "project_tags": tm.billable_shadow,
+                    "allocation_start_date": tm.allocation_start_date,
+                    "allocation_end_date": tm.allocation_end_date
+                }
+
                 if exist_alloc:
-                    status_msg = "updated"
+                    record_info["old_allocation_percentage"] = exist_alloc[1]
+                    summary["updated_records"].append(record_info)
+                else:
+                    summary["new_records"].append(record_info)
+
+                if available < tm.allocation_pct:
+                    summary["over_allocated"].append({
+                        "employee_id": emp_id,
+                        "employee_name": tm.name,
+                        "current_total": 100 - available,
+                        "additional": tm.allocation_pct,
+                        "combined": (100 - available) + tm.allocation_pct
+                    })
 
                 if not dry_run:
                     _save_single_resource(
                         cur, p_id, tm, project_billable,
                         replace_allocation_id=exist_alloc[0] if exist_alloc else None,
                         project_start=p_start, project_end=p_end,
-                        validate_capacity=True # Still validate!
+                        validate_capacity=True
                     )
-                
-                summary[status_msg] += 1
-                if available < tm.allocation_pct:
-                    summary["over"] += 1
-                    summary["details"].append({"row": idx+1, "status": "warning", "message": f"Over-allocation: {emp_id} has only {available}% capacity."})
-                else:
-                    summary["details"].append({"row": idx+1, "status": "success", "message": f"{status_msg.capitalize()} allocation for {emp_id}"})
 
             except Exception as e:
-                summary["invalid"] += 1
-                summary["details"].append({"row": idx+1, "status": "error", "message": str(e)})
+                summary["invalid_records"].append({"row": idx+1, "error": str(e), "row_data": rec})
+                summary["can_save"] = False
 
         if not dry_run:
             conn.commit()

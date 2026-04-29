@@ -238,24 +238,39 @@ const EmployeeDetails = () => {
     const completedProjectsList = userData.completedProjects || [];
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-    // Timeline always starts from RIGHT NOW (live date). The 12-week (90-day) window
-    // is anchored to today so the forecast is always current when the page opens.
+    // Current date for relative calculations
     const TODAY = new Date();
     TODAY.setHours(0, 0, 0, 0);
-    const TOTAL_WEEKS = 12; // 90-day window
-
-    // Build 3 rolling month labels based on today
-    const getTimelineMonths = () => {
-        const result = [];
-        for (let i = 0; i < 3; i++) {
-            const d = new Date(TODAY.getFullYear(), TODAY.getMonth() + i, 1);
-            const monthStr = d.toLocaleString('default', { month: 'short' });
-            const yearStr = d.getFullYear().toString().slice(-2);
-            result.push(`${monthStr} '${yearStr}`);
-        }
-        return result;
+    
+    // Anchor to the Monday of the current week to show only current and future data
+    const getMondayOfDate = (d) => {
+        const date = new Date(d);
+        const day = date.getDay() || 7;
+        date.setDate(date.getDate() - day + 1);
+        date.setHours(0, 0, 0, 0);
+        return date;
     };
-    const months = getTimelineMonths();
+    
+    const TIMELINE_START = getMondayOfDate(TODAY);
+    const TOTAL_WEEKS = 12; // 90-day window (~3 months)
+
+    // Build dynamic month labels based on the weeks actually shown in the grid
+    const getTimelineMonths = () => {
+        const monthGroups = [];
+        for (let i = 0; i < TOTAL_WEEKS; i++) {
+            const d = new Date(TIMELINE_START);
+            d.setDate(TIMELINE_START.getDate() + i * 7);
+            const monthLabel = d.toLocaleString('default', { month: 'short' }) + " '" + d.getFullYear().toString().slice(-2);
+            
+            if (monthGroups.length === 0 || monthGroups[monthGroups.length - 1].label !== monthLabel) {
+                monthGroups.push({ label: monthLabel, count: 1, startIndex: i });
+            } else {
+                monthGroups[monthGroups.length - 1].count++;
+            }
+        }
+        return monthGroups;
+    };
+    const monthGroups = getTimelineMonths();
 
     // Map raw project date strings to week-offsets relative to TODAY.
     // - Projects that started before today but haven't ended yet are clamped to start at week 0.
@@ -282,12 +297,12 @@ const EmployeeDetails = () => {
         if (rawStartDate || rawEndDate) {
             const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
-            const pStart = parseDateLocal(rawStartDate) || TODAY;
-            const pEnd = parseDateLocal(rawEndDate) || new Date(TODAY.getFullYear() + 1, TODAY.getMonth(), TODAY.getDate());
+            const pStart = parseDateLocal(rawStartDate) || TIMELINE_START;
+            const pEnd = parseDateLocal(rawEndDate) || new Date(TIMELINE_START.getFullYear() + 1, TIMELINE_START.getMonth(), TIMELINE_START.getDate());
 
-            // Week offsets relative to TODAY
-            sWeekRaw = (pStart.getTime() - TODAY.getTime()) / MS_PER_WEEK;
-            eWeekRaw = (pEnd.getTime() - TODAY.getTime()) / MS_PER_WEEK;
+            // Week offsets relative to TIMELINE_START
+            sWeekRaw = (pStart.getTime() - TIMELINE_START.getTime()) / MS_PER_WEEK;
+            eWeekRaw = (pEnd.getTime() - TIMELINE_START.getTime()) / MS_PER_WEEK;
 
             // If the project status is NOT Ended/Completed, keep it visible even if date passed
             const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
@@ -318,11 +333,13 @@ const EmployeeDetails = () => {
         // Determine if project is current (active as of today)
         // A project is current if it's currently running (starts today or earlier) 
         // AND if its end date hasn't passed (or it's not marked as Ended/Completed)
+        // A project is current if it's currently running (starts today or earlier) 
+        // AND if its end date hasn't passed (or it's not marked as Ended/Completed)
         const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
         
-        // Use a small epsilon (0.01) to handle floating point precision and ensure "Today" is current
-        const isCurrent = sWeekRaw <= 0.01 && (eWeekRaw >= -0.01 || !isEndedStatus);
-        const isFuture = sWeekRaw > 0.01;
+        const nowWeekOffset = (TODAY.getTime() - TIMELINE_START.getTime()) / (7 * 24 * 60 * 60 * 1000);
+        const isCurrent = sWeekRaw <= nowWeekOffset + 0.01 && (eWeekRaw >= nowWeekOffset - 0.01 || !isEndedStatus);
+        const isFuture = sWeekRaw > nowWeekOffset + 0.01;
 
         return {
             name: p.project_name || p.name,
@@ -348,7 +365,7 @@ const EmployeeDetails = () => {
                         await deleteEmployee(userData.employee_id || userData.id || id);
                         clearDashboardCache(); // Sync dashboard
                         triggerRefresh();
-                        navigate('/info/employee');
+                        navigate('/info/employees/list');
                     } catch (err) {
                         console.error('Delete failed', err);
                         alert('Delete failed');
@@ -774,20 +791,34 @@ const EmployeeDetails = () => {
                             <div className="flex-1">
                                 {/* Months */}
                                 <div className="grid grid-cols-12 border-b border-slate-200">
-                                    {months.map((month, idx) => (
-                                        <div key={idx} className="col-span-4 text-center text-xs font-bold text-slate-700 border-r border-slate-200 last:border-r-0 py-2 bg-slate-50">
-                                            {month}
+                                    {monthGroups.map((mg, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className="text-center text-xs font-bold text-slate-700 border-r-2 border-slate-300 last:border-r-0 py-2 bg-slate-50"
+                                            style={{ gridColumn: `span ${mg.count}` }}
+                                        >
+                                            {mg.label}
                                         </div>
                                     ))}
                                 </div>
-
                                 {/* Weeks */}
                                 <div className="grid grid-cols-12 text-[10px] text-slate-500 font-bold bg-white">
-                                    {[...Array(12)].map((_, i) => (
-                                        <div key={i} className="col-span-1 text-center border-r border-slate-100 last:border-r-0 py-1.5 uppercase tracking-wider">
-                                            W{(i % 4) + 1}
-                                        </div>
-                                    ))}
+                                    {[...Array(12)].map((_, i) => {
+                                        const weekDate = new Date(TIMELINE_START);
+                                        weekDate.setDate(TIMELINE_START.getDate() + i * 7);
+                                        const isCurrentWeek = TODAY >= weekDate && TODAY < new Date(weekDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                                        
+                                        // Find which month group this week belongs to to calculate W1, W2, etc.
+                                        const mg = [...monthGroups].reverse().find(g => i >= g.startIndex);
+                                        const weekNum = i - (mg?.startIndex || 0) + 1;
+                                        const isMonthEnd = mg && (mg.startIndex + mg.count - 1 === i);
+
+                                        return (
+                                            <div key={i} className={`col-span-1 text-center border-r ${isMonthEnd ? 'border-slate-300 border-r-2' : 'border-slate-100'} last:border-r-0 py-1.5 uppercase tracking-wider ${isCurrentWeek ? 'bg-blue-50 text-blue-600' : ''}`}>
+                                                {isCurrentWeek ? 'NOW' : `W${weekNum}`}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
@@ -813,9 +844,13 @@ const EmployeeDetails = () => {
                             <div className="flex-1 relative bg-[#fcfdfd]">
                                 {/* Background Grid Lines */}
                                 <div className="absolute inset-0 grid grid-cols-12 pointer-events-none z-0 min-h-full">
-                                    {[...Array(12)].map((_, i) => (
-                                        <div key={i} className={`border-r border-slate-100/60 h-full ${i % 4 === 3 ? 'border-slate-200' : ''}`}></div>
-                                    ))}
+                                    {[...Array(12)].map((_, i) => {
+                                         const mg = [...monthGroups].reverse().find(g => i >= g.startIndex);
+                                         const isMonthEnd = mg && (mg.startIndex + mg.count - 1 === i);
+                                         return (
+                                             <div key={i} className={`border-r ${isMonthEnd ? 'border-slate-300 border-r-2' : 'border-slate-100/60'} h-full last:border-r-0`}></div>
+                                         );
+                                     })}
                                 </div>
 
                                 {/* Project Bars Rows */}
