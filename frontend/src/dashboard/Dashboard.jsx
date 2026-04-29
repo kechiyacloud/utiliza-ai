@@ -303,8 +303,8 @@ function Dashboard() {
       color: "text-slate-500", 
       bg: "bg-slate-50", 
       border: "border-slate-100", 
-      route: "/info/resource-highlights", 
-      state: { cardType: 'total', fromDashboard: true, departmentFilter: selectedDepartments } 
+      route: "/info/employees/list", 
+      state: { cardFilter: null, fromDashboard: true, departmentFilter: selectedDepartments } 
     },
     { 
       title: "Billable Headcount", 
@@ -314,8 +314,8 @@ function Dashboard() {
       color: "text-blue-500", 
       bg: "bg-blue-50", 
       border: "border-blue-100", 
-      route: "/info/resource-highlights", 
-      state: { cardType: 'billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+      route: "/info/employees/list", 
+      state: { cardFilter: 'billable', fromDashboard: true, departmentFilter: selectedDepartments } 
     },
     { 
       title: "Non-Billable Headcount", 
@@ -325,8 +325,8 @@ function Dashboard() {
       color: "text-emerald-500", 
       bg: "bg-emerald-50", 
       border: "border-emerald-100", 
-      route: "/info/resource-highlights", 
-      state: { cardType: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+      route: "/info/employees/list", 
+      state: { cardFilter: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments } 
     },
     { 
       title: "Bench Headcount", 
@@ -336,8 +336,8 @@ function Dashboard() {
       color: "text-rose-500", 
       bg: "bg-rose-50", 
       border: "border-rose-100", 
-      route: "/info/resource-highlights", 
-      state: { cardType: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
+      route: "/info/employees/list", 
+      state: { cardFilter: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
     },
     { 
       title: `${String(contextLabel)} Utilization`, 
@@ -381,7 +381,8 @@ function Dashboard() {
       bg: "bg-amber-50", 
       border: "border-amber-100", 
       route: "/info/allocation", 
-      state: { showForecastOnly: true, showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } 
+      hash: "#forecast-bench",
+      state: { showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } 
     }
   ];
 
@@ -535,21 +536,26 @@ function Dashboard() {
                 key={idx}
                 onClick={() => {
                   if (kpi.route) {
-                    navigate(kpi.route, { state: kpi.state, hash: kpi.hash || '' });
+                    navigate(kpi.route + (kpi.hash || ''), { state: kpi.state });
                   }
                 }}
-                className={`bg-white border border-slate-100 p-3 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 shadow-md cursor-pointer flex flex-col items-start min-w-[140px] h-full flex-1`}
+                className={`bg-white border border-slate-200 p-4 rounded-2xl relative overflow-hidden group hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all duration-300 shadow-sm cursor-pointer flex flex-col justify-between min-h-[100px]`}
               >
-                <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity ${kpi.bg}`}></div>
-                <div className="flex w-full items-start justify-between z-10 mb-2">
-                  <div className={`p-1.5 rounded-lg transition-colors ${kpi.bg} ${kpi.color}`}>
-                    <kpi.icon size={18} strokeWidth={2.5} />
+                <div className="flex items-center justify-between w-full mb-3">
+                  <p className="text-2xl font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                    {kpi.value}
+                  </p>
+                  <div className={`p-2 rounded-xl transition-all ${kpi.bg} ${kpi.color} group-hover:bg-blue-100 group-hover:text-blue-700`}>
+                    <kpi.icon size={20} strokeWidth={2.5} />
                   </div>
                 </div>
-                <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
-                  <h3 className="text-xl font-bold text-slate-900 tracking-tight mb-0.5 leading-none">{kpi.value}</h3>
-                  <p className="text-slate-500 text-[11px] font-bold tracking-tight uppercase mb-0.5 whitespace-nowrap">{kpi.title}</p>
-                  <p className="text-[10px] text-slate-400 font-medium leading-tight">{kpi.subtext}</p>
+                <div className="flex flex-col">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-blue-600/80 transition-colors">
+                    {kpi.title}
+                  </p>
+                  {kpi.subtext && (
+                    <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">{kpi.subtext}</p>
+                  )}
                 </div>
               </div>
             ))}

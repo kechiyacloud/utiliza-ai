@@ -348,7 +348,7 @@ const EmployeeDetails = () => {
                         await deleteEmployee(userData.employee_id || userData.id || id);
                         clearDashboardCache(); // Sync dashboard
                         triggerRefresh();
-                        navigate('/info/employee');
+                        navigate('/info/employees/list');
                     } catch (err) {
                         console.error('Delete failed', err);
                         alert('Delete failed');

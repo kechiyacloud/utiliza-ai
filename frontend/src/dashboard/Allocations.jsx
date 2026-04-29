@@ -209,9 +209,9 @@ function Allocations() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]"
           >
-            <Upload size={15} />
+            <Upload size={15} strokeWidth={2.5} />
             Import Allocations
           </button>
           <AllocationFilters filters={filters} setFilters={setFilters} />

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check, Undo2, Download } from 'lucide-react';
+import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check, Undo2, Download, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
@@ -288,9 +288,10 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
 
                     {filters?.cardFilter === 'bench' && (
                         <button
-                            onClick={() => navigate('/info/allocation', { state: { showForecastOnly: true, showBack: true } })}
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center gap-2"
+                            onClick={() => navigate('/info/allocation#forecast-bench', { state: { showBack: true } })}
+                            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center gap-2 border border-orange-200"
                         >
+                            <TrendingUp size={14} />
                             View Upcoming Bench
                         </button>
                     )}
@@ -397,7 +398,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                         onClick={async (event) => {
                                                             event.stopPropagation();
                                                             try {
-                                                                await restoreEmployee(emp.employee_id);
+                                                                 await restoreEmployee(emp.employee_id);
                                                                 if (onRestore) onRestore();
                                                             } catch (err) {
                                                                 alert('Failed to restore employee');
@@ -417,13 +418,34 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                             })
                         ) : (
                             <tr>
-                                <td colSpan="7" className="px-6 py-12 text-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-2">
-                                            <Search className="w-6 h-6 text-gray-300" />
+                                <td colSpan="7" className="px-6 py-16 text-center">
+                                    <div className="flex flex-col items-center gap-3">
+                                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-2">
+                                            <Search className="w-8 h-8 text-slate-200" />
                                         </div>
-                                        <p className="text-sm font-bold text-gray-800">No employees found</p>
-                                        <p className="text-xs text-gray-400">Adjust your filters to see more results.</p>
+                                        {filters?.cardFilter === 'bench' ? (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <p className="text-lg font-bold text-gray-800">Excellent! No one is on bench.</p>
+                                                    <p className="text-sm text-gray-400 max-w-[300px] mx-auto mt-1">Your entire workforce is currently engaged in active project work.</p>
+                                                </div>
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">Or</p>
+                                                    <button 
+                                                        onClick={() => navigate('/info/allocation#forecast-bench', { state: { showBack: true } })}
+                                                        className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
+                                                    >
+                                                        <TrendingUp size={16} />
+                                                        View Upcoming Bench
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-lg font-bold text-gray-800">No employees found</p>
+                                                <p className="text-sm text-gray-400">Adjust your filters or search query to see more results.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

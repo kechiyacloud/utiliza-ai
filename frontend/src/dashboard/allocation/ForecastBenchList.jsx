@@ -13,7 +13,15 @@ const ForecastBenchList = ({ employees, onEmployeeClick }) => {
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 w-full h-[500px] flex flex-col">
-
+            <div className="flex items-center justify-between mb-6 shrink-0">
+                <div>
+                    <h3 className="text-lg font-bold text-gray-800 tracking-tight">Upcoming Bench (Forecast)</h3>
+                    <p className="text-xs font-medium text-gray-400">Team members scheduled to complete projects soon</p>
+                </div>
+                <div className="p-2.5 bg-orange-50 rounded-xl border border-orange-100">
+                    <Calendar size={20} className="text-orange-600" />
+                </div>
+            </div>
 
             <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
                 {employees && employees.length > 0 ? (
@@ -70,11 +78,22 @@ const ForecastBenchList = ({ employees, onEmployeeClick }) => {
                         </tbody>
                     </table>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10 gap-3">
-                        <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center">
-                            <User size={24} className="opacity-20" />
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-4">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-2">
+                            <Briefcase size={32} className="text-blue-200" />
                         </div>
-                        <p className="text-sm font-medium">No upcoming roll-offs found</p>
+                        <div>
+                            <p className="text-lg font-bold text-gray-700">All set! No upcoming roll-offs</p>
+                            <p className="text-sm text-gray-500 max-w-[320px] mx-auto mt-1">
+                                Currently, all projects are fully staffed through their planned durations. 
+                                We'll notify you when team members are scheduled to complete their assignments.
+                            </p>
+                        </div>
+                        <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <p className="text-xs font-semibold text-slate-500 italic">
+                                Suggestion: Check the <span className="text-blue-600 font-bold">Organization Insights</span> for overall utilization trends.
+                            </p>
+                        </div>
                     </div>
                 )}
             </div>

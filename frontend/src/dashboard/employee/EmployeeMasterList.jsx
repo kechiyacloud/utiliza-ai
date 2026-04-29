@@ -14,28 +14,30 @@ import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className={`bg-white p-4 rounded-2xl border relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col items-start shadow-sm ${isActive ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
+    className={`rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between min-h-[100px] shadow-sm relative group ${
+      onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30' : 'cursor-default'
+    } ${isActive ? 'bg-blue-50/80 border-blue-400 shadow-sm ring-2 ring-blue-100' : 'bg-white border-slate-200'}`}
     onClick={onClick}
   >
-    <div className="flex w-full items-start justify-between z-10 mb-2">
-      <div className={`p-1.5 rounded-lg transition-colors ${colorClass} bg-opacity-10 ${colorClass.replace('bg-', 'text-').replace('500', '600')}`}>
-        <Icon size={18} strokeWidth={2.5} />
-      </div>
-    </div>
-    <div className="relative z-10 flex flex-col justify-end flex-1 w-full text-left">
-      <h3 className={`text-xl font-bold text-slate-900 tracking-tight mb-0.5 leading-none`}>
+    <div className="flex items-center justify-between w-full mb-3">
+      <p className={`text-2xl font-bold transition-colors ${isActive ? 'text-blue-700' : 'text-slate-900 group-hover:text-blue-700'}`}>
         {loading ? (
           <span className="text-slate-200 animate-pulse">...</span>
         ) : error ? (
           <span className="text-rose-500">—</span>
         ) : (
-          <span>{value ?? '—'}</span>
+          value ?? '—'
         )}
-      </h3>
-      <p className="text-slate-500 text-[10px] font-bold tracking-tight uppercase mb-0.5 whitespace-nowrap">{label}</p>
+      </p>
+      <div className={`p-2 rounded-xl transition-all ${isActive ? `${colorClass} bg-opacity-20 text-blue-700` : `bg-slate-50 ${colorClass.replace('bg-', 'text-').replace('500', '600')} group-hover:bg-blue-100 group-hover:text-blue-700`}`}>
+        <Icon size={20} strokeWidth={2.5} />
+      </div>
     </div>
-    {/* Subtle Background Accent */}
-    <div className={`absolute -right-6 -top-6 w-16 h-16 rounded-full blur-3xl opacity-10 transition-opacity ${colorClass}`}></div>
+    <div className="flex flex-col">
+      <p className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-blue-600/80' : 'text-slate-500 group-hover:text-blue-600/80'}`}>
+        {label}
+      </p>
+    </div>
   </div>
 )
 
@@ -80,6 +82,17 @@ function EmployeeMasterList() {
   useEffect(() => {
     localStorage.setItem('employee_department_filter', JSON.stringify(selectedDepts));
   }, [selectedDepts]);
+
+  // Clear stale department filter if none of the saved departments exist in the loaded data
+  useEffect(() => {
+    if (allEmployees.length > 0 && selectedDepts.length > 0) {
+      const validDepts = new Set(allEmployees.map(e => e.department).filter(Boolean));
+      const stillValid = selectedDepts.filter(d => validDepts.has(d));
+      if (stillValid.length !== selectedDepts.length) {
+        setSelectedDepts(stillValid);
+      }
+    }
+  }, [allEmployees]);
 
   const allDepts = useMemo(() =>
     [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()

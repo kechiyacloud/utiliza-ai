@@ -463,13 +463,13 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
                                     <ReviewSection
                                         id="new"
                                         label="New Allocations"
-                                        count={reviewResult.new_records.length}
+                                        count={reviewResult?.new_records?.length || 0}
                                         color="emerald"
                                         open={openSections.new}
                                         onToggle={() => toggleSection('new')}
                                     >
                                         <ReviewTable
-                                            rows={reviewResult.new_records}
+                                            rows={reviewResult?.new_records || []}
                                             columns={[
                                                 { key: 'employee_name', label: 'Employee' },
                                                 { key: 'project_name',  label: 'Project' },
@@ -485,13 +485,13 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
                                     <ReviewSection
                                         id="updated"
                                         label="Updated Allocations"
-                                        count={reviewResult.updated_records.length}
+                                        count={reviewResult?.updated_records?.length || 0}
                                         color="amber"
                                         open={openSections.updated}
                                         onToggle={() => toggleSection('updated')}
                                     >
                                         <ReviewTable
-                                            rows={reviewResult.updated_records}
+                                            rows={reviewResult?.updated_records || []}
                                             columns={[
                                                 { key: 'employee_name', label: 'Employee' },
                                                 { key: 'project_name',  label: 'Project' },
@@ -514,13 +514,13 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
                                     <ReviewSection
                                         id="over"
                                         label="Over-Allocated Employees"
-                                        count={reviewResult.over_allocated.length}
+                                        count={reviewResult?.over_allocated?.length || 0}
                                         color="rose"
                                         open={openSections.over}
                                         onToggle={() => toggleSection('over')}
                                     >
                                         <ReviewTable
-                                            rows={reviewResult.over_allocated}
+                                            rows={reviewResult?.over_allocated || []}
                                             columns={[
                                                 { key: 'employee_name',  label: 'Employee' },
                                                 { key: 'current_total',  label: 'Current %', render: v => `${v}%` },
@@ -534,13 +534,13 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
                                     <ReviewSection
                                         id="invalid"
                                         label="Errors"
-                                        count={reviewResult.invalid_records.length}
+                                        count={reviewResult?.invalid_records?.length || 0}
                                         color="red"
                                         open={openSections.invalid}
                                         onToggle={() => toggleSection('invalid')}
                                     >
                                         <div className="divide-y divide-slate-100">
-                                            {reviewResult.invalid_records.map((r, i) => (
+                                            {reviewResult?.invalid_records?.map((r, i) => (
                                                 <div key={i} className="px-4 py-2.5 flex items-start gap-2">
                                                     <AlertCircle size={13} className="text-red-400 mt-0.5 flex-shrink-0" />
                                                     <div>
