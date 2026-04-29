@@ -423,6 +423,7 @@ const SearchableDropdown = ({
     isLoading = false,
     onBeforeOpen,
     onOpenChange,
+    onCreateNew,
 }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
@@ -432,6 +433,9 @@ const SearchableDropdown = ({
 
     const selectedItem = items.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
     const filtered = items.filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+    const trimmedSearch = search.trim();
+    const exactMatch = filtered.some(i => (i.name || '').toLowerCase() === trimmedSearch.toLowerCase());
+    const showCreateOption = !!onCreateNew && trimmedSearch.length > 0 && !exactMatch;
 
     const syncMenuPosition = () => {
         if (!containerRef.current) return;
@@ -529,9 +533,7 @@ const SearchableDropdown = ({
                         <div className="py-1">
                             {isLoading && filtered.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
-                            ) : filtered.length === 0 && search.trim().length > 0 ? (
-                                <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
-                            ) : filtered.length === 0 ? (
+                            ) : filtered.length === 0 && !showCreateOption ? (
                                 <div className="px-4 py-4 text-center text-xs text-gray-300">No options available</div>
                             ) : (
                                 filtered.map((item) => (
@@ -554,6 +556,21 @@ const SearchableDropdown = ({
                                         <span className="truncate min-w-0">{item.name}</span>
                                     </button>
                                 ))
+                            )}
+                            {showCreateOption && (
+                                <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        onCreateNew(trimmedSearch);
+                                        setIsOpen(false);
+                                        setSearch('');
+                                    }}
+                                    className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 text-emerald-600 hover:bg-emerald-50 font-semibold border-t border-gray-100 transition-colors"
+                                >
+                                    <Plus size={14} className="shrink-0" />
+                                    Add &ldquo;{trimmedSearch}&rdquo;
+                                </button>
                             )}
                         </div>
                     </div>
@@ -599,7 +616,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [employees, setEmployees] = useState([]);   // [{employee_id, employee_name, role_designation}]
     const [rolesList, setRolesList] = useState([]);   // flat list of unique role strings
     const [availableSkills, setAvailableSkills] = useState([]);
-    const [skillInput, setSkillInput] = useState('');
     const [skillError, setSkillError] = useState('');
     const [isAddingSkill, setIsAddingSkill] = useState(false);
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
@@ -675,7 +691,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('');
             setTeamHoursError('');
             setEntityError('');
-            setSkillInput('');
             setSkillError('');
             setIsAddingSkill(false);
             setFormData({
@@ -801,7 +816,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
         if (skillExistsInList(formData.skills, normalizedSkill)) {
             setSkillError(`"${normalizedSkill}" is already added.`);
-            setSkillInput('');
             return;
         }
 
@@ -835,12 +849,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             if (skillExistsInList(prev.skills, skillToAdd)) return prev;
             return { ...prev, skills: [...prev.skills, skillToAdd] };
         });
-        setSkillInput('');
         setSkillError('');
-    };
-
-    const handleAddSkillClick = async () => {
-        await addSkillToForm(skillInput);
     };
 
     const handleSkillRemove = (skillToRemove) => {
@@ -1637,49 +1646,16 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {/* SKILLS MULTI-SELECT */}
                                 <div className="flex flex-col gap-1.5 col-span-2">
                                     <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Required Skills</label>
-                                    <div className="flex flex-col gap-3">
-                                        <div className="flex gap-2">
-                                            <SearchableDropdown
-                                                items={availableSkills.map(s => ({ id: s, name: s }))}
-                                                selectedId={null} // Multi-select doesn't have a single selected ID
-                                                onSelect={(item) => {
-                                                    const selectedSkill = item?.isCreateOption ? item.skillName : item.name;
-                                                    void addSkillToForm(selectedSkill);
-                                                }}
-                                                placeholder="Search or add skills"
-                                                label="skills"
-                                                noResultsText="Skill not found. Select Add or use + Add Skill."
-                                            />
-                                        </div>
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <input
-                                                type="text"
-                                                value={skillInput}
-                                                onChange={(e) => {
-                                                    setSkillInput(e.target.value);
-                                                    if (skillError) setSkillError('');
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        void handleAddSkillClick();
-                                                    }
-                                                }}
-                                                placeholder="Type a new skill"
-                                                className="flex-1 h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => { void handleAddSkillClick(); }}
-                                                disabled={isAddingSkill}
-                                                className={`h-10 px-4 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${isAddingSkill
-                                                        ? 'bg-emerald-50 text-emerald-400 border-emerald-100 cursor-not-allowed'
-                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
-                                                    }`}
-                                            >
-                                                {isAddingSkill ? 'Adding...' : '+ Add Skill'}
-                                            </button>
-                                        </div>
+                                    <div className="flex flex-col gap-2">
+                                        <SearchableDropdown
+                                            items={availableSkills.map(s => ({ id: s, name: s }))}
+                                            selectedId={null}
+                                            onSelect={(item) => { void addSkillToForm(item.name); }}
+                                            onCreateNew={(skillText) => { void addSkillToForm(skillText); }}
+                                            placeholder={isAddingSkill ? 'Adding skill…' : 'Search or type to add a skill'}
+                                            label="skills"
+                                            disabled={isAddingSkill}
+                                        />
                                         {skillError && (
                                             <p className="text-xs text-red-600 font-medium">{skillError}</p>
                                         )}

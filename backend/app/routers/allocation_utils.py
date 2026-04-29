@@ -99,6 +99,19 @@ def _iter_week_keys(start_date: date, end_date: Optional[date], max_weeks: int =
         current += timedelta(weeks=1)
         steps += 1
 
+def _weekday_overlap_count(week_monday: date, alloc_start: date, alloc_end: Optional[date]) -> int:
+    """Count Mon–Fri days of the ISO week starting `week_monday` that fall within
+    [alloc_start, alloc_end]. alloc_end=None means open-ended."""
+    count = 0
+    for offset in range(5):
+        day = week_monday + timedelta(days=offset)
+        if day < alloc_start:
+            continue
+        if alloc_end is not None and day > alloc_end:
+            continue
+        count += 1
+    return count
+
 def _normalize_week_key(raw_key, default_year: int) -> Optional[tuple]:
     if raw_key in ("", None):
         return None
@@ -111,7 +124,8 @@ def _normalize_week_key(raw_key, default_year: int) -> Optional[tuple]:
         return None
 
 def _build_weekly_hours_from_pct(allocation_pct: int, alloc_start: date, alloc_end: Optional[date], overrides: Optional[dict] = None) -> dict:
-    hours_per_week = round((allocation_pct or 0) * HOURS_PER_FTE / 100, 2)
+    full_week_hours = (allocation_pct or 0) * HOURS_PER_FTE / 100
+    per_day_hours = full_week_hours / 5
     weekly_map = {}
     if overrides:
         default_year = alloc_start.year if alloc_start else date.today().year
@@ -124,7 +138,10 @@ def _build_weekly_hours_from_pct(allocation_pct: int, alloc_start: date, alloc_e
                     continue
     if alloc_start:
         for y, w in _iter_week_keys(alloc_start, alloc_end):
-            weekly_map.setdefault((y, w), hours_per_week)
+            week_monday = date.fromisocalendar(y, w, 1)
+            workdays = _weekday_overlap_count(week_monday, alloc_start, alloc_end)
+            prorated = round(per_day_hours * workdays, 2)
+            weekly_map.setdefault((y, w), prorated)
     return weekly_map
 
 def _fetch_existing_weekly_load(cur, employee_id: str, start_date: date, end_date: Optional[date], ignore_allocation_id: Optional[str] = None) -> dict:
@@ -166,9 +183,14 @@ def _fetch_existing_weekly_load(cur, employee_id: str, start_date: date, end_dat
         alloc_end = meta["end"] or end_date
         if not alloc_start:
             continue
+        full_week_hours = (meta["pct"] or 0) * HOURS_PER_FTE / 100
+        per_day_hours = full_week_hours / 5
         for y, w in _iter_week_keys(alloc_start, alloc_end, max_weeks=52):
-            hours = round((meta["pct"] or 0) * HOURS_PER_FTE / 100, 2)
-            weekly_load[(y, w)] = weekly_load.get((y, w), 0) + hours
+            week_monday = date.fromisocalendar(y, w, 1)
+            workdays = _weekday_overlap_count(week_monday, alloc_start, alloc_end)
+            hours = round(per_day_hours * workdays, 2)
+            if hours > 0:
+                weekly_load[(y, w)] = weekly_load.get((y, w), 0) + hours
     return weekly_load
 
 def _available_capacity_pct(existing_weekly_load: dict) -> int:
@@ -223,20 +245,24 @@ def _build_weekly_distribution_for_rec(rec: dict, weeks_ahead: int = 12):
     if alloc_end:
         total_weeks = max(1, int(((alloc_end - alloc_start).days // 7) + 1))
         horizon_weeks = max(horizon_weeks, total_weeks)
-    base_hours = round((rec.get("allocation_percentage", 0) or 0) * HOURS_PER_FTE / 100, 2)
+    full_week_hours = (rec.get("allocation_percentage", 0) or 0) * HOURS_PER_FTE / 100
+    per_day_hours = full_week_hours / 5
     explicit_weeks = {}
     for wk_key, hours in rec.get("weekly_hours", {}).items():
         explicit_weeks[wk_key] = hours
     distribution = {}
     for y, w in _iter_week_keys(alloc_start, alloc_end, max_weeks=horizon_weeks):
         key = f"{y}-{w:02d}"
-        if alloc_end and _monday_of(date.fromisocalendar(y, w, 1)) > alloc_end:
+        week_monday = date.fromisocalendar(y, w, 1)
+        if alloc_end and week_monday > alloc_end:
             distribution[key] = "-"
             continue
         if key in explicit_weeks and explicit_weeks[key] > 0:
             distribution[key] = explicit_weeks[key]
         else:
-            distribution[key] = base_hours if base_hours > 0 else "-"
+            workdays = _weekday_overlap_count(week_monday, alloc_start, alloc_end)
+            prorated = round(per_day_hours * workdays, 2)
+            distribution[key] = prorated if prorated > 0 else "-"
     return distribution
 
 def _validate_resource_rows(resources: List[TeamMemberCreate]):

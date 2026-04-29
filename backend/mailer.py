@@ -8,7 +8,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 def send_email(to_email, subject, html_body):
     smtp_host = os.getenv('SMTP_HOST')
     smtp_user = os.getenv('SMTP_USER')
-    smtp_password = os.getenv('SMTP_PASSWORD')
+    smtp_password = os.getenv('SMTP_PASS')
     smtp_from = os.getenv('SMTP_FROM', smtp_user)
 
     print(f"[MAILER] Attempting to send email to={to_email}, from={smtp_from}, host={smtp_host}")

@@ -103,25 +103,41 @@ const getStatusBadgeStyle = (status, pct) => {
 
 
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
     const progress = calculateProjectProgress(project);
     return (
         <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full">
             {/* Action Buttons - Absolute positioned to avoid title overlap */}
-            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
-                <button
-                    onClick={(e) => { e.stopPropagation(); onEdit(project); }}
-                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-emerald-100 shadow-sm"
-                    title="Edit Project"
-                >
-                    <Pencil size={14} />
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(project); }}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-rose-100 shadow-sm"
-                    title="Delete Project"
-                >
-                    <Trash2 size={14} />
-                </button>
+            <div className="absolute top-4 right-4 z-10">
+                <div className="relative">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors bg-white/80 backdrop-blur-sm border border-transparent hover:border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 data-[open=true]:opacity-100"
+                        data-open={isMenuOpen}
+                        title="Actions"
+                    >
+                        <MoreVertical size={16} />
+                    </button>
+                    {isMenuOpen && (
+                        <>
+                            <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); }}></div>
+                            <div className="absolute right-0 mt-1 w-36 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onEdit(project); }}
+                                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
+                                >
+                                    <Pencil size={14} /> Edit
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(project); }}
+                                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2 transition-colors"
+                                >
+                                    <Trash2 size={14} /> Delete
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
 
             <div className="flex items-center gap-3 mb-5 pr-12">
@@ -199,6 +215,21 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                     </span></span>
                 </div>
 
+                {project.skills && project.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                        {project.skills.slice(0, 3).map((skill, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-md border border-blue-100">
+                                {skill}
+                            </span>
+                        ))}
+                        {project.skills.length > 3 && (
+                            <span className="text-[10px] text-slate-400 font-medium ml-1">
+                                +{project.skills.length - 3} more
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 <button
                     onClick={() => onView(project)}
                     className="w-full py-2.5 mt-auto bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600 shadow-sm hover:shadow-md active:scale-[0.98]"
@@ -235,6 +266,7 @@ const ProjectList = ({
     const [isDeleting, setIsDeleting] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+    const [activeActionMenuId, setActiveActionMenuId] = useState(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -337,10 +369,24 @@ const ProjectList = ({
             if (filters?.sowStatus) {
                 matchesSowStatus = project.sub_status === filters.sowStatus || project.subStatus === filters.sowStatus;
             }
-            // Date filtering is now handled strictly by the backend using "Effective Dates"
-            // (COALESCE of resource allocation and project dates). 
-            // We rely on the API to return the correct set of projects.
-            const matchesDateFilter = true;
+            // Date filtering uses overlap semantics: project's timeline must intersect
+            // the filter window. Applied client-side as a defensive layer in addition
+            // to the backend's matching SQL filter, so the list reacts immediately.
+            let matchesDateFilter = true;
+            if (filters?.startDate) {
+                const fStart = new Date(filters.startDate);
+                const pEnd = new Date(project.endDate || project.end_date || '9999-12-31');
+                if (!Number.isNaN(fStart.getTime()) && !Number.isNaN(pEnd.getTime())) {
+                    matchesDateFilter = matchesDateFilter && pEnd >= fStart;
+                }
+            }
+            if (filters?.endDate) {
+                const fEnd = new Date(filters.endDate);
+                const pStart = new Date(project.startDate || project.start_date || '1970-01-01');
+                if (!Number.isNaN(fEnd.getTime()) && !Number.isNaN(pStart.getTime())) {
+                    matchesDateFilter = matchesDateFilter && pStart <= fEnd;
+                }
+            }
 
             // 4. Sort-based Filtering (requested by user)
             let matchesSortFilter = true;
@@ -348,6 +394,12 @@ const ProjectList = ({
                 matchesSortFilter = !isCompletedStatus(project.status || project.project_status);
             } else if (sortBy === 'internal') {
                 matchesSortFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
+            } else if (sortBy === 'billable') {
+                const bVal = (project.billable || '').toLowerCase().replace(/[\s-]/g, '');
+                matchesSortFilter = ['billable', 'yes', 'true'].includes(bVal);
+            } else if (sortBy === 'non-billable') {
+                const bVal = (project.billable || '').toLowerCase().replace(/[\s-]/g, '');
+                matchesSortFilter = ['nonbillable', 'no', 'false'].includes(bVal);
             }
 
             // 5. Department Filter (Header or Sidebar)
@@ -391,10 +443,10 @@ const ProjectList = ({
             }
             if (effectiveSort === 'finishing-soon' || effectiveSort === 'finishing-last') {
                 const getStatusPriority = (project) => {
+                    if (isCompletedStatus(project.status)) return 3;
                     const s = (project.status || '').toLowerCase();
-                    if (s === 'completed') return 3;
-                    if (s === 'not started') return 2;
-                    return 1; // Active (In Progress, On Hold, Overdue, etc.)
+                    if (['not started', 'planned', 'upcoming'].includes(s)) return 2;
+                    return 1;
                 };
 
                 const priorityA = getStatusPriority(a);
@@ -413,20 +465,10 @@ const ProjectList = ({
                     return dateB - dateA;
                 }
             }
-            if (effectiveSort === 'billable') {
-                const aVal = a.billable === true || a.is_billable === true || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'billable') ? 0 : 1;
-                const bVal = b.billable === true || b.is_billable === true || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'billable') ? 0 : 1;
-                return aVal - bVal;
-            }
-            if (effectiveSort === 'non-billable') {
-                const aVal = a.billable === false || a.is_billable === false || (typeof (a.billable || a.is_billable) === 'string' && (a.billable || a.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
-                const bVal = b.billable === false || b.is_billable === false || (typeof (b.billable || b.is_billable) === 'string' && (b.billable || b.is_billable).toLowerCase() === 'non-billable') ? 0 : 1;
-                return aVal - bVal;
-            }
-            if (effectiveSort === 'internal') {
-                const aVal = (a.type || '').toLowerCase() === 'internal' ? 0 : 1;
-                const bVal = (b.type || '').toLowerCase() === 'internal' ? 0 : 1;
-                return aVal - bVal;
+            if (effectiveSort === 'billable' || effectiveSort === 'non-billable' || effectiveSort === 'internal') {
+                const dateA = new Date(a.startDate || a.start_date || 0);
+                const dateB = new Date(b.startDate || b.start_date || 0);
+                return dateB - dateA;
             }
             return 0;
         });
@@ -633,39 +675,49 @@ const ProjectList = ({
 
                         {/* Sort */}
                         <div className="relative group">
-                            <button
-                                onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                                className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
-                            >
-                                Sort
-                                <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
-                            </button>
-                            {isSortMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                        {[
-                                            { id: 'newest', label: 'Newest First' },
-                                            { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
-                                            { id: 'billable', label: 'Billable' },
-                                            { id: 'non-billable', label: 'Non-Billable' },
-                                            { id: 'internal', label: 'Internal' },
-                                            { id: 'finishing-soon', label: 'Finishing Soon' },
-                                            { id: 'finishing-last', label: 'Finishing Last' },
-                                        ].map((opt) => (
-                                            <button
-                                                key={opt.id}
-                                                onClick={() => { onSortChange(opt.id); setIsSortMenuOpen(false); }}
-                                                className={`w-full px-4 py-2.5 text-left text-xs transition-all flex items-center justify-between group
-                                                    ${sortBy === opt.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'}`}
-                                            >
-                                                {opt.label}
-                                                {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
+                            {(() => {
+                                const sortOptions = [
+                                    { id: 'newest', label: 'Newest First' },
+                                    { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
+                                    { id: 'billable', label: 'Billable' },
+                                    { id: 'non-billable', label: 'Non-Billable' },
+                                    { id: 'internal', label: 'Internal' },
+                                    { id: 'finishing-soon', label: 'Finishing Soon' },
+                                    { id: 'finishing-last', label: 'Finishing Last' },
+                                ];
+                                const activeSortLabel = sortOptions.find(opt => opt.id === sortBy)?.label || 'Sort';
+                                return (
+                                    <>
+                                        <button
+                                            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                                            className={`flex items-center gap-1.5 px-4 py-2.5 bg-white border rounded-xl text-sm font-medium transition-all shadow-sm ${sortBy ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                {sortBy ? <span>Sort: <span className="font-bold">{activeSortLabel}</span></span> : 'Sort'}
+                                            </span>
+                                            <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isSortMenuOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)}></div>
+                                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                                    {sortOptions.map((opt) => (
+                                                        <button
+                                                            key={opt.id}
+                                                            onClick={() => { onSortChange(opt.id); setIsSortMenuOpen(false); }}
+                                                            className={`w-full px-4 py-2.5 text-left text-xs transition-all flex items-center justify-between group
+                                                                ${sortBy === opt.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600'}`}
+                                                        >
+                                                            {opt.label}
+                                                            {sortBy === opt.id && <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
 
                         {/* Reset */}
@@ -766,31 +818,33 @@ const ProjectList = ({
                                             </div>
                                         </td>
                                         <td className="py-5 px-6 align-middle min-w-[120px]">
-                                            <div className="flex items-center w-full">
-                                                <div className="flex-1 flex justify-center">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleEditClick(project);
-                                                        }}
-                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                        title="Edit Project"
-                                                    >
-                                                        <Pencil size={18} />
-                                                    </button>
-                                                </div>
-                                                <div className="flex-1 flex justify-end">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setProjectToDelete(project);
-                                                        }}
-                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                                        title="Delete Project"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                </div>
+                                            <div className="flex justify-center relative">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(activeActionMenuId === project.id ? null : project.id); }}
+                                                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200 shadow-sm"
+                                                    title="Actions"
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+                                                {activeActionMenuId === project.id && (
+                                                    <>
+                                                        <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(null); }}></div>
+                                                        <div className="absolute right-6 top-10 mt-1 w-36 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100 text-left">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(null); handleEditClick(project); }}
+                                                                className="w-full px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Pencil size={14} /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(null); setProjectToDelete(project); }}
+                                                                className="w-full px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Trash2 size={14} /> Delete
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

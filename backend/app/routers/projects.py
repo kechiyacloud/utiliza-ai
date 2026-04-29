@@ -135,6 +135,41 @@ def _sync_project_extensions(cur, project_id: str, old_end, new_end):
                 DO NOTHING
             """, (aid, w_year, w_num, hours))
 
+def _save_project_skills(cur, project_id, skills):
+    """Saves project skills by clearing old ones and inserting new ones."""
+    if skills is None:
+        return
+    
+    # 1. Clear existing skills
+    cur.execute("DELETE FROM project_skills WHERE project_id = %s", (project_id,))
+    
+    if not skills:
+        return
+
+    # 2. Insert new skills
+    for skill in skills:
+        skill = skill.strip()
+        if not skill:
+            continue
+            
+        # Ensure skill exists in the skills table
+        cur.execute("""
+            INSERT INTO skills (skill_name)
+            VALUES (%s)
+            ON CONFLICT (LOWER(TRIM(skill_name))) DO NOTHING
+        """, (skill,))
+        
+        # Get the skill_id (whether newly inserted or already present)
+        cur.execute("SELECT skill_id FROM skills WHERE LOWER(TRIM(skill_name)) = LOWER(TRIM(%s))", (skill,))
+        skill_id = cur.fetchone()[0]
+        
+        # Insert into project_skills
+        cur.execute("""
+            INSERT INTO project_skills (project_id, skill_id)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+        """, (project_id, skill_id))
+
 
 class ProjectDetailsUpdate(BaseModel):
     budget: Optional[str] = None
@@ -149,6 +184,7 @@ class ProjectDetailsUpdate(BaseModel):
     milestones: Optional[str] = None
     timeline_notes: Optional[str] = None
     department_id: Optional[str] = None
+    skills: Optional[List[str]] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -164,6 +200,7 @@ class ProjectUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     sub_status: Optional[str] = None
+    skills: Optional[List[str]] = None
 
 
 from app.routers.allocation_utils import (
@@ -474,21 +511,23 @@ def projects_overview(
             where_clause += " AND p.sub_status = %s "
             params.append(sow_status)
 
-        # Date Range Filter (Consistent with UI logic: uses allocation dates if present)
+        # Date Range Filter — overlap semantics:
+        # A project is included if its timeline (using effective dates) intersects
+        # the filter window. project_end >= filter.start AND project_start <= filter.end.
         if final_start and final_start.strip():
-            where_clause += """
-                AND COALESCE(
-                    p.start_date,
-                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
-                )::date >= %s::date
-            """
-            params.append(final_start.strip())
-        
-        if final_end and final_end.strip():
             where_clause += """
                 AND COALESCE(
                     p.end_date,
                     (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date >= %s::date
+            """
+            params.append(final_start.strip())
+
+        if final_end and final_end.strip():
+            where_clause += """
+                AND COALESCE(
+                    p.start_date,
+                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
                 )::date <= %s::date
             """
             params.append(final_end.strip())
@@ -610,21 +649,23 @@ def projects_list(
             """
             params.append(f"%{resource_name}%")
 
-        # Date Range Filter (Consistent with UI logic: uses allocation dates if present)
+        # Date Range Filter — overlap semantics:
+        # A project is included if its timeline (using effective dates) intersects
+        # the filter window. project_end >= filter.start AND project_start <= filter.end.
         if final_start and final_start.strip():
-            where_clause += """
-                AND COALESCE(
-                    p.start_date,
-                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
-                )::date >= %s::date
-            """
-            params.append(final_start.strip())
-        
-        if final_end and final_end.strip():
             where_clause += """
                 AND COALESCE(
                     p.end_date,
                     (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
+                )::date >= %s::date
+            """
+            params.append(final_start.strip())
+
+        if final_end and final_end.strip():
+            where_clause += """
+                AND COALESCE(
+                    p.start_date,
+                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
                 )::date <= %s::date
             """
             params.append(final_end.strip())
@@ -692,7 +733,13 @@ def projects_list(
                 p.partner_id,
                 p.uuid,
                 p.department_id,
-                d.department_name
+                d.department_name,
+                (
+                    SELECT JSON_AGG(s.skill_name)
+                    FROM project_skills ps
+                    JOIN skills s ON ps.skill_id = s.skill_id
+                    WHERE ps.project_id = p.project_id
+                ) AS skills
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
@@ -724,7 +771,8 @@ def projects_list(
                 "partner_id": r[15],
                 "uuid": str(r[16]) if r[16] else None,
                 "department_id": r[17],
-                "department_name": r[18]
+                "department_name": r[18],
+                "skills": r[19] if r[19] else []
             }
             for r in results
         ]
@@ -736,13 +784,61 @@ def projects_list(
         release_db_connection(conn)
 
 
-@router.get("/departments")
-def list_departments():
-    """Return all departments for use in dropdowns."""
+@router.post("/skills/ensure")
+def ensure_skill(payload: dict, _user: dict = Depends(get_current_user)):
+    """Ensure a skill exists in the skills table, creating it if absent. Returns the canonical skill_name."""
+    skill_name = str(payload.get("skill_name") or "").strip()
+    if not skill_name:
+        raise HTTPException(status_code=400, detail="skill_name is required")
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT department_id, department_name FROM departments ORDER BY department_name")
+        cur.execute("SELECT skill_name FROM skills WHERE LOWER(TRIM(skill_name)) = LOWER(%s)", (skill_name,))
+        row = cur.fetchone()
+        if row:
+            return {"skill_name": row[0]}
+        cur.execute("INSERT INTO skills (skill_name) VALUES (%s) RETURNING skill_name", (skill_name,))
+        inserted = cur.fetchone()[0]
+        conn.commit()
+        return {"skill_name": inserted}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.get("/departments")
+def list_departments():
+    """Return all unique departments for use in dropdowns.
+
+    Combines departments table with any unique department names referenced
+    via employee_master.department so dropdowns show every department that
+    actually exists in the data.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT department_id, department_name
+            FROM (
+                SELECT department_id, department_name
+                FROM departments
+                WHERE department_name IS NOT NULL
+                  AND TRIM(department_name) <> ''
+                UNION
+                SELECT NULL AS department_id, TRIM(em.department) AS department_name
+                FROM employee_master em
+                WHERE em.department IS NOT NULL
+                  AND TRIM(em.department) <> ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM departments d
+                      WHERE LOWER(TRIM(d.department_name)) = LOWER(TRIM(em.department))
+                  )
+            ) AS combined
+            ORDER BY department_name
+        """)
         rows = cur.fetchall()
         return [{"id": r[0], "name": r[1]} for r in rows]
     except Exception as e:
@@ -778,7 +874,7 @@ def get_project_details(project_id: str, _user: dict = Depends(get_current_user)
         if not row:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        return {
+        project_details = {
             "project_id": row[0],
             "project_name": row[1],
             "status": _normalize_project_status(row[2], strict=False) if row[2] else None,
@@ -802,8 +898,21 @@ def get_project_details(project_id: str, _user: dict = Depends(get_current_user)
             "type": row[19],
             "uuid": str(row[20]) if row[20] else None,
             "department_id": str(row[21]) if row[21] else None,
-            "department_name": row[22] or "No Department"
+            "department_name": row[22] or "No Department",
+            "skills": []
         }
+        
+        # Fetch skills
+        cur.execute("""
+            SELECT s.skill_name
+            FROM project_skills ps
+            JOIN skills s ON ps.skill_id = s.skill_id
+            WHERE ps.project_id = %s
+            ORDER BY s.skill_name
+        """, (project_id,))
+        project_details["skills"] = [r[0] for r in cur.fetchall()]
+        
+        return project_details
     finally:
         cur.close()
         release_db_connection(conn)
@@ -867,6 +976,9 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user
                 milestones = COALESCE(EXCLUDED.milestones, project_scopes.milestones),
                 timeline_notes = COALESCE(EXCLUDED.timeline_notes, project_scopes.timeline_notes)
         """, (project_id, details.objective, details.deliverables, details.milestones, details.timeline_notes))
+        
+        # 5. Update skills
+        _save_project_skills(cur, project_id, details.skills)
         
         conn.commit()
         print(f"SUCCESS: Project {project_id} details updated and committed.")
@@ -1264,6 +1376,10 @@ def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depend
         payload = _model_payload(updates)
         if not payload:
             raise HTTPException(status_code=400, detail="No project fields were provided.")
+        
+        # 2. Update skills if provided
+        if "skills" in payload:
+            _save_project_skills(cur, project_id, payload["skills"])
 
         start_date_value = payload.get("start_date")
         end_date_value = payload.get("end_date")
@@ -1330,15 +1446,15 @@ def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depend
             else:
                 ignore_sub_status = None
 
-        if not updates_map:
+        if not updates_map and "skills" not in payload:
             raise HTTPException(status_code=400, detail="No valid project fields were provided.")
-
-        print(f"UPDATING PROJECT {project_id} WITH:", updates_map)
-        fields = [f"{col} = %s" for col in updates_map.keys()]
-        values = list(updates_map.values())
-        values.append(project_id)
-
-        cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
+        
+        if updates_map:
+            print(f"UPDATING PROJECT {project_id} WITH:", updates_map)
+            fields = [f"{col} = %s" for col in updates_map.keys()]
+            values = list(updates_map.values())
+            values.append(project_id)
+            cur.execute(f"UPDATE projects SET {', '.join(fields)} WHERE project_id = %s", tuple(values))
 
         # 3. Synchronize Allocations if end_date was extended (Dates + Hours)
         if updates_map.get("end_date"):
@@ -1413,6 +1529,10 @@ def create_project(project: ProjectCreate):
 
         placeholders = ", ".join(["%s"] * len(insert_fields))
         cur.execute(f"INSERT INTO projects ({', '.join(insert_fields)}) VALUES ({placeholders})", tuple(insert_values))
+        
+        # Save project skills
+        if project.skills:
+            _save_project_skills(cur, project.project_id, project.skills)
 
         for idx, tm in enumerate(project.team_members):
             tm.allocation_id = tm.allocation_id or f"AL-{project.project_id}-{idx + 1:03d}"

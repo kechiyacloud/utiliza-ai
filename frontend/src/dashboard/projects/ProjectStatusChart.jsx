@@ -5,21 +5,21 @@ import { ArrowUpDown } from 'lucide-react';
 const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
     // Generate a consistent vibrant background color based on name
     const colors = [
-        'bg-blue-500', 'bg-emerald-500', 'bg-indigo-500', 'bg-rose-500', 
+        'bg-blue-500', 'bg-emerald-500', 'bg-indigo-500', 'bg-rose-500',
         'bg-amber-500', 'bg-violet-500', 'bg-cyan-500'
     ];
     const colorIndex = name ? name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length : 0;
     const bgColor = colors[colorIndex];
 
     return (
-        <div 
-            className={`${size} rounded-full border-2 border-white ${avatar_url ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`} 
+        <div
+            className={`${size} rounded-full border-2 border-white ${avatar_url ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`}
             title={name}
         >
             {avatar_url ? (
-                <img 
-                    src={avatar_url} 
-                    alt={name} 
+                <img
+                    src={avatar_url}
+                    alt={name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
                         e.target.onerror = null;
@@ -36,7 +36,7 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
 
 const AvatarStack = ({ resources, totalCount, size = 'w-7 h-7' }) => {
     if (!resources || resources.length === 0) return null;
-    
+
     const displayMembers = resources.slice(0, 3);
     const remainingCount = Math.max((totalCount || resources.length) - displayMembers.length, 0);
 
@@ -45,10 +45,10 @@ const AvatarStack = ({ resources, totalCount, size = 'w-7 h-7' }) => {
             {displayMembers.map((user, i) => {
                 const avatar = user.avatar_url || user.photo_url || user.profile_image;
                 return (
-                    <AvatarCircle 
-                        key={user.id || user.employee_id || i} 
-                        name={user.name || user.employee_name || 'Unknown'} 
-                        avatar_url={avatar} 
+                    <AvatarCircle
+                        key={user.id || user.employee_id || i}
+                        name={user.name || user.employee_name || 'Unknown'}
+                        avatar_url={avatar}
                         size={size}
                     />
                 );
@@ -120,7 +120,7 @@ const ProjectStatusChart = ({ projects }) => {
         return [...filteredProjects].sort((a, b) => {
             const aEnd = safeDate(a.endDate || a.end_date);
             const bEnd = safeDate(b.endDate || b.end_date);
-            
+
             return sortOrder === 'asc' ? aEnd - bEnd : bEnd - aEnd;
         });
     }, [filteredProjects, sortOrder]);
@@ -158,20 +158,19 @@ const ProjectStatusChart = ({ projects }) => {
                             <div className="flex justify-between items-start text-sm font-semibold text-gray-800">
                                 <span className="truncate pr-3">{p.name}</span>
                                 <div className="flex items-center gap-3">
-                                    <AvatarStack 
-                                        resources={p.team_members || p.resources || p.allocations || []} 
-                                        totalCount={p.resource_count || (p.team_members || p.resources || []).length || 0} 
-                                        size="w-7 h-7" 
+                                    <AvatarStack
+                                        resources={p.team_members || p.resources || p.allocations || []}
+                                        totalCount={p.resource_count || (p.team_members || p.resources || []).length || 0}
+                                        size="w-7 h-7"
                                     />
                                     <span className={`text-xs font-bold ${colors.text}`}>{pct}%</span>
                                 </div>
                             </div>
 
                             <div className="flex items-center justify-between mt-2">
-                                <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors duration-200 flex-wrap"
-                                    style={{ maxWidth: "100%" }}
+                                <div className="inline-flex items-center gap-2 text-xs font-semibold rounded-full transition-colors duration-200 whitespace-nowrap"
                                     aria-label="Progress summary">
-                                    <span className={`${getBadgeStyle(pct)} inline-flex items-center gap-1 px-3 py-1 rounded-full`}>
+                                    <span className={`${getBadgeStyle(pct)} inline-flex items-center gap-1 px-3 py-1 rounded-full whitespace-nowrap`}>
                                         <span className="text-[10px] font-semibold">{daysLeft} days left</span>
                                         <span className="text-[11px] font-extrabold">• {pct}% completed</span>
                                     </span>
@@ -181,7 +180,7 @@ const ProjectStatusChart = ({ projects }) => {
                             <div className="w-full bg-gray-200 rounded-full h-3 mt-2 relative group transition-all">
                                 {/* Arrow marker */}
                                 <div
-                                    className="absolute -left-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-6 border-t-transparent border-b-transparent border-r-gray-400 opacity-80"
+                                    className="absolute -left-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-[6px] border-t-transparent border-b-transparent border-r-gray-400 opacity-80"
                                 ></div>
 
                                 {/* Tooltip */}
