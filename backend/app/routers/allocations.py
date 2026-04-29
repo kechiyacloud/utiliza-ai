@@ -484,42 +484,6 @@ def get_forecast_bench(
     try:
         # Improved query: identifies employees whose maximum allocation end date falls within the next 30 days.
         # This ensures we don't show someone as 'Upcoming Bench' if they have another project starting later.
-        query = """
-            SELECT 
-                m.employee_id,
-                m.employee_name,
-                m.role_designation as role,
-                m.photo_url,
-                p.project_name,
-                pa.allocation_end_date as end_date
-            FROM projects_allocation pa
-            JOIN employee_master m ON pa.employee_id = m.employee_id
-            JOIN projects p ON pa.project_id = p.project_id
-            WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-              AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-              AND m.date_of_resign IS NULL
-              AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              -- Ensure this is their LAST project roll-off in the near future
-              AND NOT EXISTS (
-                  SELECT 1 FROM projects_allocation pa2
-                  JOIN projects p2 ON pa2.project_id = p2.project_id
-                  WHERE pa2.employee_id = m.employee_id
-                    AND pa2.allocation_id <> pa.allocation_id
-                    AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
-                    AND COALESCE(LOWER(p2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              )
-            ORDER BY pa.allocation_end_date ASC
-        """
-        params = []
-        if department and department != 'All Departments':
-            dept_list = [d.strip() for d in department.split(',')]
-            query = query.replace("AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)", 
-                                 "AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND m.department = ANY(%s)")
-            params.append(dept_list)
-        
-        # We need to re-wrap the query if we modified it, or just use a more flexible construction
-        # Actually, let's just rewrite the query construction for safety.
-        
         base_query = """
             SELECT 
                 m.employee_id,
@@ -535,14 +499,6 @@ def get_forecast_bench(
               AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND m.date_of_resign IS NULL
               AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              AND NOT EXISTS (
-                  SELECT 1 FROM projects_allocation pa2
-                  JOIN projects p2 ON pa2.project_id = p2.project_id
-                  WHERE pa2.employee_id = m.employee_id
-                    AND pa2.allocation_id <> pa.allocation_id
-                    AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
-                    AND COALESCE(LOWER(p2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              )
         """
         
         where_params = []
