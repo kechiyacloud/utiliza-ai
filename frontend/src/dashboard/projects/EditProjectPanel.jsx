@@ -311,7 +311,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     };
 
     useEffect(() => {
-        if (project) {
+        // Re-initialise whenever the panel opens OR the project changes.
+        // This ensures that any unsaved edits (e.g. a cancelled date change)
+        // are always discarded when the user reopens the Edit panel.
+        if (isOpen && project) {
             setSaveError('');
             const projectType = normalizeTypeForForm(project.type || project.project_type);
             const isPartner = projectType === 'Partner';
@@ -338,7 +341,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             setInitialFormData(data);
             loadEntities();
         }
-    }, [project]);
+    }, [isOpen, project]);
 
     const hasProjectStarted = useMemo(() => {
         if (!project || (!project.start_date && !project.startDate)) return false;

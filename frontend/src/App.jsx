@@ -26,6 +26,7 @@ const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
 const ResourceHighlights = lazy(() => import('./dashboard/employee/ResourceHighlights'))
 const SkillsSummaryPage = lazy(() => import('./dashboard/employee/SkillsSummaryPage'))
+const UserManagement = lazy(() => import('./dashboard/UserManagement'))
 
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -78,6 +79,7 @@ function App() {
           <Route path='/info' element={<ProtectedRoute />}>
             <Route element={withSuspense(<MainDashboard />, 'Loading workspace...')}>
               <Route index element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
+              <Route path='users' element={withSuspense(<UserManagement />, 'Loading users...')} />
               <Route path='dashboard' element={withSuspense(<Dashboard />, 'Loading dashboard...')} />
               <Route path='projects' element={withSuspense(<Projects />, 'Loading projects...')} />
               <Route path='projects/add' element={withSuspense(<AddProjectPage />, 'Loading add project...')} />

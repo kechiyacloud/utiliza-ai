@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.database import get_db_connection, release_db_connection
+from app.rbac_utils import require_min_role
 import psycopg2
 
-router = APIRouter(prefix="/partners", tags=["Partners"])
+router = APIRouter(prefix="/partners", tags=["Partners"], dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 
 class PartnerClientCreate(BaseModel):
@@ -25,7 +26,7 @@ def list_partner_clients():
         release_db_connection(conn)
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_min_role("editor"))])
 def create_partner_client(payload: PartnerClientCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -51,7 +52,7 @@ def create_partner_client(payload: PartnerClientCreate):
         release_db_connection(conn)
 
 
-@router.put("/{partner_client_id}")
+@router.put("/{partner_client_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_partner_client(partner_client_id: str, payload: PartnerClientCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -79,7 +80,7 @@ def update_partner_client(partner_client_id: str, payload: PartnerClientCreate):
         release_db_connection(conn)
 
 
-@router.delete("/{partner_client_id}")
+@router.delete("/{partner_client_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_partner_client(partner_client_id: str):
     conn = get_db_connection()
     cur = conn.cursor()

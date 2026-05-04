@@ -8,7 +8,7 @@ import csv
 import traceback
 import textwrap
 from datetime import datetime, date
-from app.auth_utils import get_current_user
+from app.rbac_utils import require_min_role
 
 class TodoItem(BaseModel):
     message: str
@@ -24,7 +24,7 @@ class DepartmentCreate(BaseModel):
 class DesignationCreate(BaseModel):
     name: str
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 @router.get("/dashboard/departments")
 async def get_departments():
@@ -39,7 +39,7 @@ async def get_departments():
         depts = [r[0] for r in cur.fetchall()]
         return depts
 
-@router.post("/dashboard/departments")
+@router.post("/dashboard/departments", dependencies=[Depends(require_min_role("editor"))])
 async def create_department(dept: DepartmentCreate):
     with db_cursor() as cur:
         # Check if already exists
@@ -72,7 +72,7 @@ async def get_designations():
         
         return sorted(list(unified))
 
-@router.post("/dashboard/designations")
+@router.post("/dashboard/designations", dependencies=[Depends(require_min_role("editor"))])
 async def create_designation(desig: DesignationCreate):
     with db_cursor() as cur:
         # Check if already exists
@@ -91,7 +91,6 @@ def get_dashboard_all(
     employment_types: Optional[str] = None,
     skills: Optional[str] = None,
     status: Optional[str] = None,
-    _user: dict = Depends(get_current_user)
 ):
     """Consolidated endpoint to fetch all dashboard data in a single request."""
     with db_cursor() as cur:
@@ -678,14 +677,14 @@ def get_todos():
         cur.execute("SELECT id, message, type, status, created_at FROM actionable_todos ORDER BY created_at DESC")
         return [{"id": r[0], "message": r[1], "type": r[2], "status": r[3], "time": r[4].strftime("%I:%M %p") if r[4] else "Just now"} for r in cur.fetchall()]
 
-@router.post("/dashboard/todos")
+@router.post("/dashboard/todos", dependencies=[Depends(require_min_role("viewer"))])
 def add_todo(todo: TodoItem):
     with db_cursor() as cur:
         cur.execute("INSERT INTO actionable_todos (message, type, status) VALUES (%s, %s, 'pending') RETURNING id, message, type, status, created_at", (todo.message, todo.type))
         r = cur.fetchone()
         return {"id": r[0], "message": r[1], "type": r[2], "status": r[3], "time": r[4].strftime("%I:%M %p") if r[4] else "Just now"}
 
-@router.put("/dashboard/todos/{todo_id}/toggle")
+@router.put("/dashboard/todos/{todo_id}/toggle", dependencies=[Depends(require_min_role("viewer"))])
 def toggle_todo(todo_id: int):
     with db_cursor() as cur:
         cur.execute("SELECT status FROM actionable_todos WHERE id = %s", (todo_id,))
@@ -695,7 +694,7 @@ def toggle_todo(todo_id: int):
         cur.execute("UPDATE actionable_todos SET status = %s WHERE id = %s RETURNING status", (new_status, todo_id))
         return {"id": todo_id, "status": cur.fetchone()[0]}
 
-@router.delete("/dashboard/todos/{todo_id}")
+@router.delete("/dashboard/todos/{todo_id}", dependencies=[Depends(require_min_role("viewer"))])
 def delete_todo(todo_id: int):
     with db_cursor() as cur:
         cur.execute("DELETE FROM actionable_todos WHERE id = %s", (todo_id,))

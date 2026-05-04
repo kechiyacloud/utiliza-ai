@@ -741,7 +741,6 @@ const ProjectList = ({
                                     <th className="text-left py-5 pl-6">Project Details</th>
                                     <th className="text-center py-5">Status</th>
                                     <th className="text-center py-5">Type</th>
-                                    <th className="text-center py-5">Billable</th>
                                     <th className="text-center py-5">Resource</th>
                                     <th className="text-center py-5 px-6">Actions</th>
                                 </tr>
@@ -784,32 +783,7 @@ const ProjectList = ({
                                                 {project.type || 'Unknown'}
                                             </span>
                                         </td>
-                                        <td className="py-5 text-center">
-                                            {(() => {
-                                                const val = project.billable || project.is_billable;
-                                                const isBll = val === true || val === 'true' || (typeof val === 'string' && val.toLowerCase() === 'billable');
-                                                const isNonBll = val === false || val === 'false' || (typeof val === 'string' && val.toLowerCase() === 'non-billable');
 
-                                                if (isBll) {
-                                                    return (
-                                                        <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-emerald-100 bg-emerald-50 text-emerald-600 font-sans">
-                                                            Billable
-                                                        </span>
-                                                    );
-                                                } else if (isNonBll) {
-                                                    return (
-                                                        <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-amber-100 bg-amber-50 text-amber-600 font-sans">
-                                                            Non-Billable
-                                                        </span>
-                                                    );
-                                                }
-                                                return (
-                                                    <span className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-slate-100 bg-slate-50 text-slate-500 font-sans">
-                                                        N/A
-                                                    </span>
-                                                );
-                                            })()}
-                                        </td>
                                         <td className="py-5 text-center align-middle">
                                             <div className="flex flex-col items-center justify-center">
                                                 <div className="text-slate-800 font-bold text-lg">

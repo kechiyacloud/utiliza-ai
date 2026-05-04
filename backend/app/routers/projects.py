@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
 from app.database import get_db_connection, release_db_connection
-from app.auth_utils import get_current_user
+from app.rbac_utils import require_min_role, require_role, get_role, strip_fields
 from app.routers.employees import _sync_employee_allocations
 
 def ensure_project_columns():
@@ -62,7 +62,7 @@ def ensure_project_columns():
 # Run migration check on module import
 ensure_project_columns()
 
-router = APIRouter(prefix="/projects", tags=["Projects"])
+router = APIRouter(prefix="/projects", tags=["Projects"], dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 def _resolve_project_id(identifier: str, cur):
     """
@@ -784,8 +784,8 @@ def projects_list(
         release_db_connection(conn)
 
 
-@router.post("/skills/ensure")
-def ensure_skill(payload: dict, _user: dict = Depends(get_current_user)):
+@router.post("/skills/ensure", dependencies=[Depends(require_min_role("editor"))])
+def ensure_skill(payload: dict):
     """Ensure a skill exists in the skills table, creating it if absent. Returns the canonical skill_name."""
     skill_name = str(payload.get("skill_name") or "").strip()
     if not skill_name:
@@ -849,7 +849,7 @@ def list_departments():
 
 
 @router.get("/{project_id}/details")
-def get_project_details(project_id: str, _user: dict = Depends(get_current_user)):
+def get_project_details(project_id: str, _user: dict = Depends(require_min_role("restricted_viewer"))):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -912,14 +912,22 @@ def get_project_details(project_id: str, _user: dict = Depends(get_current_user)
         """, (project_id,))
         project_details["skills"] = [r[0] for r in cur.fetchall()]
         
-        return project_details
+        return strip_fields(project_details, get_role(_user), "project_detail")
     finally:
         cur.close()
         release_db_connection(conn)
 
 
 @router.put("/{project_id}/details")
-def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user: dict = Depends(get_current_user)):
+def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user: dict = Depends(require_min_role("editor"))):
+    from app.rbac_utils import is_admin
+    if not is_admin(_user):
+        details.budget = None
+        details.billing_type = None
+        details.contract_type = None
+        details.revenue_model = None
+        details.commercial_notes = None
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -995,7 +1003,7 @@ def update_project_details(project_id: str, details: ProjectDetailsUpdate, _user
 
 
 @router.get("/{project_id}/resources")
-def project_resources(project_id: str, _user: dict = Depends(get_current_user)):
+def project_resources(project_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -1131,7 +1139,7 @@ def project_resources(project_id: str, _user: dict = Depends(get_current_user)):
         release_db_connection(conn)
 
 
-@router.post("/{project_id}/resources")
+@router.post("/{project_id}/resources", dependencies=[Depends(require_min_role("editor"))])
 def create_project_resource(project_id: str, payload: TeamMemberCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1163,7 +1171,7 @@ def create_project_resource(project_id: str, payload: TeamMemberCreate):
         release_db_connection(conn)
 
 
-@router.patch("/{project_id}/resources/{allocation_id}")
+@router.patch("/{project_id}/resources/{allocation_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_project_resource(project_id: str, allocation_id: str, payload: TeamMemberCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1203,7 +1211,7 @@ def update_project_resource(project_id: str, allocation_id: str, payload: TeamMe
         release_db_connection(conn)
 
 
-@router.delete("/{project_id}/resources/{allocation_id}")
+@router.delete("/{project_id}/resources/{allocation_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_project_resource(project_id: str, allocation_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1296,8 +1304,8 @@ def export_project_resources_pdf(project_id: str, payload: ProjectResourcesPdfEx
         release_db_connection(conn)
 
 
-@router.put("/{project_id}/resources")
-def update_project_resources(project_id: str, payload: ResourceAllocationUpdate, _user: dict = Depends(get_current_user)):
+@router.put("/{project_id}/resources", dependencies=[Depends(require_min_role("editor"))])
+def update_project_resources(project_id: str, payload: ResourceAllocationUpdate):
     import datetime
 
     conn = get_db_connection()
@@ -1361,8 +1369,8 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate,
         release_db_connection(conn)
 
 
-@router.put("/{project_id}")
-def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depends(get_current_user)):
+@router.put("/{project_id}", dependencies=[Depends(require_min_role("editor"))])
+def update_project(project_id: str, updates: ProjectUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -1485,7 +1493,7 @@ def update_project(project_id: str, updates: ProjectUpdate, _user: dict = Depend
         release_db_connection(conn)
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_min_role("editor"))])
 def create_project(project: ProjectCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1568,7 +1576,7 @@ def create_project(project: ProjectCreate):
         release_db_connection(conn)
 
 
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_project(project_id: str):
     import psycopg2.errors
 

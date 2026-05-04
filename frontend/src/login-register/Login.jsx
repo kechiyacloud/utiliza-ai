@@ -54,6 +54,7 @@ function Login() {
 
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("userEmail", formData.email.trim());
+      window.dispatchEvent(new Event('auth-token-changed'));
       navigate("/info")
 
     } catch (err) {
