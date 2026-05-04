@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut, StickyNote } from 'lucide-react';
 
 const Navbar = () => {
     const navigate = useNavigate();

@@ -98,8 +98,16 @@ function Allocations() {
     setSelectedProject(project);
   };
 
-  const handleOverallocatedClick = () => {
-    navigate('/employees/list', { state: { cardFilter: 'overallocated' } });
+  const handleMetricClick = (filter) => {
+    const url = filter === 'overallocated'
+      ? `/info/view-resources?type=${filter}`
+      : (filter ? `/info/employees/list?filter=${filter}` : '/info/employees/list');
+    
+    if (filter === 'overallocated') {
+      navigate(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const showForecastOnly = location.state?.showForecastOnly;
@@ -169,7 +177,7 @@ function Allocations() {
         <div className="flex justify-end w-full">
           <AllocationFilters filters={filters} setFilters={setFilters} />
         </div>
-        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} onOverallocatedClick={handleOverallocatedClick} />
+        <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} onMetricClick={handleMetricClick} />
 
         <div className="flex flex-col lg:flex-row gap-6 w-full pb-8">
           <ProjectUtilization
@@ -223,7 +231,7 @@ function Allocations() {
       </div>
 
       {/* Metrics Row */}
-      <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} />
+      <AllocationMetrics metrics={data?.metrics} highlightTag={location.state?.showOverAllocation ? 'overallocated' : null} onMetricClick={handleMetricClick} />
 
       {/* Utilization Row (Projects & Organization Chart / Employee Allocation) */}
       <div className="flex flex-col lg:flex-row gap-6 w-full">

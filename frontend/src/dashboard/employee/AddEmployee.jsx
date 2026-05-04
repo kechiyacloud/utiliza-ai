@@ -148,25 +148,26 @@ const AddEmployee = () => {
     useEffect(() => {
         const applyEditData = (source) => {
             if (!source) return;
+            console.log("AddEmployee: Applying source data:", source);
 
             setFormData({
-                employee_id: source.id || source.employee_id || '',
-                employee_name: source.name || source.employee_name || '',
-                email: source.email || source.email_id || '',
+                employee_id: source.employee_id || source.id || '',
+                employee_name: source.employee_name || source.name || '',
+                email: source.email_id || source.email || '',
                 phone: source.phone === null || source.phone === undefined 
                     ? (source.phone_number === null || source.phone_number === undefined ? '' : String(source.phone_number))
                     : String(source.phone),
                 date_of_birth: normalizeDate(source.date_of_birth),
                 address: source.address || '',
                 photo_url: source.photo_url || source.profilePic || '',
-                date_of_joining: normalizeDate(source.joiningDate || source.date_of_joining),
-                role_designation: source.designation || source.role_designation || '',
+                date_of_joining: normalizeDate(source.date_of_joining || source.joiningDate),
+                role_designation: source.role_designation || source.designation || '',
                 department: source.department || '',
                 employment_type: normalizeEmploymentType(source.employment_type),
-                location: source.status?.location || source.location || '',
-                work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
-                employee_status: source.status?.allocated || source.employee_status || 'Bench',
-                shift: source.shift || '',
+                location: source.location || source.status?.location || '',
+                work_mode: normalizeWorkMode(source.work_mode || source.mode_of_work || source.status?.workMode),
+                employee_status: source.employee_status || source.status?.allocated || 'Bench',
+                shift: source.shift || source.shiftTiming || '',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
                 reporting_manager_id: source.reporting_manager_id || '',
                 date_of_resign: normalizeDate(source.date_of_resign),
@@ -174,12 +175,15 @@ const AddEmployee = () => {
                 pip_end_date: normalizeDate(source.pip_end_date),
                 notice_start_date: normalizeDate(source.notice_start_date),
                 notice_end_date: normalizeDate(source.notice_end_date),
-                skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
+                skills: (source.skills || source.masterSkills || []).map(s => {
+                    if (typeof s === 'string') return s;
+                    return s.skill_name || s.skill || s.name || '';
+                }).filter(Boolean),
                 certificates: (source.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
                 projects: (source.projects || []).map(p => ({
                     project_id: p.project_id || '',
-                    project_role: p.project_role || '',
-                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation, 10) || 0),
+                    project_role: p.project_role || p.role_in_project || '',
+                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation || p.allocation_percentage, 10) || 0),
                     project_start_date: normalizeDate(p.project_start_date || p.allocation_start_date || p.start_date),
                     project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date),
                     project_tags: p.project_tags || p.billable || 'billable'
@@ -187,13 +191,11 @@ const AddEmployee = () => {
             });
 
             // Parse existing shift string to restore preset + time pickers in edit mode
-            const rawShift = source.shift || '';
+            const rawShift = source.shift || source.shiftTiming || '';
             if (rawShift) {
-                // Try to match "Label (HH:MM AM - HH:MM PM)"
                 const match = rawShift.match(/^(.+?)\s*\((\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))\)$/i);
                 if (match) {
                     const presetLabel = match[1].trim();
-                    // Convert 12-hr to 24-hr for input[type=time]
                     const to24 = (t12) => {
                         const [time, ap] = t12.trim().split(/\s+/);
                         let [h, m] = time.split(':').map(Number);
@@ -211,23 +213,30 @@ const AddEmployee = () => {
 
             setShowPreview(true);
             setCompletedSections(['personal', 'professional', 'project', 'preview']);
-
         };
+
+        // 1. Initial application of data if available from router state
+        if (isEditMode && editData) {
+            applyEditData(editData);
+        }
 
         const loadEditData = async () => {
             if (!isEditMode || !editEmployeeId) return;
 
             try {
-                // Always fetch fresh data from API to ensure we have the latest record
+                // Fetch fresh data from API
                 const fullEmployee = await getEmployeeById(editEmployeeId);
-                applyEditData(fullEmployee);
+                if (fullEmployee) {
+                    applyEditData(fullEmployee);
+                }
             } catch (error) {
-                console.error('Failed to load employee details for edit', error);
+                console.error('Failed to load employee details for edit:', error);
             }
         };
 
         loadEditData();
     }, [isEditMode, editData, editEmployeeId]);
+
 
     useEffect(() => {
         const loadEmployees = async () => {
@@ -702,7 +711,7 @@ const AddEmployee = () => {
             
             // Redirect to the newly created/updated employee details page
             const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id;
-            navigate(`/info/employee/${targetId}`);
+            navigate(`/info/employee/${targetId}`, { replace: true });
         } catch (error) {
             console.error('Error saving employee:', error);
             const detail = error.response?.data?.detail;

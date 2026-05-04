@@ -96,7 +96,7 @@ def allocation_metrics(
                   AND (
                       pa.allocation_end_date IS NULL 
                       OR pa.allocation_end_date >= CURRENT_DATE
-                      OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                      OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                   )
                   AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                 GROUP BY pa.employee_id

@@ -41,7 +41,7 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 
                 {/* Right Side: Allocation Pill */}
                 <div className="flex items-center gap-2">
-                        {project.value === 0 ? "No project allocation" : `${project.value}%`}
+                        {project.value === 0 ? "No Allocation" : `${project.value}%`}
                     <ChevronRight
                         size={14}
                         className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
@@ -572,8 +572,9 @@ const EmployeeDetails = () => {
                                     cy="50%"
                                     innerRadius={45}
                                     outerRadius={60}
-                                    paddingAngle={5}
+                                    paddingAngle={0}
                                     dataKey="value"
+                                    stroke="none"
                                 >
                                     {chartData.filter(item => item.isCurrent).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -586,7 +587,7 @@ const EmployeeDetails = () => {
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center">
                                 {(() => {
                                     const total = chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
-                                    return total === 0 ? "No project allocation" : `${total}%`;
+                                    return total === 0 ? "No Allocation" : `${total}%`;
                                 })()}
                         </div>
                     </div>
@@ -876,7 +877,7 @@ const EmployeeDetails = () => {
 
                                                 {/* Inside Label */}
                                                 <span className="ml-3 text-[11px] text-white font-bold px-2 truncate drop-shadow-sm relative z-10 flex items-center leading-none">
-                                                    <span>{project.value === 0 ? "No project allocation" : `${project.value}%`}</span>
+                                                    <span>{project.value === 0 ? "No Allocation" : `${project.value}%`}</span>
                                                 </span>
                                             </div>
                                         </div>

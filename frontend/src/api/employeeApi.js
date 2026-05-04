@@ -39,7 +39,8 @@ export const getEmployeeList = async (forceUpdate = false, includeResigned = fal
         const res = await api.get('/employees/list', { 
             params: { 
                 include_resigned: includeResigned,
-                include_deleted: includeDeleted
+                include_deleted: includeDeleted,
+                _t: forceUpdate ? Date.now() : undefined
             } 
         });
         const rawData = Array.isArray(res?.data) ? res.data : [];
@@ -90,7 +91,7 @@ export const getEmployeeList = async (forceUpdate = false, includeResigned = fal
 
 // Fetch single employee details by ID
 export const getEmployeeById = async (id) => {
-    const res = await api.get(`/employees/${id}`);
+    const res = await api.get(`/employees/${encodeURIComponent(id)}`);
     return res.data;
 };
 

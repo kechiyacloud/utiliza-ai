@@ -34,7 +34,7 @@ export const getEmployeeTag = (status) => {
     }
     if (s === 'partially allocated') {
         return {
-            label: 'Partially allocated',
+            label: 'Partially',
             color: 'bg-purple-50 text-purple-600 border-purple-200',
             dot: 'bg-purple-500',
         };
@@ -84,8 +84,7 @@ const EmployeeStatusTag = ({ status, size = 'md' }) => {
         : 'px-2.5 py-1 text-xs';
 
     return (
-        <span className={`inline-flex items-center gap-1.5 rounded-md font-bold border ${tag.color} ${sizeClass} break-normal whitespace-nowrap`}>
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tag.dot}`} />
+        <span className={`inline-flex items-center gap-1.5 rounded-md font-semibold border ${tag.color} ${sizeClass} break-normal whitespace-nowrap`}>
             <span className="truncate max-w-[120px]" title={tag.label}>{tag.label}</span>
         </span>
     );

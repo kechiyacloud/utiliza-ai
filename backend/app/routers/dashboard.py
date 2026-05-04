@@ -186,7 +186,7 @@ def get_dashboard_all(
                        AND (
                            pa.allocation_end_date IS NULL 
                            OR pa.allocation_end_date >= CURRENT_DATE
-                           OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                           OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                        )
                        AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') 
@@ -205,7 +205,7 @@ def get_dashboard_all(
                              AND (
                                  pa_sub.allocation_end_date IS NULL 
                                  OR pa_sub.allocation_end_date >= CURRENT_DATE
-                                 OR LOWER(pj_sub.project_status) IN ('in-progress', 'active', 'ongoing')
+                                 OR LOWER(pj_sub.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                              )
                              AND COALESCE(LOWER(pj_sub.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        ), 0) <= 0),
@@ -217,7 +217,7 @@ def get_dashboard_all(
                        AND (
                            pa.allocation_end_date IS NULL 
                            OR pa.allocation_end_date >= CURRENT_DATE
-                           OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                           OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                        )
                        AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags)='no') 
@@ -314,7 +314,7 @@ def get_dashboard_all(
                               AND (
                                   pa.allocation_end_date IS NULL
                                   OR pa.allocation_end_date >= mo.month_start
-                                  OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                                  OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                               )
                               AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                         ) AS total_alloc
@@ -368,7 +368,7 @@ def get_dashboard_all(
                 WHERE (
                     pa.allocation_end_date IS NULL 
                     OR pa.allocation_end_date >= CURRENT_DATE
-                    OR LOWER(p.project_status) IN ('in-progress', 'active', 'ongoing')
+                    OR LOWER(p.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                 )
                   AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                   {e_filter}
@@ -388,7 +388,7 @@ def get_dashboard_all(
                       AND (
                           pa.allocation_end_date IS NULL 
                           OR pa.allocation_end_date >= CURRENT_DATE
-                          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                          OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                       )
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                     GROUP BY pa.employee_id
@@ -529,7 +529,7 @@ def get_dashboard_all(
                   AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE)
                   {e_filter}
                 GROUP BY e.employee_id, e.employee_name
-                ORDER BY MIN(ec.expiry_date) ASC NULLS LAST
+                ORDER BY MAX(ec.issued_date) DESC NULLS LAST
                 LIMIT 12
             """, dept_params)
             certifications = [{"employee": r[0], "certs": r[1], "count": r[2], "id": r[3]} for r in cur.fetchall()]
@@ -559,7 +559,7 @@ def get_dashboard_all(
                             AND (
                                 pa2.allocation_end_date IS NULL 
                                 OR pa2.allocation_end_date >= CURRENT_DATE
-                                OR LOWER(pj2.project_status) IN ('in-progress', 'active', 'ongoing')
+                                OR LOWER(pj2.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                             )
                             AND LOWER(pj2.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                       ), 0) <= 0
@@ -589,7 +589,7 @@ def get_dashboard_all(
                         AND (
                             pa_b.allocation_end_date IS NULL 
                             OR pa_b.allocation_end_date >= CURRENT_DATE
-                            OR LOWER(pj_b.project_status) IN ('in-progress', 'active', 'ongoing')
+                            OR LOWER(pj_b.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                         )
                         AND LOWER(pj_b.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                   ), 0) <= 0
