@@ -334,7 +334,7 @@ function Employee() {
           employees={allEmployees}
           loading={loading}
           onEmployeeClick={(emp) =>
-            navigate(`/info/employee/${emp.employee_id || '123'}`, {
+            navigate(`/info/employee/${encodeId(emp.employee_id || '123')}`, {
               state: {
                 employee: emp,
                 from: {

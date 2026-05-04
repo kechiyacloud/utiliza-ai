@@ -561,10 +561,10 @@ function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-8">
-            {/* Allocated vs Availability (Span 1) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
+            {/* Allocated vs Availability (Span 3 for 60% split) */}
             <div
-              className="lg:col-span-1 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              className="lg:col-span-3 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
             >
               <div className="flex justify-between items-center mb-4">
@@ -597,8 +597,8 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Actionable Todo List — Dashboard Theme */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
+            {/* Actionable Todo List — Dashboard Theme (Span 2 for 40% split) */}
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
               <div className="flex flex-col h-full">
 
                 {/* ── Header ── */}

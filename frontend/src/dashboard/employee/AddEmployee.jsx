@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
 import PhoneInputField from '../../components/PhoneInputField';
+import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
 import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation } from '../../api/employeeApi';
@@ -101,6 +102,14 @@ const AddEmployee = () => {
         const en = found ? found.end   : shiftEnd;
         if (found) { setShiftStart(s); setShiftEnd(en); }
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(val || 'Custom', s, en) }));
+        
+        if (errors.shift) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.shift;
+                return newErrors;
+            });
+        }
     };
 
     const handleShiftTimeChange = (field, value) => {
@@ -109,6 +118,14 @@ const AddEmployee = () => {
         if (field === 'start') setShiftStart(value);
         else setShiftEnd(value);
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(shiftPreset || 'Custom', s, en) }));
+
+        if (errors.shift) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.shift;
+                return newErrors;
+            });
+        }
     };
 
     // Form state
@@ -279,7 +296,7 @@ const AddEmployee = () => {
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
         { id: 'professional', label: 'Professional', icon: Briefcase },
-        { id: 'project', label: 'Project', icon: FolderKanban },
+        ...(formData.employee_status !== 'Bench' ? [{ id: 'project', label: 'Project', icon: FolderKanban }] : []),
         { id: 'preview', label: 'Preview', icon: Check }
     ];
 
@@ -324,7 +341,15 @@ const AddEmployee = () => {
                 }));
             }
         } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
+            setFormData(prev => {
+                const newState = { ...prev, [name]: value };
+                // If user explicitly forces status to Bench, automatically wipe any existing projects/allocations
+                if (name === 'employee_status' && value === 'Bench') {
+                    newState.projects = [];
+                    newState.employee_allocations = 0;
+                }
+                return newState;
+            });
         }
     };
 
@@ -471,7 +496,20 @@ const AddEmployee = () => {
     };
 
     const addProject = () => {
-        if (currentProject.project_id && currentProject.project_allocation > 0) {
+        if (!currentProject.project_id) {
+            alert('Please select a project.');
+            return;
+        }
+        if (!currentProject.project_allocation || currentProject.project_allocation <= 0) {
+            alert('Please specify a valid allocation percentage greater than 0.');
+            return;
+        }
+        if (!currentProject.project_start_date) {
+            alert('Please specify a project start date.');
+            return;
+        }
+
+        if (currentProject.project_id && currentProject.project_allocation > 0 && currentProject.project_start_date) {
             if (editingProjectIndex !== null) {
                 // Update existing project
                 setFormData(prev => {
@@ -621,7 +659,14 @@ const AddEmployee = () => {
         
         setFormData(prev => {
             // Calculate what the auto-status SHOULD be based on project list
-            const autoStatus = (formData.projects.length > 0 && totalAllocation > 0) ? 'Allocated' : 'Bench';
+            let autoStatus = 'Bench';
+            if (totalAllocation >= 81) {
+                autoStatus = 'Allocated';
+            } else if (totalAllocation >= 41) {
+                autoStatus = 'Partially allocated';
+            } else if (totalAllocation >= 1) {
+                autoStatus = 'Partially bench';
+            }
             
             // If current status is manual (Notice/PIP/Resign), keep status but sync allocation %
             if (MANUAL_STATUSES.some(s => (prev.employee_status || '').toLowerCase().includes(s))) {
@@ -711,7 +756,7 @@ const AddEmployee = () => {
             
             // Redirect to the newly created/updated employee details page
             const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id;
-            navigate(`/info/employee/${targetId}`, { replace: true });
+            navigate(`/info/employee/${encodeId(targetId)}`, { replace: true });
         } catch (error) {
             console.error('Error saving employee:', error);
             const detail = error.response?.data?.detail;
@@ -1062,30 +1107,24 @@ const AddEmployee = () => {
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
-                    {isEditMode ? (
-                        <select
-                            name="employee_status"
-                            value={formData.employee_status}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                            <optgroup label="Auto-calculated (based on projects)">
-                                <option value="Bench">Bench</option>
-                                <option value="Partially bench">Partially bench</option>
-                                <option value="Partially allocated">Partially allocated</option>
-                                <option value="Allocated">Allocated</option>
-                            </optgroup>
-                            <optgroup label="Manually set">
-                                <option value="Notice period">Notice period</option>
-                                <option value="PIP">PIP</option>
-                                <option value="Resigned">Resigned</option>
-                            </optgroup>
-                        </select>
-                    ) : (
-                        <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
-                            {formData.employee_status}
-                        </div>
-                    )}
+                    <select
+                        name="employee_status"
+                        value={formData.employee_status}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                        <optgroup label="Auto-calculated (based on projects)">
+                            <option value="Bench">Bench</option>
+                            <option value="Partially bench">Partially bench</option>
+                            <option value="Partially allocated">Partially allocated</option>
+                            <option value="Allocated">Allocated</option>
+                        </optgroup>
+                        <optgroup label="Manually set">
+                            <option value="Notice period">Notice period</option>
+                            <option value="PIP">PIP</option>
+                            <option value="Resigned">Resigned</option>
+                        </optgroup>
+                    </select>
                     <p className="text-[10px] text-gray-400 mt-1 font-medium italic">
                         * Bench/Allocated statuses are auto-calculated based on project details in Section 3.
                     </p>
@@ -1559,44 +1598,46 @@ const AddEmployee = () => {
             </div>
 
             {/* Projects */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-gray-800">Projects ({formData.projects.length})</h3>
-                    <button
-                        type="button"
-                        onClick={() => setCurrentSection('project')}
-                        className="px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 font-medium transition-colors"
-                    >
-                        Edit
-                    </button>
-                </div>
-                {formData.projects.length > 0 ? (
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="text-left p-2 border">Project</th>
-                                <th className="text-left p-2 border">Role</th>
-                                <th className="text-left p-2 border">Allocation</th>
-                                <th className="text-left p-2 border">Dates</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {formData.projects.map((project, i) => (
-                                <tr key={i} className="border-t">
-                                    <td className="p-2 border">
-                                        {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
-                                    </td>
-                                    <td className="p-2 border">{project.project_role}</td>
-                                    <td className="p-2 border">{project.project_allocation}% ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)</td>
-                                    <td className="p-2 border text-xs">{project.project_start_date} to {project.project_end_date || 'Ongoing'}</td>
+            {formData.employee_status !== 'Bench' && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-gray-800">Projects ({formData.projects.length})</h3>
+                        <button
+                            type="button"
+                            onClick={() => setCurrentSection('project')}
+                            className="px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 font-medium transition-colors"
+                        >
+                            Edit
+                        </button>
+                    </div>
+                    {formData.projects.length > 0 ? (
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="text-left p-2 border">Project</th>
+                                    <th className="text-left p-2 border">Role</th>
+                                    <th className="text-left p-2 border">Allocation</th>
+                                    <th className="text-left p-2 border">Dates</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <p className="text-gray-500 text-sm">No projects assigned</p>
-                )}
-            </div>
+                            </thead>
+                            <tbody>
+                                {formData.projects.map((project, i) => (
+                                    <tr key={i} className="border-t">
+                                        <td className="p-2 border">
+                                            {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
+                                        </td>
+                                        <td className="p-2 border">{project.project_role}</td>
+                                        <td className="p-2 border">{project.project_allocation}% ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)</td>
+                                        <td className="p-2 border text-xs">{project.project_start_date} to {project.project_end_date || 'Ongoing'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <p className="text-gray-500 text-sm">No projects assigned</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 
@@ -1706,18 +1747,18 @@ const AddEmployee = () => {
                                         setCompletedSections([...completedSections, currentSection]);
                                     }
 
-                                    if (currentSection === 'project') {
+                                    const idx = sections.findIndex(s => s.id === currentSection);
+                                    const nextSectionId = sections[idx + 1].id;
+                                    
+                                    if (nextSectionId === 'preview') {
                                         setShowPreview(true);
-                                        setCurrentSection('preview');
-                                    } else {
-                                        const idx = sections.findIndex(s => s.id === currentSection);
-                                        setCurrentSection(sections[idx + 1].id);
                                     }
+                                    setCurrentSection(nextSectionId);
                                 }
                             }}
                             className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors bg-blue-600 hover:bg-blue-700`}
                         >
-                            {currentSection === 'project' ? 'Review & Submit' : 'Next'}
+                            {sections[sections.findIndex(s => s.id === currentSection) + 1]?.id === 'preview' ? 'Review & Submit' : 'Next'}
                         </button>
                     ) : (
                         <button

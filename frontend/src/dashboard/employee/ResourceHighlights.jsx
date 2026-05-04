@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Users, UserCheck, Activity, UserMinus, AlertCircle, Search, Filter, Award } from 'lucide-react';
-import { getEmployeeList } from '../../api/employeeApi';
+import { useEmployees } from '../../context/EmployeeContext';
+import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import EmployeeTable from './EmployeeTable';
 import FilterOverlay from './FilterOverlay';
@@ -217,7 +218,7 @@ const ResourceHighlights = () => {
                                 .map((emp) => (
                                     <div 
                                         key={emp.employee_id}
-                                        onClick={() => navigate(`/info/employee/${emp.employee_id}`)}
+                                        onClick={() => navigate(`/info/employee/${encodeId(emp.employee_id)}`)}
                                         className="group bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-teal-100 transition-all cursor-pointer flex items-start gap-4"
                                     >
                                         <div className="flex-shrink-0 mt-1">
@@ -261,7 +262,7 @@ const ResourceHighlights = () => {
                         filters={filters}
                         searchValue={searchQuery}
                         onSearchChange={setSearchQuery}
-                        onEmployeeClick={(emp) => navigate(`/info/employee/${emp.employee_id}`, { state: { employee: emp } })}
+                        onEmployeeClick={(emp) => navigate(`/info/employee/${encodeId(emp.employee_id)}`, { state: { employee: emp } })}
                         onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
                         onFilterClick={() => setIsFilterOpen(true)}
                         hideControls={true}

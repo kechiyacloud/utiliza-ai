@@ -11,6 +11,7 @@ import { useEmployees } from '../../context/EmployeeContext'
 import { useDataRefresh } from '../../context'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import { encodeId } from '../../utils/idEncoder'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -409,7 +410,7 @@ function EmployeeMasterList() {
             employees={finalEmployees}
             loading={loading}
             onEmployeeClick={(emp) =>
-              navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, {
+              navigate(`/info/employee/${encodeId(emp.employee_id || emp.email_id || '123')}`, {
                 state: {
                   employee: emp,
                   from: {

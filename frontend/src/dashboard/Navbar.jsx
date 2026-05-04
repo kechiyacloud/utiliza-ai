@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
 import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut, StickyNote } from 'lucide-react';
+import { encodeId } from '../utils/idEncoder';
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -90,7 +91,7 @@ const Navbar = () => {
                             try {
                                 const response = await api.get(`/employee/by-email/${encodeURIComponent(userEmail)}`);
                                 if (response.data && response.data.employee_id) {
-                                    navigate(`/info/employee/${response.data.employee_id}`, {
+                                    navigate(`/info/employee/${encodeId(response.data.employee_id)}`, {
                                         state: {
                                             from: {
                                                 pathname: location.pathname,
