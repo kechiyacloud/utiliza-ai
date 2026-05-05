@@ -453,16 +453,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         }
 
         // Validations - only validate if the relevant field is changed or critical
-        if (!(formData.name || '').trim()) {
-            setSaveError('Project Name is required.');
-            return;
-        }
-
-        if (!formData.startDate) {
-            setSaveError('Start Date is required.');
-            return;
-        }
-
         if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
             setSaveError('End date cannot be earlier than start date.');
             return;
@@ -634,8 +624,8 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                 </div>
                             )}
 
-                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Project Name <span className="text-black ml-1">*</span></label>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-bold text-gray-500 uppercase">Project Name</label>
                                 <input
                                     type="text"
                                     name="name"
@@ -740,9 +730,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             )}
 
                             {/* Department — for ALL project types */}
-                             <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
-                                    Department <span className="text-black ml-1">*</span>
+                                    Department <span className="text-red-500">*</span>
                                 </label>
                                 <div className="flex gap-2">
                                     <SearchableDropdown
@@ -802,9 +792,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                 <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1">
                                     <label className={`text-xs font-bold uppercase ${hasProjectStarted ? 'text-blue-600' : 'text-gray-500'}`}>
-                                        Start Date <span className="text-black ml-1">*</span> {hasProjectStarted && <span className="text-[10px] lowercase font-medium ml-1">(Started)</span>}
+                                        Start Date {hasProjectStarted && <span className="text-[10px] lowercase font-medium ml-1">(Started)</span>}
                                     </label>
                                     <input
                                         type="date"
