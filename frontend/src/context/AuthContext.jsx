@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 
-const AuthContext = createContext({ role: null, userEmail: null });
+const AuthContext = createContext({ role: null, userEmail: null, subRoleConfig: null });
 
 function decodeJwt(token) {
     try {
@@ -15,6 +15,7 @@ function decodeJwt(token) {
 
 export function AuthProvider({ children }) {
     const [token, setToken] = useState(() => localStorage.getItem('token'));
+    const [subRoleConfig, setSubRoleConfig] = useState(null);
 
     useEffect(() => {
         const onAuthChange = () => setToken(localStorage.getItem('token'));
@@ -26,12 +27,29 @@ export function AuthProvider({ children }) {
         };
     }, []);
 
+    useEffect(() => {
+        if (!token) { setSubRoleConfig(null); return; }
+        const payload = decodeJwt(token);
+        if (!payload || (payload.exp && Date.now() >= payload.exp * 1000)) {
+            setSubRoleConfig(null); return;
+        }
+        let cancelled = false;
+        fetch('/api/sub-roles/my-config', {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (!cancelled) setSubRoleConfig(data); })
+        .catch(() => { if (!cancelled) setSubRoleConfig(null); });
+        return () => { cancelled = true; };
+    }, [token]);
+
     const payload = token ? decodeJwt(token) : null;
 
     const value = useMemo(() => ({
         role: payload?.role ?? null,
         userEmail: payload?.email ?? localStorage.getItem('userEmail') ?? null,
-    }), [payload?.role, payload?.email]);
+        subRoleConfig,
+    }), [payload?.role, payload?.email, subRoleConfig]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

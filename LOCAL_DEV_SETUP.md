@@ -5,7 +5,7 @@
 Only **Postgres and Redis** run in Docker. Backend and Frontend run natively in WSL for instant hot-reload.
 
 | Service  | Runs via   | Port | Auto-reload    |
-|----------|------------|------|----------------|
+| -------- | ---------- | ---- | -------------- |
 | Postgres | Docker     | 5433 | N/A            |
 | Redis    | Docker     | 6379 | N/A            |
 | Backend  | WSL native | 8000 | Yes (uvicorn)  |
@@ -76,11 +76,11 @@ Press `Ctrl+C` in each terminal to stop.
 
 ## Access Points
 
-| Service   | URL                        |
-|-----------|----------------------------|
-| Frontend  | http://localhost:5173      |
-| Backend   | http://localhost:8000      |
-| API Docs  | http://localhost:8000/docs |
+| Service  | URL                        |
+| -------- | -------------------------- |
+| Frontend | http://localhost:5173      |
+| Backend  | http://localhost:8000      |
+| API Docs | http://localhost:8000/docs |
 
 ---
 
@@ -107,3 +107,16 @@ docker compose -f docker-compose.local.yml stop postgres redis
 ## For Killing 8000 port
 
 - "sudo fuser -k 8000/tcp"
+
+- How to Enable it When Needed
+If you want to bring the feature back, follow these simple steps in the file frontend/src/dashboard/Settings.jsx:
+
+Enable the Menu Tab: Go to line 1030 and remove the // (double slashes) from the start of this line:
+
+javascript
+// ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
+Enable the Content View: Go to line 1165 and remove the {/* and */} comment markers from this block:
+
+javascript
+{/* {activeTab === 'access-control' && <AccessControlSection />} */}
+Once you save the file, the "Access Control" tab will immediately reappear for users with master_admin privileges.

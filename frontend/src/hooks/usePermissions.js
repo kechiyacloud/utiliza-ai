@@ -46,8 +46,18 @@ const ROLE_PERMISSIONS = {
     },
 };
 
+const BASE_FIELD_RESTRICTIONS = {
+    restricted_viewer: {
+        employees: ['phone', 'phone_number', 'date_of_birth', 'address'],
+        project_detail: ['budget', 'billing_type', 'revenue_model', 'contract_type', 'commercial_notes'],
+    },
+    viewer: {
+        project_detail: ['budget', 'billing_type', 'revenue_model', 'contract_type', 'commercial_notes'],
+    },
+};
+
 export function usePermissions() {
-    const { role } = useAuth();
+    const { role, subRoleConfig } = useAuth();
     const effectiveRole = role ?? 'restricted_viewer';
 
     function can(action, resource) {
@@ -59,5 +69,20 @@ export function usePermissions() {
         return (ROLE_HIERARCHY[effectiveRole] ?? -1) >= (ROLE_HIERARCHY[minRole] ?? 999);
     }
 
-    return { role: effectiveRole, can, isAtLeast };
+    function canAccessPage(page) {
+        // page_access is a BLACKLIST — pages listed here are RESTRICTED.
+        // If the array is empty, no pages are restricted → allow all.
+        const restricted = subRoleConfig?.page_access ?? [];
+        if (restricted.length === 0) return true;
+        return !restricted.includes(page);  // blocked if found in the restricted list
+    }
+
+    function isFieldHidden(resource, field) {
+        const base = BASE_FIELD_RESTRICTIONS[effectiveRole]?.[resource] ?? [];
+        if (base.includes(field)) return true;
+        const sub = subRoleConfig?.field_restrictions?.[resource] ?? [];
+        return sub.includes(field);
+    }
+
+    return { role: effectiveRole, can, isAtLeast, canAccessPage, isFieldHidden };
 }

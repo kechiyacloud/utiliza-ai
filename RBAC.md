@@ -18,12 +18,43 @@ No third-party RBAC libraries are used. The entire system is ~300 lines across f
 restricted_viewer (0) < viewer (1) < editor (2) < master_admin (3)
 ```
 
-| Role | Level | Description |
-|---|---|---|
-| `restricted_viewer` | 0 | Read-only. Employee PII and project financials are hidden. No Settings page. |
-| `viewer` | 1 | Full read-only including financials. Settings visible, no write actions. |
-| `editor` | 2 | Full CRUD on employees, projects, allocations, clients. Cannot edit financials or manage users. |
-| `master_admin` | 3 | Unrestricted. User management, bulk ops, financial field edits. |
+| Role                | Level | Description                                                                                     |
+| ------------------- | ----- | ----------------------------------------------------------------------------------------------- |
+| `restricted_viewer` | 0     | Read-only. Employee PII and project financials are hidden. No Settings page.                    |
+| `viewer`            | 1     | Full read-only including financials. Settings visible, no write actions.                        |
+| `editor`            | 2     | Full CRUD on employees, projects, allocations, clients. Cannot edit financials or manage users. |
+| `master_admin`      | 3     | Unrestricted. User management, bulk ops, financial field edits.                                 |
+
+---
+
+## Sub-Roles (Fine-Grained UI Access Control)
+
+Sub-roles are custom configurations created by a `master_admin` that further restrict which pages and data fields are visible in the UI. They are layered on top of base roles — they can only **restrict** further, never expand access.
+
+### Core Features
+- **Page Access**: Explicitly whitelist which pages (e.g., `dashboard`, `projects`) the user can see.
+- **Field Restrictions**: Hide specific data fields (e.g., `phone`, `budget`) even if the base role allows them.
+
+### Database Schema
+**File:** `database/migrate_sub_roles.sql`
+
+```sql
+CREATE TABLE public.sub_roles (
+    sub_role_id        SERIAL PRIMARY KEY,
+    name               VARCHAR(100) NOT NULL UNIQUE,
+    label              VARCHAR(150) NOT NULL,
+    description        TEXT,
+    base_role          VARCHAR(50) NOT NULL REFERENCES public.roles(role_name),
+    page_access        TEXT[] NOT NULL DEFAULT '{}',
+    field_restrictions JSONB  NOT NULL DEFAULT '{}',
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.users ADD COLUMN sub_role_id INTEGER REFERENCES public.sub_roles(sub_role_id);
+```
+
+---
 
 ---
 
@@ -67,36 +98,36 @@ ALTER TABLE public.users ADD COLUMN role_id INTEGER REFERENCES public.roles(role
 
 ### Seeded permissions
 
-| Resource | Actions |
-|---|---|
-| `employees` | read, write, delete |
-| `employee_pii` | read *(phone, date_of_birth, address)* |
-| `projects` | read, write, delete |
+| Resource              | Actions                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `employees`           | read, write, delete                                                                  |
+| `employee_pii`        | read *(phone, date_of_birth, address)*                                               |
+| `projects`            | read, write, delete                                                                  |
 | `project_commercials` | read, write *(budget, billing_type, revenue_model, contract_type, commercial_notes)* |
-| `allocations` | read, write, delete |
-| `clients` | read, write |
-| `dashboard` | read |
-| `settings_admin` | read, write *(import, sync, export)* |
-| `users` | read, write *(role assignment, deactivation)* |
+| `allocations`         | read, write, delete                                                                  |
+| `clients`             | read, write                                                                          |
+| `dashboard`           | read                                                                                 |
+| `settings_admin`      | read, write *(import, sync, export)*                                                 |
+| `users`               | read, write *(role assignment, deactivation)*                                        |
 
 ### Role-permission wiring summary
 
-| Permission | `restricted_viewer` | `viewer` | `editor` | `master_admin` |
-|---|:---:|:---:|:---:|:---:|
-| employees read | ✓ | ✓ | ✓ | ✓ |
-| employees write/delete | | | ✓ | ✓ |
-| employee_pii read | | ✓ | ✓ | ✓ |
-| projects read | ✓ | ✓ | ✓ | ✓ |
-| projects write/delete | | | ✓ | ✓ |
-| project_commercials read | | ✓ | ✓ | ✓ |
-| project_commercials write | | | | ✓ |
-| allocations read | ✓ | ✓ | ✓ | ✓ |
-| allocations write/delete | | | ✓ | ✓ |
-| clients read | ✓ | ✓ | ✓ | ✓ |
-| clients write | | | ✓ | ✓ |
-| dashboard read | ✓ | ✓ | ✓ | ✓ |
-| settings_admin read/write | | | | ✓ |
-| users read/write | | | | ✓ |
+| Permission                | `restricted_viewer` | `viewer` | `editor` | `master_admin` |
+| ------------------------- | :-----------------: | :------: | :------: | :------------: |
+| employees read            |          ✓          |    ✓     |    ✓     |       ✓        |
+| employees write/delete    |                     |          |    ✓     |       ✓        |
+| employee_pii read         |                     |    ✓     |    ✓     |       ✓        |
+| projects read             |          ✓          |    ✓     |    ✓     |       ✓        |
+| projects write/delete     |                     |          |    ✓     |       ✓        |
+| project_commercials read  |                     |    ✓     |    ✓     |       ✓        |
+| project_commercials write |                     |          |          |       ✓        |
+| allocations read          |          ✓          |    ✓     |    ✓     |       ✓        |
+| allocations write/delete  |                     |          |    ✓     |       ✓        |
+| clients read              |          ✓          |    ✓     |    ✓     |       ✓        |
+| clients write             |                     |          |    ✓     |       ✓        |
+| dashboard read            |          ✓          |    ✓     |    ✓     |       ✓        |
+| settings_admin read/write |                     |          |          |       ✓        |
+| users read/write          |                     |          |          |       ✓        |
 
 ### Safe rollout default
 
@@ -248,17 +279,17 @@ def sync_all(...):
 
 #### Guard matrix by router
 
-| Router | Router-level guard | GET extra | POST/PUT/PATCH guard | DELETE/Admin guard |
-|---|---|---|---|---|
-| `employees.py` | `restricted_viewer` | — | `editor` | `master_admin` (sync-all) |
-| `projects.py` | `restricted_viewer` | — | `editor` | `editor` |
-| `clients.py` | `restricted_viewer` | — | `editor` | `editor` |
-| `partner_clients.py` | `restricted_viewer` | — | `editor` | `editor` |
-| `allocations.py` | `restricted_viewer` | — | `editor` | — |
-| `availability.py` | `restricted_viewer` | — | `editor` | — |
-| `dashboard.py` | `restricted_viewer` | — | `editor` | — |
-| `feedback.py` | `restricted_viewer` | — | — | — |
-| `users.py` | — | `master_admin` | `master_admin` | `master_admin` |
+| Router               | Router-level guard  | GET extra      | POST/PUT/PATCH guard | DELETE/Admin guard        |
+| -------------------- | ------------------- | -------------- | -------------------- | ------------------------- |
+| `employees.py`       | `restricted_viewer` | —              | `editor`             | `master_admin` (sync-all) |
+| `projects.py`        | `restricted_viewer` | —              | `editor`             | `editor`                  |
+| `clients.py`         | `restricted_viewer` | —              | `editor`             | `editor`                  |
+| `partner_clients.py` | `restricted_viewer` | —              | `editor`             | `editor`                  |
+| `allocations.py`     | `restricted_viewer` | —              | `editor`             | —                         |
+| `availability.py`    | `restricted_viewer` | —              | `editor`             | —                         |
+| `dashboard.py`       | `restricted_viewer` | —              | `editor`             | —                         |
+| `feedback.py`        | `restricted_viewer` | —              | —                    | —                         |
+| `users.py`           | —                   | `master_admin` | `master_admin`       | `master_admin`            |
 
 ---
 
@@ -308,8 +339,27 @@ All four endpoints are `master_admin` only:
 GET    /api/users              List all users with their role and status
 GET    /api/users/roles        List all available roles
 PUT    /api/users/{id}/role    Assign a new role to a user
+PUT    /api/users/{id}/sub-role Assign a sub-role to a user
 DELETE /api/users/{id}         Deactivate a user (sets is_active = false)
 ```
+
+---
+
+## Backend — Sub-Roles Router
+
+**File:** `backend/app/routers/sub_roles.py`
+
+Endpoints (all `master_admin` except `my-config`):
+
+| Endpoint                       | Auth              | Purpose                                          |
+| ------------------------------ | ----------------- | ------------------------------------------------ |
+| `GET /api/sub-roles/my-config` | any authenticated | returns calling user's sub-role config or `null` |
+| `GET /api/sub-roles`           | `master_admin`    | list all sub-roles                               |
+| `POST /api/sub-roles`          | `master_admin`    | create sub-role                                  |
+| `PUT /api/sub-roles/{id}`      | `master_admin`    | update sub-role                                  |
+| `DELETE /api/sub-roles/{id}`   | `master_admin`    | delete sub-role (clears user assignments first)  |
+
+---
 
 ---
 
@@ -352,13 +402,8 @@ export const AppDataProvider = ({ children }) => (
 
 ### 3b. Permission hook
 
-**File:** `frontend/src/hooks/usePermissions.js`
-
-The primary hook used across all components:
-
-```js
 export function usePermissions() {
-    const { role } = useAuth();
+    const { role, subRoleConfig } = useAuth();
     const effectiveRole = role ?? 'restricted_viewer';  // safe default
 
     function can(action, resource) {
@@ -369,7 +414,20 @@ export function usePermissions() {
         return (ROLE_HIERARCHY[effectiveRole] ?? -1) >= (ROLE_HIERARCHY[minRole] ?? 999);
     }
 
-    return { role: effectiveRole, can, isAtLeast };
+    function canAccessPage(page) {
+        const subPageAccess = subRoleConfig?.page_access ?? [];
+        if (subPageAccess.length === 0) return true;  // no sub-role page restriction
+        return subPageAccess.includes(page);
+    }
+
+    function isFieldHidden(resource, field) {
+        const base = BASE_FIELD_RESTRICTIONS[effectiveRole]?.[resource] ?? [];
+        if (base.includes(field)) return true;
+        const sub = subRoleConfig?.field_restrictions?.[resource] ?? [];
+        return sub.includes(field);
+    }
+
+    return { role: effectiveRole, can, isAtLeast, canAccessPage, isFieldHidden };
 }
 ```
 
@@ -514,39 +572,42 @@ Every API request
 
 Every page render
     → AuthContext decodes JWT from localStorage (client-side, no API call)
-    → usePermissions() reads role from context
-    → Navbar filters items, components show/hide buttons, tabs appear/disappear
+    → AuthContext fetches `/api/sub-roles/my-config` to get fine-grained UI rules
+    → usePermissions() reads role and subRoleConfig from context
+    → Navbar filters items using `isAtLeast` AND `canAccessPage`
+    → components show/hide buttons and hide sensitive fields using `isFieldHidden`
 
 Role change (by master_admin)
     → PUT /api/users/{id}/role → updates users.role_id in DB
-    → Takes full effect on the target user's next token refresh (up to 8 hours)
-    → or immediately on next login
+    → PUT /api/users/{id}/sub-role → updates users.sub_role_id in DB
+    → Takes full effect on the target user's next token refresh or page reload
 ```
 
 ---
 
 ## File Index
 
-| File | Layer | Purpose |
-|---|---|---|
-| `database/migrate_rbac.sql` | DB | Creates roles, permissions, role_permissions; alters users table; seeds data |
-| `backend/app/rbac_utils.py` | API | ROLE_HIERARCHY, FIELD_RESTRICTIONS, `require_role()`, `require_min_role()`, `strip_fields()` |
-| `backend/app/auth_utils.py` | API | JWT creation/validation; role embedded in token payload |
-| `backend/app/routers/auth.py` | API | Login and refresh both fetch + embed role from DB |
-| `backend/app/routers/users.py` | API | `GET/PUT/DELETE /api/users` — master_admin only |
-| `frontend/src/context/AuthContext.jsx` | UI | Decodes JWT client-side; exposes `role` via React context |
-| `frontend/src/hooks/usePermissions.js` | UI | `can(action, resource)` and `isAtLeast(minRole)` helpers |
-| `frontend/src/components/CanAccess.jsx` | UI | Declarative `<CanAccess>` conditional render wrapper |
-| `frontend/src/ProtectedRoute.jsx` | UI | Route guard with optional `minRole` redirect |
-| `frontend/src/dashboard/Navbar.jsx` | UI | Filters nav items by `minRole` |
-| `frontend/src/dashboard/Settings.jsx` | UI | Access Control tab with user table; Data tab gates admin ops |
+| File                                    | Layer | Purpose                                                                                      |
+| --------------------------------------- | ----- | -------------------------------------------------------------------------------------------- |
+| `database/migrate_rbac.sql`             | DB    | Creates roles, permissions, role_permissions; seeds data                                     |
+| `database/migrate_sub_roles.sql`        | DB    | Creates sub_roles table and users.sub_role_id                                                |
+| `backend/app/rbac_utils.py`             | API   | ROLE_HIERARCHY, FIELD_RESTRICTIONS, `require_role()`, `require_min_role()`, `strip_fields()` |
+| `backend/app/auth_utils.py`             | API   | JWT creation/validation; role embedded in token payload                                      |
+| `backend/app/routers/auth.py`           | API   | Login and refresh both fetch + embed role from DB                                            |
+| `backend/app/routers/users.py`          | API   | `GET/PUT/DELETE /api/users` — master_admin only                                              |
+| `backend/app/routers/sub_roles.py`      | API   | Sub-role management and user-specific config                                                 |
+| `frontend/src/context/AuthContext.jsx`  | UI    | Decodes JWT and fetches `subRoleConfig`; exposes both via React context                      |
+| `frontend/src/hooks/usePermissions.js`  | UI    | `can()`, `isAtLeast()`, `canAccessPage()`, `isFieldHidden()`                                 |
+| `frontend/src/components/CanAccess.jsx` | UI    | Declarative `<CanAccess>` conditional render wrapper                                         |
+| `frontend/src/dashboard/Navbar.jsx`     | UI    | Filters nav items by `minRole` and `canAccessPage`                                           |
+| `frontend/src/dashboard/Settings.jsx`   | UI    | Sub-role management UI and user assignment                                                   |
 
 ---
 
 ## Why This Approach
 
-| Option | Decision |
-|---|---|
-| **Casbin + fastapi-authz** | Rejected — requires SQLAlchemy adapter; codebase uses raw psycopg2 |
-| **OPA (Open Policy Agent)** | Rejected — adds a separate server process + ~10-20ms network latency per request; overkill for 4 static roles |
-| **Custom FastAPI `Depends()`** | Chosen — zero new dependencies, idiomatic FastAPI, O(1) checks from JWT, ~150 lines total |
+| Option                         | Decision                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| **Casbin + fastapi-authz**     | Rejected — requires SQLAlchemy adapter; codebase uses raw psycopg2                                            |
+| **OPA (Open Policy Agent)**    | Rejected — adds a separate server process + ~10-20ms network latency per request; overkill for 4 static roles |
+| **Custom FastAPI `Depends()`** | Chosen — zero new dependencies, idiomatic FastAPI, O(1) checks from JWT, ~150 lines total                     |

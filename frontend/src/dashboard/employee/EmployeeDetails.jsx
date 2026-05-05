@@ -18,6 +18,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import { clearDashboardCache } from '../../api/dashboardApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
+import { usePermissions } from '../../hooks/usePermissions'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 import { decodeId } from '../../utils/idEncoder'
 
@@ -79,6 +80,7 @@ const EmployeeDetails = () => {
     const location = useLocation();
     const { id } = useParams();
     const { triggerRefresh } = useDataRefresh();
+    const { isFieldHidden } = usePermissions();
     // State
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -464,10 +466,12 @@ const EmployeeDetails = () => {
                                 <span>{userData.email}</span>
                             </a>
                         </div>
+                        {!isFieldHidden('employees', 'phone') && !isFieldHidden('employees', 'phone_number') && (
                         <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                             <Phone size={16} />
                             <span>{userData.phone}</span>
                         </div>
+                        )}
                     </div>
                 </div>
             </div>
