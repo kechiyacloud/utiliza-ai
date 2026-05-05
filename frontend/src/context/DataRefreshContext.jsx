@@ -4,6 +4,7 @@ const DataRefreshContext = createContext();
 
 export const DataRefreshProvider = ({ children }) => {
     const [refreshKey, setRefreshKey] = useState(0);
+    const [isDirty, setIsDirty] = useState(false);
 
     const triggerRefresh = useCallback(() => {
         setRefreshKey(prev => prev + 1);
@@ -11,8 +12,10 @@ export const DataRefreshProvider = ({ children }) => {
 
     const value = useMemo(() => ({
         refreshKey,
-        triggerRefresh
-    }), [refreshKey, triggerRefresh]);
+        triggerRefresh,
+        isDirty,
+        setIsDirty
+    }), [refreshKey, triggerRefresh, isDirty, setIsDirty]);
 
     return (
         <DataRefreshContext.Provider value={value}>

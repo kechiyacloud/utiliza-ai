@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive, UserCheck, Activity, UserRoundPlus, UserSearch } from 'lucide-react'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, Download, FileSpreadsheet, MoreHorizontal, ArrowLeft, Archive, UserCheck, Activity, UserRoundPlus, UserSearch, AlertCircle } from 'lucide-react'
 import BulkImportModal from './BulkImportModal'
 import EmployeeTable from './EmployeeTable'
 import NewJoinerCard from './NewJoinerCard'
@@ -11,6 +11,7 @@ import { useEmployees } from '../../context/EmployeeContext'
 import { useDataRefresh } from '../../context'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
+import { encodeId } from '../../utils/idEncoder'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -49,9 +50,11 @@ function EmployeeMasterList() {
   const [allEmployees, setAllEmployees] = useState([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
-  // Filter States
+  const location = useLocation();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
+  const [searchParams] = useSearchParams();
+  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || searchParams.get('filter') || null);
+  const [filters, setFilters] = useState(location.state?.filters || {
     departments: [],
     types: [],
     skills: [],
@@ -59,9 +62,7 @@ function EmployeeMasterList() {
     statusTags: [],
     designations: []
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const location = useLocation();
-  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
+  const [searchQuery, setSearchQuery] = useState(location.state?.search || "");
   const { showArchived, showDeleted } = useEmployees();
 
   // Department chip selector
@@ -119,7 +120,7 @@ function EmployeeMasterList() {
       setError(null)
       try {
         // When showing archived, we want both resigned and deleted
-        const data = await getEmployeeList(refreshKey > 0, showArchived, showDeleted)
+        const data = await getEmployeeList(refreshKey > 0 || true, showArchived, showDeleted) // forceUpdate if key > 0, but adding a timestamp helps too
         if (controller.signal.aborted) return;
         setAllEmployees(data)
       } catch (err) {
@@ -135,7 +136,7 @@ function EmployeeMasterList() {
 
     fetchAllData()
     return () => controller.abort();
-  }, [showArchived, refreshKey])
+  }, [showArchived, showDeleted, refreshKey])
 
   const combinedFilters = useMemo(() => ({
     ...filters,
@@ -183,6 +184,8 @@ function EmployeeMasterList() {
           return billable.includes('non') && !isSpecialStatus;
         case 'bench':
           return (emp.employee_allocations || 0) <= 0 && !isSpecialStatus;
+        case 'overallocated':
+          return (emp.employee_allocations || 0) > 100;
         case 'notice':
           return isSpecialStatus;
         case 'new-joiner': {
@@ -222,6 +225,7 @@ function EmployeeMasterList() {
     const s = (e.employee_status || '').toLowerCase();
     return s.includes('notice') || s.includes('pip');
   }).length;
+
 
   const newJoinersCount = useMemo(() => {
     const now = new Date();
@@ -319,7 +323,7 @@ function EmployeeMasterList() {
           label="TOTAL EMPLOYEES"
           value={totalEmployeesCount}
           icon={Users}
-          colorClass="bg-blue-500"
+          colorClass="bg-slate-500"
           loading={loading}
           error={error}
           isActive={cardFilter === null}
@@ -329,7 +333,7 @@ function EmployeeMasterList() {
           label="BILLABLE"
           value={billableCount}
           icon={UserCheck}
-          colorClass="bg-emerald-500"
+          colorClass="bg-blue-500"
           loading={loading}
           error={error}
           isActive={cardFilter === 'billable'}
@@ -339,7 +343,7 @@ function EmployeeMasterList() {
           label="NON-BILLABLE"
           value={nonBillableCount}
           icon={Activity}
-          colorClass="bg-slate-500"
+          colorClass="bg-emerald-500"
           loading={loading}
           error={error}
           isActive={cardFilter === 'non-billable'}
@@ -349,7 +353,7 @@ function EmployeeMasterList() {
           label="TOTAL BENCH"
           value={benchEmployeesCount}
           icon={UserMinus}
-          colorClass="bg-orange-500"
+          colorClass="bg-rose-500"
           loading={loading}
           error={error}
           isActive={cardFilter === 'bench'}
@@ -405,7 +409,24 @@ function EmployeeMasterList() {
             contextLabel={contextLabel}
             employees={finalEmployees}
             loading={loading}
-            onEmployeeClick={(emp) => navigate(`/info/employee/${emp.email_id || emp.employee_id || '123'}`, { state: { employee: emp } })}
+            onEmployeeClick={(emp) =>
+              navigate(`/info/employee/${encodeId(emp.employee_id || emp.email_id || '123')}`, {
+                state: {
+                  employee: emp,
+                  from: {
+                    pathname: location.pathname,
+                    search: location.search,
+                    hash: location.hash,
+                    state: { 
+                      ...location.state, 
+                      cardFilter, 
+                      filters,
+                      search: searchQuery
+                    }
+                  }
+                }
+              })
+            }
             onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
             onEmployeeDelete={(deletedId) => {
               // If we are in "Archived" mode, we don't necessarily want to remove it from UI immediately

@@ -4,7 +4,7 @@ import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign, Clock, UserCheck, UserMinus,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft, Building2
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft, Building2, Check
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -340,7 +340,7 @@ function Dashboard() {
       state: { cardFilter: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
     },
     { 
-      title: `${String(contextLabel)} Utilization`, 
+      title: `${String(contextLabel)} Allocation`, 
       value: `${_metrics?.companyUtilization || 0}%`, 
       subtext: "Target 85%", 
       icon: TrendingUp, 
@@ -430,11 +430,11 @@ function Dashboard() {
   // Derive bench employees with their skills from the filtered employee list
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
-      .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
+      .filter(emp => (emp.employee_allocations || 0) <= 0)
       .slice(0, 4)
-          .map(emp => ({
+      .map(emp => ({
         name: emp.employee_name,
-        skills: emp.skills.join(', ')
+        skills: Array.isArray(emp.skills) && emp.skills.length > 0 ? emp.skills.join(', ') : 'No skills listed'
       }));
   }, [filteredDashboardEmployees]);
 
@@ -561,10 +561,10 @@ function Dashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-8">
-            {/* Allocated vs Availability (Span 2) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
+            {/* Allocated vs Availability (Span 3 for 60% split) */}
             <div
-              className="lg:col-span-2 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              className="lg:col-span-3 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
             >
               <div className="flex justify-between items-center mb-4">
@@ -597,65 +597,226 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Actionable Todo List (Span 1) — Coming Soon */}
-            <div className="relative bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
+            {/* Actionable Todo List — Dashboard Theme (Span 2 for 40% split) */}
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
+              <div className="flex flex-col h-full">
 
-              {/* Blurred background preview */}
-              <div className="flex flex-col gap-3 p-5 blur-[3px] opacity-40 pointer-events-none select-none">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <ListTodo size={18} className="text-blue-500" />
-                  Actionable Todo List
-                  <span className="ml-auto text-xs font-bold text-slate-400">{actionableTodos.length} pending</span>
-                </h2>
-                <div className="flex gap-2">
-                  <div className="flex-1 h-8 bg-slate-100 rounded-lg" />
-                  <div className="w-14 h-8 bg-blue-200 rounded-lg" />
-                </div>
-                {[
-                  { w: 'w-3/4', type: 'bg-rose-100' },
-                  { w: 'w-full', type: 'bg-amber-100' },
-                  { w: 'w-2/3', type: 'bg-blue-100' },
-                ].map((item, i) => (
-                  <div key={i} className="border border-slate-100 bg-slate-50 p-3 rounded-xl flex items-start gap-3">
-                    <div className="w-4 h-4 mt-0.5 rounded-full bg-slate-200 flex-shrink-0" />
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <div className={`h-3 ${item.w} bg-slate-200 rounded`} />
-                      <div className={`h-2 w-10 ${item.type} rounded`} />
+                {/* ── Header ── */}
+                <div className="px-5 pt-5 pb-4 border-b border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-50 rounded-lg">
+                        <ListTodo size={16} className="text-blue-500" />
+                      </div>
+                      Actionable Todo List
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      {actionableTodos.filter(t => t.status === 'done' || t.status === 'completed').length > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                          {actionableTodos.filter(t => t.status === 'done' || t.status === 'completed').length} Done
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                        {actionableTodos.filter(t => t.status !== 'done' && t.status !== 'completed').length} Pending
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Coming Soon Overlay */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/70 backdrop-blur-[2px]">
-                <div className="relative flex items-center justify-center">
-                  {/* Pulsing ring */}
-                  <span className="absolute inline-flex h-16 w-16 rounded-full bg-blue-400 opacity-20 animate-ping" />
-                  <div className="relative z-10 w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
-                    <ListTodo size={24} className="text-white" strokeWidth={2} />
-                  </div>
+                  {/* Progress bar */}
+                  {actionableTodos.length > 0 && (
+                    <div className="mt-3">
+                      <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.round(
+                              (actionableTodos.filter(t => t.status === 'done' || t.status === 'completed').length /
+                                actionableTodos.length) * 100
+                            )}%`
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">
+                        {Math.round(
+                          (actionableTodos.filter(t => t.status === 'done' || t.status === 'completed').length /
+                            actionableTodos.length) * 100
+                        )}% complete
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-center px-6">
-                  <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-600 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    Coming Soon
-                  </div>
-                  <h3 className="text-base font-bold text-slate-800 mb-1">Actionable Todo List</h3>
-                  <p className="text-xs text-slate-400 leading-relaxed max-w-[200px] mx-auto">
-                    A smart task board to track and act on your team's priorities — launching soon.
+                {/* ── Input Row ── */}
+                <div className="px-4 py-3 border-b border-slate-100 flex gap-2 items-center bg-slate-50/40">
+                  <input
+                    type="text"
+                    placeholder={editingTodoId ? 'Editing task...' : 'Add a new task and press Enter...'}
+                    value={newTodoText}
+                    onChange={(e) => setNewTodoText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm"
+                  />
+                  {editingTodoId && (
+                    <button
+                      onClick={cancelTodoEditing}
+                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                      title="Cancel editing"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                  <button
+                    onClick={handleAddTodo}
+                    disabled={todoLoading || !newTodoText.trim()}
+                    className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-blue-200"
+                    title={editingTodoId ? 'Save edit' : 'Add task'}
+                  >
+                    {editingTodoId ? <Check size={18} strokeWidth={2.5} /> : <Plus size={18} strokeWidth={2.5} />}
+                  </button>
+                </div>
+
+                {/* ── Task List ── */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
+                  {actionableTodos.length > 0 ? (
+                    actionableTodos.map((todo) => {
+                      const isDone = todo.status === 'done' || todo.status === 'completed';
+                      const isEditing = editingTodoId === todo.id;
+                      const isWarning = todo.type === 'warning' || todo.type === 'alert';
+                      const isSuggestion = todo.isSystemSuggestion;
+                      return (
+                        <div
+                          key={todo.id}
+                          className={`group relative flex items-start gap-3 p-3 rounded-xl border transition-all duration-200
+                            ${
+                              isDone
+                                ? 'bg-slate-50/60 border-slate-100'
+                                : isSuggestion
+                                ? 'bg-amber-50/40 border-amber-100 hover:border-amber-200'
+                                : isWarning
+                                ? 'bg-rose-50/40 border-rose-100 hover:border-rose-200'
+                                : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-sm'
+                            }`}
+                        >
+                          {/* Left accent line */}
+                          {!isDone && (
+                            <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${
+                              isSuggestion ? 'bg-amber-400' : isWarning ? 'bg-rose-400' : 'bg-blue-400'
+                            }`} />
+                          )}
+
+                          {/* Checkbox / Icon */}
+                          {isSuggestion ? (
+                            <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-amber-200 bg-amber-50 flex items-center justify-center">
+                              <AlertCircle size={10} className="text-amber-500" strokeWidth={3} />
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleToggleTodo(todo.id)}
+                              className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200
+                                ${
+                                  isDone
+                                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                                    : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
+                                }`}
+                            >
+                              {isDone && <Check size={11} strokeWidth={3} />}
+                            </button>
+                          )}
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2">
+                                <textarea
+                                  value={newTodoText}
+                                  onChange={(e) => setNewTodoText(e.target.value)}
+                                  rows={2}
+                                  className="w-full text-sm text-slate-700 bg-white border border-blue-300 rounded-lg px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-blue-100 transition-all"
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <p className={`text-sm font-semibold leading-snug break-words ${
+                                  isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'
+                                }`}>
+                                  {todo.message || todo.text}
+                                </p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {isSuggestion ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">
+                                      ⚡ System Suggestion
+                                    </span>
+                                  ) : isWarning ? (
+                                    <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-100">
+                                      Alert
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-100">
+                                      Task
+                                    </span>
+                                  )}
+                                  {isDone && (
+                                    <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100">
+                                      ✓ Done
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action buttons — manual tasks only */}
+                          {!isSuggestion && !isEditing && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 flex-shrink-0">
+                              <button
+                                onClick={() => startEditingTodo(todo)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                title="Edit task"
+                              >
+                                <SquarePen size={13} />
+                              </button>
+                              <button
+                                onClick={() => promptDeleteTodo(todo)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete task"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="h-full min-h-[180px] flex flex-col items-center justify-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                        <ListTodo size={22} className="text-slate-300" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-slate-400">All clear!</p>
+                        <p className="text-[11px] text-slate-300 mt-0.5">Add a task above to get started.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Footer ── */}
+                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between">
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {actionableTodos.filter(t => t.status !== 'done' && t.status !== 'completed').length > 0
+                      ? `${actionableTodos.filter(t => t.status !== 'done' && t.status !== 'completed').length} task${actionableTodos.filter(t => t.status !== 'done' && t.status !== 'completed').length > 1 ? 's' : ''} remaining`
+                      : 'All tasks completed 🎉'}
                   </p>
+                  <button
+                    onClick={() => navigate('/info/todo')}
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors group"
+                  >
+                    Full Board
+                    <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+                  </button>
                 </div>
 
-                <div className="flex gap-1.5">
-                  {[0, 1, 2].map(i => (
-                    <span
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-blue-300"
-                      style={{ animationDelay: `${i * 0.2}s`, animation: 'pulse 1.5s ease-in-out infinite' }}
-                    />
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -664,14 +825,14 @@ function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Allocation Distribution */}
             <div
-              className={`bg-white border p-6 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilizationPrediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
+              className={`bg-white border p-4 rounded-2xl shadow-md cursor-pointer group hover:border-blue-300 transition-all duration-300 flex flex-col ${data?.executiveMetrics?.utilizationPrediction?.gap > 0 ? 'border-amber-100 ring-4 ring-amber-50/50' : 'border-slate-100'}`}
               onClick={() => setIsSplitViewOpen(true)}
             >
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <PieChartIcon size={18} className="text-indigo-500" />
                 {contextLabel} Allocation
               </h2>
-              <div className="h-[200px] w-full relative">
+              <div className="h-[220px] w-full relative">
                 {dynamicAllocationData.length > 0 ? (
                   <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                     <PieChart>
@@ -680,8 +841,8 @@ function Dashboard() {
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
+                        outerRadius={88}
+                        paddingAngle={2}
                         dataKey="value"
                         stroke="none"
                       >

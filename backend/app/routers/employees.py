@@ -95,7 +95,7 @@ def _sync_employee_allocations(cur, employee_ids):
             WHERE p.employee_id = ANY(%s)
               AND (pa.allocation_id IS NULL OR (
                   pa.allocation_start_date <= CURRENT_DATE
-                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing'))
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
               ))
             GROUP BY p.employee_id
@@ -188,9 +188,8 @@ def get_bench_employee_count():
                 WHERE pa.employee_id = m.employee_id 
                   AND pa.allocation_start_date <= CURRENT_DATE
                   AND (
-                      pa.allocation_end_date IS NULL 
-                      OR pa.allocation_end_date >= CURRENT_DATE 
-                      OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                      pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
+                      
                   )
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) <= 0
@@ -290,10 +289,19 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "      AND ( "
             "          pa.allocation_end_date IS NULL "
             "          OR pa.allocation_end_date >= CURRENT_DATE "
-            "          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') "
+            "          OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') "
             "      ) "
             "      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
             "    GROUP BY pa.employee_id"
+            "), "
+            "CertsAgg AS ("
+            "    SELECT "
+            "        ec.employee_id, "
+            "        COUNT(*) as cert_count, "
+            "        JSON_AGG(c.certificate_name) as cert_list "
+            "    FROM employee_certificates ec "
+            "    JOIN certificates c ON ec.certificate_id = c.certificate_id "
+            "    GROUP BY ec.employee_id"
             ") "
             "SELECT "
             "    m.employee_id, m.employee_name, m.role_designation, m.department, m.location, "
@@ -321,11 +329,14 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "    " + pip_end_expr + " as pip_end_date, "
             "    " + notice_start_expr + " as notice_start_date, "
             "    " + notice_end_expr + " as notice_end_date, "
-            "    COALESCE(sk.skills, ARRAY[]::text[]) as skills "
+            "    COALESCE(sk.skills, ARRAY[]::text[]) as skills, "
+            "    COALESCE(ca.cert_count, 0) as cert_count, "
+            "    COALESCE(ca.cert_list, '[]'::json) as cert_list "
             "FROM employee_master m "
             "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
             "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
             "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
+            "LEFT JOIN CertsAgg ca ON m.employee_id = ca.employee_id "
             "WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE OR %s = TRUE) "
             "  AND " + is_deleted_expr + " "
             "ORDER BY m.employee_name ASC"
@@ -423,7 +434,7 @@ def fetch_employee_of_month():
                 m.photo_url,
                 COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
-            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
             WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
             HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
@@ -663,9 +674,8 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     JOIN projects pj ON pa.project_id = pj.project_id 
                     WHERE pa.allocation_start_date <= CURRENT_DATE 
                       AND ( 
-                          pa.allocation_end_date IS NULL 
-                          OR pa.allocation_end_date >= CURRENT_DATE 
-                          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') 
+                          pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
+                           
                       ) 
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
                     GROUP BY employee_id 
