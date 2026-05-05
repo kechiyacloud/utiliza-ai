@@ -470,19 +470,8 @@ def projects_overview(
         is_all_dept = not department or str(department).lower() in ('all', 'all department', 'all departments', 'null', 'undefined', '')
         
         if not is_all_dept:
-            join_clause = """
-                LEFT JOIN projects_allocation pa ON p.project_id = pa.project_id
-                LEFT JOIN employee_master em ON pa.employee_id = em.employee_id
-                LEFT JOIN departments d ON p.department_id = d.department_id
-            """
-            where_clause += """
-                AND (
-                    em.department = %s 
-                    OR d.department_name = %s 
-                    OR d.department_id = %s
-                )
-            """
-            params.extend([department, department, department])
+            where_clause += " AND TRIM(p.department_id) ILIKE %s "
+            params.append(department)
 
         if resource_name:
             if not join_clause:
@@ -620,22 +609,9 @@ def projects_list(
         is_all_dept = not department or str(department).lower() in ('all', 'all department', 'all departments', 'null', 'undefined', '')
         
         if not is_all_dept:
-            where_clause += """
-                AND (
-                    EXISTS (
-                        SELECT 1 FROM departments d_dept
-                        WHERE d_dept.department_id = p.department_id
-                          AND (d_dept.department_name = %s OR d_dept.department_id = %s)
-                    )
-                    OR EXISTS (
-                        SELECT 1 FROM projects_allocation pa_dept
-                        JOIN employee_master em_dept ON pa_dept.employee_id = em_dept.employee_id
-                        WHERE pa_dept.project_id = p.project_id
-                          AND em_dept.department = %s
-                    )
-                )
-            """
-            params.extend([department, department, department])
+            where_clause += " AND TRIM(p.department_id) ILIKE %s "
+            params.append(department)
+            print(f"DEBUG: STRICT Filtering list by department_id: {department}")
 
         # Resource Name Filter
         if resource_name:
@@ -821,14 +797,14 @@ def list_departments():
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT department_id, department_name
+            SELECT id, name
             FROM (
-                SELECT department_id, department_name
+                SELECT CAST(department_id AS TEXT) AS id, department_name AS name
                 FROM departments
                 WHERE department_name IS NOT NULL
                   AND TRIM(department_name) <> ''
                 UNION
-                SELECT NULL AS department_id, TRIM(em.department) AS department_name
+                SELECT TRIM(em.department) AS id, TRIM(em.department) AS name
                 FROM employee_master em
                 WHERE em.department IS NOT NULL
                   AND TRIM(em.department) <> ''
@@ -837,7 +813,7 @@ def list_departments():
                       WHERE LOWER(TRIM(d.department_name)) = LOWER(TRIM(em.department))
                   )
             ) AS combined
-            ORDER BY department_name
+            ORDER BY name
         """)
         rows = cur.fetchall()
         return [{"id": r[0], "name": r[1]} for r in rows]

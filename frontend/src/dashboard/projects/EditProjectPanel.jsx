@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
+import SearchableDropdown from '../../components/SearchableDropdown';
 import { fetchProjectDepartments } from '../../api/projectsApi';
 import {
     fetchSimpleClients,
@@ -106,107 +107,14 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
     );
 };
 
-/* ──────────────────────────────────────────────────────────
-   SEARCHABLE DROPDOWN  —  scrollable + filterable
-   ────────────────────────────────────────────────────────── */
-const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false, noResultsText = 'No results found', isLoading = false }) => {
-    const [search, setSearch] = useState('');
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef(null);
 
-    const selectedItem = items.find(i => String(i.id) === String(selectedId) || i.name === selectedId);
-    const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
-
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (containerRef.current && !containerRef.current.contains(e.target)) {
-                setIsOpen(false);
-                setSearch('');
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    return (
-        <div ref={containerRef} className="relative flex-1">
-            <button
-                type="button"
-                onClick={() => {
-                    if (disabled) return;
-                    setSearch('');
-                    setIsOpen(!isOpen);
-                }}
-                disabled={disabled}
-                className={`w-full p-3 bg-gray-50 border rounded-xl text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2
-                    ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
-                    ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
-                    ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
-            >
-                <span className={selectedItem ? 'text-gray-800' : 'text-gray-400'}>
-                    {selectedItem ? selectedItem.name : placeholder || `Select ${label}`}
-                </span>
-                <Search size={14} className="text-gray-400 shrink-0" />
-            </button>
-
-            {!disabled && isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                    <div className="p-2 border-b border-gray-100">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder={`Search ${label}...`}
-                                className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-100 rounded-lg outline-none focus:bg-white focus:border-blue-200 transition-all"
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                        <div className="py-1">
-                            {isLoading && filtered.length === 0 ? (
-                                <div className="px-4 py-6 text-center text-xs text-gray-400">Loading...</div>
-                            ) : filtered.length === 0 && search.trim().length > 0 ? (
-                                <div className="px-4 py-6 text-center text-xs text-gray-400">{noResultsText}</div>
-                            ) : filtered.length === 0 ? (
-                                <div className="px-4 py-4 text-center text-xs text-gray-300">No options available</div>
-                            ) : (
-                                filtered.map((item) => (
-                                    <button
-                                        type="button"
-                                        key={item.id}
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            onSelect(item);
-                                            setIsOpen(false);
-                                            setSearch('');
-                                        }}
-                                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center gap-2 min-w-0
-                                            ${String(item.id) === String(selectedId) || item.name === selectedId
-                                                ? 'bg-blue-50 text-blue-700 font-semibold'
-                                                : 'text-gray-700 hover:bg-gray-50 font-medium'
-                                            }`}
-                                    >
-                                        {(String(item.id) === String(selectedId) || item.name === selectedId) && <Check size={14} className="text-blue-500 shrink-0" />}
-                                        <span className="truncate min-w-0">{item.name}</span>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
 
 const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const [clients, setClients] = useState([]);
     const [partnerClients, setPartnerClients] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [saveError, setSaveError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [entityError, setEntityError] = useState('');
     const [initialFormData, setInitialFormData] = useState(null);
     const [formData, setFormData] = useState({
@@ -230,7 +138,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
     const [availableSkills, setAvailableSkills] = useState([]);
     const [isEntitiesLoading, setIsEntitiesLoading] = useState(false);
-    
+
     // ——— Toast State ———
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const showToast = (message, type = 'success') => {
@@ -262,16 +170,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const filteredClients = useMemo(() => {
         const isPartnerClientFlow = formData.type === 'External' && formData.clientType === 'Partner Client';
         if (!isPartnerClientFlow || !formData.partnerId) return clients;
-        
+
         return clients.filter(client => {
-            const linkedPartner = 
-                client.partner_id ?? 
-                client.partnerId ?? 
-                client.partner_client_id ?? 
+            const linkedPartner =
+                client.partner_id ??
+                client.partnerId ??
+                client.partner_client_id ??
                 client.partnerClientId;
-            
+
             if (linkedPartner === undefined || linkedPartner === null || linkedPartner === '') {
-                return true; 
+                return true;
             }
             return String(linkedPartner) === String(formData.partnerId);
         });
@@ -426,9 +334,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     };
 
     const handlePartnerSelect = (item) => {
-        setFormData(prev => ({ 
-            ...prev, 
-            partnerId: String(item.id), 
+        setFormData(prev => ({
+            ...prev,
+            partnerId: String(item.id),
             partnerName: item.name,
             clientId: '',
             client: ''
@@ -467,10 +375,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         }
 
         const isInternal = formData.type === 'Internal';
-        
+
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === 'Partner Client';
         const isDirectClientProject = formData.type === 'External' && formData.clientType === 'Direct Client';
-        
+
         // Build the payload mapping our form keys to backend keys
         // We only send a key if it was changed
         const payload = {
@@ -485,7 +393,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             if (isDirectClientProject) effectiveType = 'Client';
             payload.type = effectiveType;
         }
-        
+
         if ('clientId' in changedFields || 'type' in changedFields) {
             payload.client_id = formData.type === 'External' ? (formData.clientId || null) : null;
         }
@@ -504,11 +412,20 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             payload.sub_status = !isInternal ? (formData.subStatus || null) : null;
         }
 
+        setIsSaving(true);
         console.log('Edit Project Submission Payload:', payload);
         try {
             await onSave(payload);
+            showToast('Project updated successfully!', 'success');
+            // Delay closing to let user see success toast
+            setTimeout(() => {
+                onClose();
+            }, 1500);
         } catch (error) {
-            setSaveError(error?.response?.data?.detail || 'Failed to save project.');
+            const msg = error?.response?.data?.detail || 'Failed to save project.';
+            setSaveError(msg);
+            showToast(msg, 'error');
+            setIsSaving(false);
         }
     };
 
@@ -589,17 +506,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             {/* Toast Notification */}
             {toast.show && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${
-                        toast.type === 'error' 
-                            ? 'bg-red-500 border-red-400 text-white shadow-red-200' 
+                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${toast.type === 'error'
+                            ? 'bg-red-500 border-red-400 text-white shadow-red-200'
                             : 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-200'
-                    }`}>
+                        }`}>
                         {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
                         <span className="text-xs font-bold whitespace-nowrap">{toast.message}</span>
                     </div>
                 </div>
             )}
-            
+
             <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
             <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
@@ -615,7 +531,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6">
-                        <form id="edit-project-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+                        <form id="edit-project-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
                             {saveError && (
                                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                                     {saveError}
@@ -636,7 +552,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium text-gray-800"
                                     value={formData.name}
                                     onChange={handleChange}
-                                    required
                                 />
                             </div>
 
@@ -809,8 +724,8 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     />
                                     {hasProjectStarted && (
                                         <p className={`text-[10px] mt-1 font-semibold ${startedWeeksAgo > 2 ? 'text-red-500' : 'text-blue-500'}`}>
-                                            {startedWeeksAgo > 2 
-                                                ? "⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)" 
+                                            {startedWeeksAgo > 2
+                                                ? "⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)"
                                                 : "ℹ️ Project has started. Any change will affect allocations."}
                                         </p>
                                     )}
@@ -880,12 +795,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             Cancel
                         </button>
                         <button
-                            form="edit-project-form"
                             type="submit"
-                            className="px-6 py-2.5 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+                            form="edit-project-form"
+                            disabled={isSaving}
+                            className={`px-6 py-2.5 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all flex items-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            <Save size={16} />
-                            Save Changes
+                            {isSaving ? (
+                                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Saving...</>
+                            ) : (
+                                <><Save size={16} /> Save Changes</>
+                            )}
                         </button>
                     </div>
                 </div>

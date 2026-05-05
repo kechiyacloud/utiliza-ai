@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check, X, Search, Building2 } from 'lucide-react';
 
-const MultiSelectDropdown = ({ 
-  options = [], 
-  selectedValues = [], 
-  onChange, 
+const MultiSelectDropdown = ({
+  options = [],
+  selectedValues = [],
+  onChange,
   placeholder = "Select Departments",
   label = "Departments",
   icon: Icon = Building2,
@@ -40,7 +40,7 @@ const MultiSelectDropdown = ({
     }
   };
 
-  const filteredOptions = options.filter(opt => 
+  const filteredOptions = options.filter(opt =>
     opt.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -74,7 +74,7 @@ const MultiSelectDropdown = ({
       </div>
 
       {isOpen && (
-        <div 
+        <div
           className="origin-top-right absolute right-0 mt-2 w-72 rounded-2xl shadow-2xl bg-white border border-slate-100 ring-1 ring-black ring-opacity-5 focus:outline-none z-[100] animate-in fade-in zoom-in-95 duration-100"
           role="menu"
           aria-orientation="vertical"
@@ -104,7 +104,7 @@ const MultiSelectDropdown = ({
               {selectedValues.length === options.length && <Check size={14} className="text-blue-600" />}
             </button>
             <div className="h-px bg-slate-50 mx-2 mb-1"></div>
-            
+
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-3 text-xs text-slate-400 text-center italic">No departments found</div>
             ) : (
@@ -137,7 +137,7 @@ const MultiSelectDropdown = ({
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-2">
                 {selectedValues.length} Selected
               </span>
-              <button 
+              <button
                 onClick={() => onChange([])}
                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider mr-2 px-2 py-1 hover:bg-blue-50 rounded-md transition-colors"
               >

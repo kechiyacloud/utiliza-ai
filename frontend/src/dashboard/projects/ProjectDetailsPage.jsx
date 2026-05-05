@@ -10,6 +10,7 @@ import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import EditProjectPanel from './EditProjectPanel';
+import SearchableDropdown from '../../components/SearchableDropdown';
 
 const toMessage = (val, fallback = 'Something went wrong') => {
     if (!val && val !== 0) return fallback;
@@ -372,93 +373,7 @@ function getResourceAllocationPct(row, visibleWeeks = []) {
 // ─── AllocationTable Component ────────────────────────────────────────────────
 
 
-const SearchableDropdown = ({ items, selectedId, onSelect, placeholder, label, disabled = false }) => {
-    const [search, setSearch] = useState('');
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef(null);
 
-    const selectedItem = items.find(i => String(i.id) === String(selectedId) || i.employee_id === selectedId || (i.name && i.name === selectedId));
-    const filtered = items.filter(i => (i.name || i.employee_name || '').toLowerCase().includes(search.toLowerCase()));
-
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (containerRef.current && !containerRef.current.contains(e.target)) {
-                setIsOpen(false);
-                setSearch('');
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    return (
-        <div ref={containerRef} className="relative w-full">
-            <button
-                type="button"
-                onClick={() => !disabled && setIsOpen(!isOpen)}
-                disabled={disabled}
-                className={`w-full p-3 bg-gray-50/80 border rounded-lg text-xs outline-none text-left font-semibold transition-all flex items-center justify-between gap-2 shadow-sm
-                    ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
-                    ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-400 shadow-blue-50/50' : 'border-gray-200 hover:border-blue-300 hover:bg-white'}`}
-            >
-                <div className="truncate pr-2">
-                    <span className={selectedItem ? 'text-slate-700' : 'text-slate-400'}>
-                        {selectedItem ? (selectedItem.name || selectedItem.employee_name) : placeholder || `Select ${label}`}
-                    </span>
-                </div>
-                <Search size={12} className={`shrink-0 transition-colors ${isOpen ? 'text-blue-500' : 'text-slate-300'}`} />
-            </button>
-
-            {!disabled && isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-2xl z-[120] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="p-2.5 border-b border-slate-50 bg-slate-50/30">
-                        <div className="relative">
-                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder={`Filter ${label.toLowerCase()}...`}
-                                className="w-full pl-8 pr-3 py-2 text-[11px] bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all font-medium"
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto py-1 custom-scrollbar">
-                        {filtered.length === 0 ? (
-                            <div className="px-4 py-8 text-center">
-                                <Search size={20} className="mx-auto text-slate-200 mb-2" />
-                                <p className="text-[11px] text-slate-400 font-medium">No {label.toLowerCase()} found</p>
-                            </div>
-                        ) : (
-                            filtered.map((item) => (
-                                <button
-                                    type="button"
-                                    key={item.id || item.employee_id}
-                                    onClick={() => {
-                                        onSelect(item);
-                                        setIsOpen(false);
-                                        setSearch('');
-                                    }}
-                                    className={`w-full px-4 py-2.5 text-left text-xs transition-all flex items-center justify-between group
-                                        ${(String(item.id) === String(selectedId) || item.employee_id === selectedId || (item.name && item.name === selectedId))
-                                            ? 'bg-blue-50 text-blue-700 font-bold'
-                                            : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-medium'
-                                        }`}
-                                >
-                                    <span className="truncate">{item.name || item.employee_name}</span>
-                                    {(String(item.id) === String(selectedId) || item.employee_id === selectedId || (item.name && item.name === selectedId)) && (
-                                        <CheckCircle size={10} className="text-blue-500" />
-                                    )}
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
 
 const W_KEYS = ['w1', 'w2', 'w3', 'w4'];
 

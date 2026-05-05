@@ -1451,7 +1451,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                 {/* Form Content */}
                 <div className="flex-1 overflow-y-auto w-full">
-                    <form id="add-project-form" onSubmit={handleSubmit} className="p-6 flex flex-col gap-8">
+                    <form id="add-project-form" onSubmit={handleSubmit} noValidate className="p-6 flex flex-col gap-8">
                         {submitError && (
                             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 flex items-center gap-2">
                                 <AlertCircle size={16} className="shrink-0" /> {toMessage(submitError)}
@@ -1473,7 +1473,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="flex flex-col gap-1.5 col-span-2">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Project Name</label>
-                                    <input type="text" name="name" placeholder="e.g. Enterprise Migration" required
+                                    <input type="text" name="name" placeholder="e.g. Enterprise Migration"
                                         maxLength={100}
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
                                         value={formData.name} onChange={handleChange} />
@@ -1581,7 +1581,6 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.department_id}
                                         onChange={handleChange}
-                                        required
                                     >
                                         <option value="">Select Department</option>
                                         {departments.map((dept) => (
@@ -1630,7 +1629,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600 uppercase">Start Date</label>
-                                    <input type="date" name="startDate" required
+                                    <input type="date" name="startDate"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         value={formData.startDate} onChange={handleChange} />
                                 </div>

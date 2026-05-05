@@ -13,6 +13,7 @@ import { clearDashboardCache } from '../../api/dashboardApi';
 import EditProjectPanel from './EditProjectPanel';
 import FilterPanel from './FilterPanel';
 import ProjectStatusChart from './ProjectStatusChart';
+import TruncatedText from '../../components/TruncatedText';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import cdBlueLogo from '../../assets/CD-Blue.svg';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
@@ -145,11 +146,11 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                     {project.icon || (project.name?.[0]?.toUpperCase() || '?')}
                 </div>
                 <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate" title={project.name}>
-                        {project.name}
+                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">
+                        <TruncatedText text={project.name} maxWidth="100%" />
                     </h3>
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">
-                        {project.project_id || project.id}
+                        <TruncatedText text={project.project_id || project.id} maxWidth="100%" />
                     </p>
                 </div>
             </div>
@@ -295,18 +296,25 @@ const ProjectList = ({
     if (!projects || !Array.isArray(projects)) return null;
 
     const filteredProjects = useMemo(() => {
-        // Robust normalization for status comparison
         const normalizeStatus = (s) => (s || '').toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ').trim();
         const isCompletedStatus = (s) => {
             const norm = normalizeStatus(s);
             return ['closed', 'completed', 'done', 'ended', 'finished'].some(opt => norm.includes(opt));
         };
 
+        console.log(`[ProjectList] Filtering ${projects.length} projects. searchTerm: "${searchTerm}", activeCardFilter: "${activeCardFilter}", activeDepartment: "${activeDepartment}"`);
         const filtered = projects.filter(project => {
-            if (!project || !project.name) return false;
+            if (!project || !project.name) {
+                console.log(`[ProjectList Filter Fail] Project missing name`, project);
+                return false;
+            }
 
             const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
+            
+            if (!matchesSearchTerm) {
+                 console.log(`[ProjectList Filter Fail] Search term mismatch for project ${project.name}`);
+            }
 
             // 1. Sidebar Status Filter
             let matchesSidebarStatus = true;
@@ -322,6 +330,9 @@ const ProjectList = ({
                     matchesSidebarStatus = ['not started', 'planned', 'upcoming'].some(s => pStatus.includes(s));
                 } else {
                     matchesSidebarStatus = pStatus.includes(fStatus);
+                }
+                if (!matchesSidebarStatus) {
+                    console.log(`[ProjectList Filter Fail] Sidebar Status mismatch for project ${project.name} (pStatus: ${pStatus}, fStatus: ${fStatus})`);
                 }
             }
 
@@ -402,16 +413,6 @@ const ProjectList = ({
                 matchesSortFilter = ['nonbillable', 'no', 'false'].includes(bVal);
             }
 
-            // 5. Department Filter (Header or Sidebar)
-            let matchesDepartment = true;
-            const deptFilter = filters?.department || activeDepartment;
-            if (deptFilter && deptFilter !== 'All Department' && deptFilter !== 'All Departments') {
-                const pDeptId = project.department_id || project.department;
-                const pDeptName = project.department_name || project.department;
-                matchesDepartment = String(pDeptId) === String(deptFilter) ||
-                    String(pDeptName).toLowerCase() === String(deptFilter).toLowerCase();
-            }
-
             return matchesSearchTerm &&
                 matchesSidebarStatus &&
                 matchesCardFilter &&
@@ -420,8 +421,7 @@ const ProjectList = ({
                 matchesResourceName &&
                 matchesSowStatus &&
                 matchesDateFilter &&
-                matchesSortFilter &&
-                matchesDepartment;
+                matchesSortFilter;
         });
 
         // Debug logging for filter verification as requested
@@ -756,9 +756,13 @@ const ProjectList = ({
                                                 <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                                                     {project.icon || project.name?.[0]?.toUpperCase()}
                                                 </div>
-                                                <div>
-                                                    <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight">{project.name}</div>
-                                                    <div className="text-sm text-slate-500 font-sans tracking-tight">{project.project_id || project.id}</div>
+                                                <div className="min-w-0 max-w-[200px] sm:max-w-[250px] lg:max-w-[300px]">
+                                                    <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight">
+                                                        <TruncatedText text={project.name} maxWidth="100%" />
+                                                    </div>
+                                                    <div className="text-sm text-slate-500 font-sans tracking-tight">
+                                                        <TruncatedText text={project.project_id || project.id} maxWidth="100%" />
+                                                    </div>
                                                     <div className="text-sm text-slate-500 font-normal mt-0.5">
                                                         Client: {(() => {
                                                             let c = project.client_name || project.client || '—';

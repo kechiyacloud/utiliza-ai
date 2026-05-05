@@ -27,6 +27,7 @@ export const fetchProjectsData = async (filters = {}) => {
             endDate: filters.endDate
         };
 
+        console.log("[ProjectsAPI] Fetching with params:", apiParams);
         const [overviewRes, listRes] = await Promise.all([
             api.get('/projects/overview', { params: apiParams }),
             api.get('/projects/list', { params: apiParams })
@@ -34,6 +35,7 @@ export const fetchProjectsData = async (filters = {}) => {
 
         const o = overviewRes?.data || {};
         const l = Array.isArray(listRes?.data) ? listRes.data : [];
+        console.log(`[ProjectsAPI] Overview total: ${o.totalProjects ?? o.total_projects}, List count: ${l.length}`);
 
         // Map Backend structure to Frontend Expected Structure
         const REAL_PROJECTS_DATA = {
