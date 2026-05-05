@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_db_connection, release_db_connection
+from app.rbac_utils import require_min_role
 from typing import Optional, List
 
-router = APIRouter(prefix="/availability", tags=["Availability"])
+router = APIRouter(prefix="/availability", tags=["Availability"], dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 @router.get("/all")
 def get_all_availability(

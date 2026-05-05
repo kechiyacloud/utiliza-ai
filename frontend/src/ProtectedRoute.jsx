@@ -1,12 +1,12 @@
-// src/ProtectedRoute.jsx
 import { Navigate, Outlet } from 'react-router-dom'
+import { usePermissions } from './hooks/usePermissions'
+
+const ROLE_HIERARCHY = { restricted_viewer: 0, viewer: 1, editor: 2, master_admin: 3 }
 
 function getTokenPayload(token) {
   try {
-    // JWT is three base64url segments separated by dots
     const base64Payload = token.split('.')[1]
     if (!base64Payload) return null
-    // base64url → base64
     const padded = base64Payload.replace(/-/g, '+').replace(/_/g, '/')
     return JSON.parse(atob(padded))
   } catch {
@@ -16,25 +16,28 @@ function getTokenPayload(token) {
 
 function isTokenValid(token) {
   if (!token || token === 'undefined' || token === 'null') return false
-
   const payload = getTokenPayload(token)
   if (!payload) return false
-
-  // Check expiry — payload.exp is in seconds, Date.now() is in ms
   if (payload.exp && Date.now() >= payload.exp * 1000) return false
-
   return true
 }
 
-function ProtectedRoute() {
+// minRole: if provided, redirect to /info/dashboard when role is below minimum
+function ProtectedRoute({ minRole } = {}) {
   const token = localStorage.getItem('token')
 
   if (!isTokenValid(token)) {
-    // Remove any stale / expired / malformed token so the login page
-    // starts fresh and the user is not confused by a lingering entry.
     localStorage.removeItem('token')
     localStorage.removeItem('userEmail')
     return <Navigate to="/" replace />
+  }
+
+  if (minRole) {
+    const payload = getTokenPayload(token)
+    const role = payload?.role ?? 'restricted_viewer'
+    if ((ROLE_HIERARCHY[role] ?? -1) < (ROLE_HIERARCHY[minRole] ?? 999)) {
+      return <Navigate to="/info/dashboard" replace />
+    }
   }
 
   return <Outlet />

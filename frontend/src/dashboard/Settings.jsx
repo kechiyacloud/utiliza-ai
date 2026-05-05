@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePermissions } from '../hooks/usePermissions';
 import api from '../api/axios';
 import { submitFeedback } from '../api/feedbackApi';
 import { Soon_GIF } from '../Assets';
@@ -11,12 +12,13 @@ import {
     Building2, Laptop, Award, Send, MessageSquare,
     AlertCircle, CheckCircle2, Loader2,
     BarChart2, FileText, Settings as SettingsIcon, ShieldCheck,
-    Archive, Trash2, Upload, Download, RefreshCcw, Database
+    Archive, Trash2, Upload, Download, RefreshCcw, Database, UserX, ChevronDown
 } from 'lucide-react';
 import { getEmployeeList } from '../api/employeeApi';
 import ExportPreviewModal from './employee/ExportPreviewModal';
 import { clearDashboardCache } from '../api/dashboardApi';
 import ModuleLoader from '../components/ModuleLoader';
+import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -269,69 +271,128 @@ const FeedbackSection = ({ employeeData }) => {
 };
 
 // ─────────────────────────────────────────────
-// Section D — Auto Reports (placeholder)
+// Section D — Reports
 // ─────────────────────────────────────────────
 
-const AutoReportsSection = () => (
-    <div className="relative">
-        {/* Non-functional preview UI (blurred) */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-40 pointer-events-none select-none">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Report Configuration</p>
-            <div className="space-y-5 max-w-2xl">
-                <div>
-                    <p className={labelCls}>Frequency</p>
-                    <div className="flex gap-2">
-                        {['Daily', 'Weekly', 'Monthly'].map(f => (
-                            <span key={f} className="px-4 py-1.5 text-sm rounded-xl border border-gray-200 font-medium text-gray-600 bg-gray-50">
-                                {f}
-                            </span>
+const ReportsSection = () => {
+    const [downloading, setDownloading] = useState(null);
+
+    const reports = [
+        {
+            id: 'employees',
+            title: 'Employee Directory',
+            description: 'Full list of employees with their designations, departments, and contact info.',
+            icon: User,
+            endpoint: '/employees/list',
+            fileName: 'Employee_Directory_Report',
+            columns: [
+                { header: 'Name', dataKey: 'name' },
+                { header: 'Email', dataKey: 'email' },
+                { header: 'Department', dataKey: 'department' },
+                { header: 'Designation', dataKey: 'designation' },
+                { header: 'Status', dataKey: 'employee_status' }
+            ]
+        },
+        {
+            id: 'projects',
+            title: 'Projects Overview',
+            description: 'Consolidated list of all active and historical projects with status and timelines.',
+            icon: Briefcase,
+            endpoint: '/projects/list',
+            fileName: 'Projects_Overview_Report',
+            columns: [
+                { header: 'Project Name', dataKey: 'project_name' },
+                { header: 'Client', dataKey: 'client_name' },
+                { header: 'Status', dataKey: 'status' },
+                { header: 'Start Date', dataKey: 'start_date' },
+                { header: 'End Date', dataKey: 'end_date' }
+            ]
+        },
+        {
+            id: 'clients',
+            title: 'Client Roster',
+            description: 'Complete database of clients and associated partners.',
+            icon: Building2,
+            endpoint: '/clients',
+            fileName: 'Client_Roster_Report',
+            columns: [
+                { header: 'Client Name', dataKey: 'client_name' },
+                { header: 'Partner', dataKey: 'partner_name' },
+                { header: 'Location', dataKey: 'location' },
+                { header: 'Contact', dataKey: 'primary_contact' }
+            ]
+        }
+    ];
+
+    const handleDownload = async (report, format) => {
+        const downloadId = `${report.id}-${format}`;
+        setDownloading(downloadId);
+        try {
+            const res = await api.get(report.endpoint);
+            // Handle different API response structures
+            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
+
+            if (format === 'csv') {
+                exportToCSV(data, report.fileName);
+            } else if (format === 'excel') {
+                exportToExcel(data, report.fileName);
+            } else if (format === 'pdf') {
+                await exportToPDF(data, report.columns, report.title, report.fileName);
+            }
+        } catch (err) {
+            console.error(`Export failed for ${report.title}`, err);
+            alert(`Failed to download ${report.title}. Please try again.`);
+        } finally {
+            setDownloading(null);
+        }
+    };
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {reports.map((report) => (
+                <div key={report.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col hover:border-CD_Blue/20 transition-all">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="p-3 rounded-xl bg-slate-50 text-CD_Blue">
+                            <report.icon size={24} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-mainTheme text-lg">{report.title}</h3>
+                            <p className="text-sm text-gray-500 line-clamp-1">{report.description}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-auto pt-4 border-t border-gray-50 flex items-center gap-2">
+                        {['csv', 'excel', 'pdf'].map((format) => (
+                            <button
+                                key={format}
+                                disabled={downloading !== null}
+                                onClick={() => handleDownload(report, format)}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all
+                                    ${downloading === `${report.id}-${format}` 
+                                        ? 'bg-slate-100 text-slate-400' 
+                                        : 'bg-slate-50 text-gray-600 hover:bg-mainTheme hover:text-white'
+                                    }`}
+                            >
+                                {downloading === `${report.id}-${format}` ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                    <Download size={14} />
+                                )}
+                                {format}
+                            </button>
                         ))}
                     </div>
                 </div>
-                <div>
-                    <p className={labelCls}>Report Type</p>
-                    <div className="flex flex-wrap gap-2">
-                        {['Resource Utilization', 'Project Summary', 'Allocation Overview'].map(r => (
-                            <span key={r} className="px-4 py-1.5 text-sm rounded-xl border border-gray-200 font-medium text-gray-600 bg-gray-50">
-                                {r}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-                <div>
-                    <p className={labelCls}>Date Range</p>
-                    <div className="flex gap-3 items-center">
-                        <input type="date" className={`${inputCls} max-w-[160px]`} readOnly />
-                        <span className="text-gray-400 text-sm">to</span>
-                        <input type="date" className={`${inputCls} max-w-[160px]`} readOnly />
-                    </div>
-                </div>
-                <div>
-                    <p className={labelCls}>Delivery Email</p>
-                    <input type="email" className={`${inputCls} max-w-xs`} placeholder="you@organization.com" readOnly />
-                </div>
-                <button disabled className="flex items-center gap-2 px-5 py-2.5 bg-mainTheme text-white text-sm font-semibold rounded-xl opacity-50 cursor-not-allowed">
-                    <FileText size={15} /> Schedule Report
-                </button>
-            </div>
+            ))}
         </div>
-
-        {/* Coming Soon overlay */}
-        <div className="absolute inset-0 bg-white/75 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-2xl z-10 gap-3">
-            <Soon_GIF className="w-20 h-20" />
-            <p className="text-base font-bold text-mainTheme">Coming Soon</p>
-            <p className="text-sm text-gray-500 text-center max-w-xs">
-                Automated email report scheduling is currently in development.
-            </p>
-        </div>
-    </div>
-);
+    );
+};
 
 // ─────────────────────────────────────────────
-// Section E — Admin (Admin/HR only)
+// Section E — Data
 // ─────────────────────────────────────────────
 
-const AdminSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync }) => {
+const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, isAdmin }) => {
     const { showArchived, setShowArchived, showDeleted, setShowDeleted } = useEmployees();
 
 
@@ -390,18 +451,20 @@ const AdminSection = ({ employeeData, onExport, onImport, isExporting, isSyncing
                     Bulk Operations
                 </h3>
                 <div className="flex flex-wrap gap-4">
-                    <button
-                        onClick={onImport}
-                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors text-left"
-                    >
-                        <div className="p-3 bg-blue-600 text-white rounded-xl">
-                            <Upload size={20} />
-                        </div>
-                        <div>
-                            <p className="font-bold text-blue-900">Import Employees</p>
-                            <p className="text-xs text-blue-700/60 font-medium">Upload CSV or Excel files</p>
-                        </div>
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={onImport}
+                            className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors text-left"
+                        >
+                            <div className="p-3 bg-blue-600 text-white rounded-xl">
+                                <Upload size={20} />
+                            </div>
+                            <div>
+                                <p className="font-bold text-blue-900">Import Employees</p>
+                                <p className="text-xs text-blue-700/60 font-medium">Upload CSV or Excel files</p>
+                            </div>
+                        </button>
+                    )}
 
                     <button
                         onClick={onExport}
@@ -417,19 +480,21 @@ const AdminSection = ({ employeeData, onExport, onImport, isExporting, isSyncing
                         </div>
                     </button>
 
-                    <button
-                        onClick={onSync}
-                        disabled={isSyncing}
-                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-colors text-left disabled:opacity-50"
-                    >
-                        <div className="p-3 bg-amber-600 text-white rounded-xl">
-                            {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
-                        </div>
-                        <div>
-                            <p className="font-bold text-amber-900">Sync All Data</p>
-                            <p className="text-xs text-amber-700/60 font-medium">Re-calculate allocations & statuses</p>
-                        </div>
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={onSync}
+                            disabled={isSyncing}
+                            className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-colors text-left disabled:opacity-50"
+                        >
+                            <div className="p-3 bg-amber-600 text-white rounded-xl">
+                                {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
+                            </div>
+                            <div>
+                                <p className="font-bold text-amber-900">Sync All Data</p>
+                                <p className="text-xs text-amber-700/60 font-medium">Re-calculate allocations & statuses</p>
+                            </div>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -438,18 +503,191 @@ const AdminSection = ({ employeeData, onExport, onImport, isExporting, isSyncing
 };
 
 // ─────────────────────────────────────────────
+// Placeholder Section
+// ─────────────────────────────────────────────
+
+const PlaceholderSection = ({ title }) => (
+    <div className="relative">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-40 pointer-events-none select-none h-64 flex items-center justify-center">
+            <p className="text-gray-400 font-medium">Settings will appear here</p>
+        </div>
+        <div className="absolute inset-0 bg-white/75 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-2xl z-10 gap-3">
+            <Soon_GIF className="w-20 h-20" />
+            <p className="text-base font-bold text-mainTheme">Coming Soon</p>
+            <p className="text-sm text-gray-500 text-center max-w-xs">
+                {title} settings are currently in development.
+            </p>
+        </div>
+    </div>
+);
+
+// ─────────────────────────────────────────────
+// Access Control Section
+// ─────────────────────────────────────────────
+
+const ROLE_COLORS = {
+    master_admin:      'bg-purple-100 text-purple-800',
+    editor:            'bg-blue-100 text-blue-800',
+    viewer:            'bg-green-100 text-green-800',
+    restricted_viewer: 'bg-gray-100 text-gray-600',
+};
+
+const AccessControlSection = () => {
+    const [users, setUsers] = useState([]);
+    const [roles, setRoles] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [updating, setUpdating] = useState({});
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [usersRes, rolesRes] = await Promise.all([
+                api.get('/users'),
+                api.get('/users/roles'),
+            ]);
+            setUsers(usersRes.data);
+            setRoles(rolesRes.data);
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to load users');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const handleRoleChange = async (userId, roleName) => {
+        setUpdating(prev => ({ ...prev, [userId]: 'role' }));
+        try {
+            await api.put(`/users/${userId}/role`, { role_name: roleName });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: roleName } : u));
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed to update role');
+        } finally {
+            setUpdating(prev => ({ ...prev, [userId]: null }));
+        }
+    };
+
+    const handleDeactivate = async (userId, email) => {
+        if (!window.confirm(`Deactivate "${email}"? They will no longer be able to log in.`)) return;
+        setUpdating(prev => ({ ...prev, [userId]: 'deactivate' }));
+        try {
+            await api.delete(`/users/${userId}`);
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: false } : u));
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed to deactivate user');
+        } finally {
+            setUpdating(prev => ({ ...prev, [userId]: null }));
+        }
+    };
+
+    if (loading) return (
+        <div className="flex items-center justify-center h-48">
+            <Loader2 className="animate-spin text-blue-500" size={28} />
+        </div>
+    );
+
+    if (error) return (
+        <div className="p-4 text-center text-red-600 font-medium text-sm">{error}</div>
+    );
+
+    return (
+        <div className="space-y-6 max-w-4xl">
+            <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">{users.length} registered accounts</p>
+                <button
+                    onClick={fetchData}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                    <RefreshCcw size={12} />
+                    Refresh
+                </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/50">
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Email</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Last Login</th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {users.map(user => (
+                            <tr key={user.id} className={`hover:bg-gray-50/50 transition-colors ${!user.is_active ? 'opacity-50' : ''}`}>
+                                <td className="px-4 py-3 font-medium text-gray-800 truncate max-w-[200px]">{user.email}</td>
+                                <td className="px-4 py-3">
+                                    <div className="relative inline-block">
+                                        <select
+                                            value={user.role_name || ''}
+                                            onChange={e => handleRoleChange(user.id, e.target.value)}
+                                            disabled={!user.is_active || updating[user.id] === 'role'}
+                                            className={`appearance-none pl-2 pr-7 py-1 rounded-lg text-xs font-semibold cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed ${ROLE_COLORS[user.role_name] || 'bg-gray-100 text-gray-600'}`}
+                                        >
+                                            {roles.map(r => (
+                                                <option key={r.role_name} value={r.role_name}>{r.role_label}</option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                        {user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 text-gray-400 text-xs">
+                                    {user.last_login_at
+                                        ? new Date(user.last_login_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                        : '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                    {user.is_active && (
+                                        <button
+                                            onClick={() => handleDeactivate(user.id, user.email)}
+                                            disabled={updating[user.id] === 'deactivate'}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                                        >
+                                            {updating[user.id] === 'deactivate'
+                                                ? <Loader2 size={12} className="animate-spin" />
+                                                : <UserX size={12} />}
+                                            Deactivate
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────
 // Main Settings component
 // ─────────────────────────────────────────────
 
-const TABS = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'feedback', label: 'Feedback', icon: MessageSquare },
-    { id: 'reports', label: 'Auto Reports', icon: BarChart2 },
-];
-
 const Settings = () => {
     const navigate = useNavigate();
+    const { isAtLeast } = usePermissions();
+    const isAdmin = isAtLeast('master_admin');
     const [activeTab, setActiveTab] = useState('profile');
+
+    const TABS = useMemo(() => [
+        { id: 'profile',        label: 'Profile',         icon: User },
+        { id: 'reports',        label: 'Report',          icon: BarChart2 },
+        { id: 'data',           label: 'Data',            icon: Database },
+        { id: 'feedback',       label: 'Feedback',        icon: MessageSquare },
+        { id: 'mcp',            label: 'MCP',             icon: SettingsIcon },
+        ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
+        { id: 'appearance',     label: 'Appearance',      icon: Laptop },
+    ], [isAdmin]);
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
     const [showBulkModal, setShowBulkModal] = useState(false);
@@ -458,16 +696,6 @@ const Settings = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [empNotLinked, setEmpNotLinked] = useState(false);
-
-    const isAdminPrivileged = true; // Enabled for all users as requested
-
-    const tabs = useMemo(() => {
-        const baseTabs = [...TABS];
-        if (isAdminPrivileged) {
-            baseTabs.push({ id: 'admin', label: 'Admin', icon: ShieldCheck });
-        }
-        return baseTabs;
-    }, [isAdminPrivileged]);
 
     useEffect(() => {
         const fetchEmployee = async () => {
@@ -531,60 +759,71 @@ const Settings = () => {
     }
 
     return (
-        <div className="p-6 min-h-full">
-            {/* Header */}
-            <div className="mb-6 flex items-center gap-4">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
-                    title="Go Back"
-                >
-                    <ArrowLeft size={20} className="text-gray-600" />
-                </button>
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Settings</h1>
-                    <p className="text-sm font-medium text-gray-500">Manage your profile, integrations, and preferences</p>
+        <div className="flex h-full w-full bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm">
+            {/* Left Sidebar */}
+            <div className="w-64 flex-shrink-0 bg-gray-50/50 border-r border-gray-100 flex flex-col">
+                <div className="p-6 pb-4">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="flex items-center gap-2 text-gray-600 hover:text-mainTheme transition-colors font-medium text-sm"
+                    >
+                        <ArrowLeft size={16} />
+                        Settings
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                    <p className="px-3 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-2">Preferences</p>
+                    {TABS.map(({ id, label, icon: Icon }) => (
+                        <button
+                            key={id}
+                            onClick={() => setActiveTab(id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                activeTab === id
+                                    ? 'bg-white text-mainTheme shadow-sm border border-gray-100'
+                                    : 'text-gray-500 hover:bg-gray-200/50 hover:text-mainTheme border border-transparent'
+                            }`}
+                        >
+                            <Icon size={16} className={activeTab === id ? 'text-CD_Blue' : 'text-gray-400'} />
+                            {label}
+                        </button>
+                    ))}
                 </div>
             </div>
 
-            {/* Tab bar */}
-            <div className="flex gap-1 mb-6 border-b border-gray-200">
-                {tabs.map(({ id, label, icon: Icon }) => (
-                    <button
-                        key={id}
-                        onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                            ${activeTab === id
-                                ? 'border-CD_Blue text-CD_Blue'
-                                : 'border-transparent text-gray-500 hover:text-mainTheme'
-                            }`}
-                    >
-                        <Icon size={14} />
-                        {label}
-                    </button>
-                ))}
+            {/* Right Content Area */}
+            <div className="flex-1 h-full overflow-y-auto bg-white p-8">
+                <div className="max-w-4xl mx-auto w-full">
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight mb-8">
+                        {TABS.find(t => t.id === activeTab)?.label || 'Settings'}
+                    </h1>
+                    
+                    {/* Tab content */}
+                    {activeTab === 'profile' && (
+                        <ProfileSection
+                            employeeData={employeeData}
+                            loading={empLoading}
+                            notLinked={empNotLinked}
+                        />
+                    )}
+                    {activeTab === 'reports' && <ReportsSection />}
+                    {activeTab === 'data' && (
+                        <DataSection
+                            employeeData={employeeData}
+                            onExport={handleExportClick}
+                            onImport={() => setShowBulkModal(true)}
+                            onSync={handleSyncAll}
+                            isExporting={isExporting}
+                            isSyncing={isSyncing}
+                            isAdmin={isAdmin}
+                        />
+                    )}
+                    {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
+                    {activeTab === 'mcp' && <PlaceholderSection title="MCP" />}
+                    {activeTab === 'access-control' && <AccessControlSection />}
+                    {activeTab === 'appearance' && <PlaceholderSection title="Appearance" />}
+                </div>
             </div>
-
-            {/* Tab content */}
-            {activeTab === 'profile' && (
-                <ProfileSection
-                    employeeData={employeeData}
-                    loading={empLoading}
-                    notLinked={empNotLinked}
-                />
-            )}
-            {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
-            {activeTab === 'reports' && <AutoReportsSection />}
-            {activeTab === 'admin' && isAdminPrivileged && (
-                <AdminSection 
-                    employeeData={employeeData} 
-                    onExport={handleExportClick}
-                    onImport={() => setShowBulkModal(true)}
-                    onSync={handleSyncAll}
-                    isExporting={isExporting}
-                    isSyncing={isSyncing}
-                />
-            )}
 
             {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
             {showExportModal && (

@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useDataRefresh } from '../context';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut, StickyNote, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, StickyNote, AlertTriangle } from 'lucide-react';
+import { usePermissions } from '../hooks/usePermissions';
 import { encodeId } from '../utils/idEncoder';
 
 const Navbar = () => {
@@ -11,6 +12,7 @@ const Navbar = () => {
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(true);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const { isAtLeast } = usePermissions();
     const { isDirty, setIsDirty } = useDataRefresh();
     const [showNavBlocker, setShowNavBlocker] = useState(false);
     const [pendingPath, setPendingPath] = useState(null);
@@ -28,24 +30,27 @@ const Navbar = () => {
     const userName = (userEmail || '').split('@')[0] || 'User';
     const userInitials = (userName || 'U').substring(0, 2).toUpperCase();
 
-    const menuItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard' },
-        { icon: Briefcase, label: 'Projects', path: 'projects' },
-        { icon: Users, label: 'Employees', path: 'employees/list' },
-        { icon: PieChart, label: 'Allocations', path: 'allocation' },
-        { icon: CalendarClock, label: 'Availability', path: 'availability' },
-        { icon: Building2, label: 'Clients', path: 'client' },
-        { icon: Settings, label: 'Settings', path: 'settings' },
+    const allMenuItems = [
+        { icon: LayoutDashboard, label: 'Dashboard', path: 'dashboard', minRole: 'restricted_viewer' },
+        { icon: Briefcase, label: 'Projects', path: 'projects', minRole: 'restricted_viewer' },
+        { icon: Users, label: 'Employees', path: 'employees/list', minRole: 'restricted_viewer' },
+        { icon: PieChart, label: 'Allocations', path: 'allocation', minRole: 'restricted_viewer' },
+        { icon: CalendarClock, label: 'Availability', path: 'availability', minRole: 'restricted_viewer' },
+        { icon: Building2, label: 'Clients', path: 'client', minRole: 'restricted_viewer' },
+        { icon: Settings, label: 'Settings', path: 'settings', minRole: 'viewer' },
+        { icon: ShieldCheck, label: 'Users', path: 'users', minRole: 'master_admin' },
     ];
+
+    const menuItems = allMenuItems.filter(item => isAtLeast(item.minRole));
 
     const handleLogout = () => {
         setShowLogoutConfirm(true);
     };
 
     const confirmLogout = () => {
-        // Clear any auth tokens/session data
         localStorage.removeItem('token');
         localStorage.clear();
+        window.dispatchEvent(new Event('auth-token-changed'));
         navigate('/login');
     };
 

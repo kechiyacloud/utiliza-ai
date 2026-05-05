@@ -24,7 +24,7 @@ function Projects() {
   const activeView = searchParams.get('view') || 'table';
 
   const filters = {
-    department: searchParams.get('f_dept') || '',
+    department: searchParams.get('dept') || '',
     projectName: searchParams.get('f_name') || '',
     status: searchParams.get('f_status') || 'All Status',
     sowStatus: searchParams.get('f_sow') || '',
@@ -59,15 +59,19 @@ function Projects() {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[ProjectsView] loadData called. dept arg: "${dept}", selectedDepartment state: "${selectedDepartment}"`);
       const effectiveDept = currentFilters.department || dept;
+      console.log(`[ProjectsView] Fetching for effectiveDept: "${effectiveDept}"`);
+      
       const res = await fetchProjectsData({
         ...currentFilters,
         department: (effectiveDept === 'All Department' || effectiveDept === 'All Departments') ? '' : effectiveDept
       });
+      console.log(`[ProjectsView] Data received: ${res.data?.projects?.length} projects`);
       setData(res.data);
     } catch (err) {
       console.error("Failed to load projects data", err);
-      setError("Failed to load projects. Please check the backend is running.");
+      setError("Failed to load data. Please try refreshing the page.");
     } finally {
       setLoading(false);
     }
@@ -86,6 +90,7 @@ function Projects() {
           }
         }
         if (deptRes.status === 'fulfilled') {
+          console.log(`[ProjectsView] Fetched ${deptRes.value?.length} departments`);
           setDepartments(deptRes.value || []);
         }
       } catch (err) {
@@ -170,7 +175,7 @@ function Projects() {
           activeDepartment={selectedDepartment}
           onFilterChange={(newFilters) => {
             updateParams({
-              f_dept: newFilters.department,
+              dept: newFilters.department,
               f_name: newFilters.projectName,
               f_status: newFilters.status,
               f_sow: newFilters.sowStatus,

@@ -21,6 +21,7 @@ const FilterPanel = ({
         endDate: ''
     });
     const [focusedField, setFocusedField] = useState(null);
+    const [dateError, setDateError] = useState('');
 
     useEffect(() => {
         if (isOpen && currentFilters) {
@@ -73,6 +74,16 @@ const FilterPanel = ({
             newFilters = { ...filters, [name]: value };
         }
 
+        // Validate date range — end date must not be before start date
+        const effectiveStart = name === 'startDate' ? value : newFilters.startDate;
+        const effectiveEnd = name === 'endDate' ? value : newFilters.endDate;
+        if (effectiveStart && effectiveEnd && new Date(effectiveEnd) < new Date(effectiveStart)) {
+            setDateError('End date cannot be earlier than start date.');
+            setFilters(newFilters); // update local UI state so the field shows the value
+            return; // block applying the invalid filter
+        }
+        setDateError('');
+
         setFilters(newFilters);
 
         // Trigger immediate filtering for a snappier experience as requested
@@ -84,6 +95,7 @@ const FilterPanel = ({
     };
 
     const handleApply = () => {
+        if (dateError) return; // block apply if date range is invalid
         const normalizedFilters = {
             ...filters,
             sowStatus: filters.status === 'In Progress' ? filters.sowStatus : '',
@@ -226,30 +238,42 @@ const FilterPanel = ({
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-4">
-                                {/* Start Date */}
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Start Date</label>
-                                    <input
-                                        type="date"
-                                        name="startDate"
-                                        value={filters.startDate || ''}
-                                        onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
-                                    />
-                                </div>
+                            <div className="flex flex-col gap-2">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Start Date */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Start Date</label>
+                                        <input
+                                            type="date"
+                                            name="startDate"
+                                            value={filters.startDate || ''}
+                                            onChange={handleChange}
+                                            className={`p-3 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white ${
+                                                dateError ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                                            }`}
+                                        />
+                                    </div>
 
-                                {/* End Date */}
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">End Date</label>
-                                    <input
-                                        type="date"
-                                        name="endDate"
-                                        value={filters.endDate || ''}
-                                        onChange={handleChange}
-                                        className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white"
-                                    />
+                                    {/* End Date */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">End Date</label>
+                                        <input
+                                            type="date"
+                                            name="endDate"
+                                            value={filters.endDate || ''}
+                                            min={filters.startDate || undefined}
+                                            onChange={handleChange}
+                                            className={`p-3 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-slate-700 focus:bg-white ${
+                                                dateError ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                                            }`}
+                                        />
+                                    </div>
                                 </div>
+                                {dateError && (
+                                    <p className="text-[11px] font-semibold text-red-500 flex items-center gap-1">
+                                        ⚠ {dateError}
+                                    </p>
+                                )}
                             </div>
 
                         </div>
