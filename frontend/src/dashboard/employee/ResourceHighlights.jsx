@@ -6,6 +6,7 @@ import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import EmployeeTable from './EmployeeTable';
 import FilterOverlay from './FilterOverlay';
+import { getEmployeeList } from '../../api/employeeApi';
 
 const ResourceHighlights = () => {
     const location = useLocation();

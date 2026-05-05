@@ -1327,22 +1327,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Department is required.');
             return;
         }
-        // SOW Status validation removed - it is now optional
-        const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
-        const effectiveType = formData.type;
-        const normalizedClientId = isClientProject ? toIdOrNull(formData.clientId) : null;
-        const normalizedPartnerId = isPartnerClientProject ? toIdOrNull(formData.partnerId) : null;
 
-        if (isClientProject && !normalizedClientId) {
-            setSubmitError('Selected client is invalid. Please re-select the client.');
-            return;
-        }
-        if (isPartnerClientProject && !normalizedPartnerId) {
-            setSubmitError('Selected partner is invalid. Please re-select the partner.');
-            return;
-        }
-
-        setIsSubmitting(true);
         const normalizedSelectedSkills = Array.from(
             new Map(
                 (formData.skills || [])
@@ -1380,8 +1365,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
             // Give the user time to see the success toast before closing/navigating
             setTimeout(() => {
-                if (onAdd) onAdd(response); // Notify parent (e.g. to navigate or refresh)
-                if (onClose && !pageMode) onClose(); // Close if it's a sidebar
+                if (response && response.project_id) {
+                    navigate(`/info/projects/details`, { state: { projectId: response.project_id } });
+                } else if (onAdd) {
+                    onAdd(response);
+                }
+                if (onClose && !pageMode) onClose();
             }, 1500);
 
         } catch (error) {
@@ -1472,7 +1461,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="flex flex-col gap-1.5 col-span-2">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Project Name</label>
+                                    <label className="text-xs font-bold text-gray-600 uppercase">Project Name <span className="text-black ml-1">*</span></label>
                                     <input type="text" name="name" placeholder="e.g. Enterprise Migration" required
                                         maxLength={100}
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
@@ -1575,7 +1564,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 {/* DEPARTMENT DROPDOWN — for all project types */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Department <span className="text-red-500">*</span></label>
+                                    <label className="text-xs font-bold text-gray-600 uppercase">Department <span className="text-black ml-1">*</span></label>
                                     <select
                                         name="department_id"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
@@ -1629,7 +1618,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Start Date</label>
+                                    <label className="text-xs font-bold text-gray-600 uppercase">Start Date <span className="text-black ml-1">*</span></label>
                                     <input type="date" name="startDate" required
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         value={formData.startDate} onChange={handleChange} />

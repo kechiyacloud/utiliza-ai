@@ -430,11 +430,11 @@ function Dashboard() {
   // Derive bench employees with their skills from the filtered employee list
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
-      .filter(emp => (emp.employee_allocations || 0) <= 0 && Array.isArray(emp.skills) && emp.skills.length > 0)
+      .filter(emp => (emp.employee_allocations || 0) <= 0)
       .slice(0, 4)
-          .map(emp => ({
+      .map(emp => ({
         name: emp.employee_name,
-        skills: emp.skills.join(', ')
+        skills: Array.isArray(emp.skills) && emp.skills.length > 0 ? emp.skills.join(', ') : 'No skills listed'
       }));
   }, [filteredDashboardEmployees]);
 

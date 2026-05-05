@@ -111,8 +111,16 @@ const OrganizationHighlights = ({
                     {data.length > 0 ? data.slice(0, 5).map((item, idx) => (
                         <div 
                             key={idx} 
-                            className={`group relative ${utilizationSubTab === 'EMPLOYEE' && item.id && item.id !== '0' ? 'cursor-pointer' : ''}`}
-                            onClick={() => utilizationSubTab === 'EMPLOYEE' && item.id && item.id !== '0' && navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } })}
+                            className={`group relative ${((utilizationSubTab === 'EMPLOYEE' && item.id) || (utilizationSubTab === 'PROJECTS' && item.id)) && item.id !== '0' ? 'cursor-pointer' : ''}`}
+                            onClick={() => {
+                                if (item.id && item.id !== '0') {
+                                    if (utilizationSubTab === 'EMPLOYEE') {
+                                        navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } });
+                                    } else {
+                                        navigate(`/info/projects/${item.id}`, { state: { from: 'highlights' } });
+                                    }
+                                }
+                            }}
                         >
                             <div className="flex items-center gap-2">
                                 <span className="text-[9px] font-bold text-slate-300 w-4">#{idx + 1}</span>
@@ -162,8 +170,28 @@ const OrganizationHighlights = ({
                             {item.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h5 className="text-xs font-medium text-slate-800 uppercase truncate group-hover:text-blue-600">{item.name}</h5>
-                            <p className="text-[10px] text-slate-500 font-medium">{item.project}</p>
+                            <h5 
+                                className="text-xs font-medium text-slate-800 uppercase truncate group-hover:text-blue-600"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.id && item.id !== '0') {
+                                        navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } });
+                                    }
+                                }}
+                            >
+                                {item.name}
+                            </h5>
+                            <p 
+                                className="text-[10px] text-slate-500 font-medium hover:text-blue-600 cursor-pointer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.project_id) {
+                                        navigate(`/info/projects/${item.project_id}`, { state: { from: 'highlights' } });
+                                    }
+                                }}
+                            >
+                                {item.project}
+                            </p>
                         </div>
                         <div className="text-right">
                             <p className="text-[10px] font-bold text-blue-600 uppercase">Roll-off</p>
