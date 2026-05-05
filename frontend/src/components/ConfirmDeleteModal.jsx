@@ -3,12 +3,14 @@ import React, { useState, useEffect } from 'react';
 const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, itemName, isDeleting }) => {
     const [confirmationText, setConfirmationText] = useState('');
     const [isPermanent, setIsPermanent] = useState(false);
+    const [error, setError] = useState('');
     const requiredText = 'delete';
 
     useEffect(() => {
         if (!isOpen) {
             setConfirmationText('');
             setIsPermanent(false);
+            setError('');
         }
     }, [isOpen]);
 
@@ -16,7 +18,10 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, itemName, isDeleting }
 
     const handleConfirm = () => {
         if (confirmationText.toLowerCase() === requiredText) {
+            setError('');
             onConfirm(isPermanent);
+        } else {
+            setError('Please type "delete" to proceed.');
         }
     };
 
@@ -65,11 +70,18 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, itemName, isDeleting }
                         <input
                             type="text"
                             value={confirmationText}
-                            onChange={(e) => setConfirmationText(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all font-mono"
+                            onChange={(e) => {
+                                setConfirmationText(e.target.value);
+                                if (error) setError('');
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleConfirm();
+                            }}
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 transition-all font-mono ${error ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50' : 'border-gray-300 focus:ring-red-500 focus:border-red-500'}`}
                             placeholder="Type 'delete' here..."
                             autoFocus
                         />
+                        {error && <p className="text-red-500 text-xs mt-1 font-medium animate-in fade-in">{error}</p>}
                     </div>
                 </div>
 
@@ -83,7 +95,7 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, itemName, isDeleting }
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={confirmationText.toLowerCase() !== requiredText || isDeleting}
+                        disabled={isDeleting}
                         className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-lg focus:ring-2 focus:ring-offset-2 transition-all flex items-center gap-2 ${
                             isPermanent 
                             ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' 

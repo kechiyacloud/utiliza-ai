@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppDataProvider } from './context'
 import ProtectedRoute from './ProtectedRoute'
+import { Toaster } from 'react-hot-toast'
 
 const LoginRegister = lazy(() => import('./LoginRegister'))
 const Login = lazy(() => import('./login-register/Login'))
@@ -26,6 +27,7 @@ const Organization = lazy(() => import('./dashboard/Organization'))
 const WorkStatus = lazy(() => import('./dashboard/WorkStatus'))
 const ResourceHighlights = lazy(() => import('./dashboard/employee/ResourceHighlights'))
 const SkillsSummaryPage = lazy(() => import('./dashboard/employee/SkillsSummaryPage'))
+const TodoPage = lazy(() => import('./dashboard/TodoPage'))
 
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -61,6 +63,7 @@ function withSuspense(element, label) {
 function App() {
   return (
     <AppDataProvider>
+      <Toaster position="top-right" reverseOrder={false} />
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>
@@ -96,7 +99,11 @@ function App() {
               <Route path='resource-highlights' element={withSuspense(<ResourceHighlights />, 'Loading highlights...')} />
               <Route path='skills' element={withSuspense(<SkillsSummaryPage />, 'Loading skills analysis...')} />
               <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
+              <Route path='todo' element={withSuspense(<TodoPage />, 'Loading To-Do Board...')} />
             </Route>
+
+            {/* Standalone views without sidebar/layout */}
+            <Route path='view-resources' element={withSuspense(<ResourceHighlights />, 'Loading view...')} />
           </Route>
 
           {/* FALLBACK */}

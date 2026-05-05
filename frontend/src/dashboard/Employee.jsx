@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, X, Building2, ChevronDown, Upload, MoreHorizontal, ArrowLeft, UserSearch, UserCheck, Activity } from 'lucide-react'
+import { Users, BriefcaseBusiness, Hourglass, UserPlus, Award, UserMinus, X, Building2, ChevronDown, Upload, MoreHorizontal, ArrowLeft, UserSearch, UserCheck, Activity } from 'lucide-react'
 import BulkImportModal from './employee/BulkImportModal'
 import EmployeeTable from './employee/EmployeeTable'
 import NewJoinerCard from './employee/NewJoinerCard'
@@ -8,29 +8,36 @@ import FilterOverlay from './employee/FilterOverlay'
 import SkillsOverview from './employee/insights/SkillsOverview'
 import { getEmployeeList } from '../api/employeeApi'
 import { normalizeSkillName } from '../utils/skillTopics'
+import { useEmployees } from '../context/EmployeeContext'
 import MultiSelectDropdown from '../components/MultiSelectDropdown'
 import { useDataRefresh } from '../context'
 import ModuleLoader from '../components/ModuleLoader'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
-    className={`bg-white p-3 rounded-xl shadow-sm border flex items-center justify-between transition-all hover:shadow-md cursor-pointer ${isActive ? 'border-blue-400 ring-2 ring-blue-100 ring-offset-1' : 'border-gray-100'}`}
+    className={`rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between min-h-[100px] shadow-sm relative group ${
+      onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30' : 'cursor-default'
+    } ${isActive ? 'bg-blue-50/80 border-blue-400 shadow-sm ring-2 ring-blue-100' : 'bg-white border-slate-200'}`}
     onClick={onClick}
   >
-    <div>
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <h3 className={`font-extrabold text-gray-800 ${value === 'Tap to View' ? 'text-sm mt-1' : 'text-xl'}`}>
+    <div className="flex items-center justify-between w-full mb-3">
+      <p className={`text-2xl font-bold transition-colors ${isActive ? 'text-blue-700' : 'text-slate-900 group-hover:text-blue-700'}`}>
         {loading ? (
-          <span className="text-gray-400">...</span>
+          <span className="text-slate-200 animate-pulse">...</span>
         ) : error ? (
-          <span className="text-red-500">—</span>
+          <span className="text-rose-500">—</span>
         ) : (
-          <span>{value ?? '—'}</span>
+          value ?? '—'
         )}
-      </h3>
+      </p>
+      <div className={`p-2 rounded-xl transition-all ${isActive ? `${colorClass} bg-opacity-20 text-blue-700` : `bg-slate-50 ${colorClass.replace('bg-', 'text-').replace('500', '600')} group-hover:bg-blue-100 group-hover:text-blue-700`}`}>
+        <Icon size={20} strokeWidth={2.5} />
+      </div>
     </div>
-    <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
-      <Icon size={20} className={colorClass.replace('bg-', 'text-').replace('10', '500')} />
+    <div className="flex flex-col">
+      <p className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-blue-600/80' : 'text-slate-500 group-hover:text-blue-600/80'}`}>
+        {label}
+      </p>
     </div>
   </div>
 )
@@ -38,14 +45,16 @@ const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClic
 function Employee() {
   const navigate = useNavigate()
   const { refreshKey } = useDataRefresh()
+  const { showArchived, showDeleted } = useEmployees()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [allEmployees, setAllEmployees] = useState([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
-  // Filter States
+  const location = useLocation();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({
+  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
+  const [filters, setFilters] = useState(location.state?.filters || {
     departments: [],
     types: [],
     skills: [],
@@ -53,9 +62,7 @@ function Employee() {
     statusTags: [],
     designations: []
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const location = useLocation();
-  const [cardFilter, setCardFilter] = useState(location.state?.cardFilter || null);
+  const [searchQuery, setSearchQuery] = useState(location.state?.search || "");
   const [activeDrawer, setActiveDrawer] = useState(null);
 
   // Department chip selector — default shows all unique depts; user can narrow down
@@ -101,7 +108,7 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList(refreshKey > 0)
+        const data = await getEmployeeList(refreshKey > 0, showArchived, showDeleted)
         if (!mounted) return
 
         setAllEmployees(data)
@@ -126,7 +133,7 @@ function Employee() {
 
     fetchAllData()
     return () => { mounted = false }
-  }, [refreshKey])
+  }, [refreshKey, showArchived, showDeleted])
 
   // Combined filters passed to EmployeeTable — dept chips override the filter drawer's dept selection
   const combinedFilters = useMemo(() => ({
@@ -164,13 +171,28 @@ function Employee() {
 
   // Derived stats from the filtered group
   const totalEmployeesCount = baseGroup.length;
-  const benchEmployeesCount = baseGroup.filter(e => (e.employee_allocations || 0) <= 0).length;
+  const billableCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
+  }).length;
+
+  const nonBillableCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
+  }).length;
+
+  const benchEmployeesCount = baseGroup.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const isSpecialStatus = s.includes('notice') || s.includes('pip');
+    return (e.employee_allocations || 0) <= 0 && !isSpecialStatus;
+  }).length;
+
   const noticeEmployeesCount = baseGroup.filter(e => {
     const s = (e.employee_status || '').toLowerCase();
     return s.includes('notice') || s.includes('pip');
   }).length;
-  const billableCount = baseGroup.filter(e => e.billable === 'billable' && (e.employee_allocations || 0) > 0).length;
-  const nonBillableCount = baseGroup.filter(e => e.billable === 'non-billable' && (e.employee_allocations || 0) > 0).length;
 
   if (loading && !allEmployees.length) {
     return <ModuleLoader label="Loading Employees" />;
@@ -245,10 +267,10 @@ function Employee() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard
-          label={`Total ${contextLabel === 'Team' ? 'Team' : 'Talent'}`}
+          label="Total Talent"
           value={totalEmployeesCount}
           icon={Users}
-          colorClass="bg-blue-500"
+          colorClass="bg-slate-500"
           loading={loading}
           error={error}
           isActive={cardFilter === null}
@@ -258,7 +280,7 @@ function Employee() {
           label="Billable"
           value={billableCount}
           icon={UserCheck}
-          colorClass="bg-blue-600"
+          colorClass="bg-blue-500"
           loading={loading}
           error={error}
           isActive={cardFilter === 'billable'}
@@ -275,17 +297,17 @@ function Employee() {
           onClick={() => setCardFilter('non-billable')}
         />
         <StatCard
-          label="Available Now"
+          label="Total Bench"
           value={benchEmployeesCount}
-          icon={BriefcaseBusiness}
-          colorClass="bg-orange-500"
+          icon={UserMinus}
+          colorClass="bg-rose-500"
           loading={loading}
           error={error}
           isActive={cardFilter === 'bench'}
           onClick={() => setCardFilter('bench')}
         />
         <StatCard
-          label="Notice Period & PIP"
+          label="Notice Period"
           value={noticeEmployeesCount}
           icon={Hourglass}
           colorClass="bg-red-500"
@@ -312,14 +334,19 @@ function Employee() {
           employees={allEmployees}
           loading={loading}
           onEmployeeClick={(emp) =>
-            navigate(`/info/employee/${emp.employee_id || '123'}`, {
+            navigate(`/info/employee/${encodeId(emp.employee_id || '123')}`, {
               state: {
                 employee: emp,
                 from: {
                   pathname: location.pathname,
                   search: location.search,
                   hash: location.hash,
-                  state: location.state || null
+                  state: { 
+                    ...location.state, 
+                    cardFilter, 
+                    filters,
+                    search: searchQuery
+                  }
                 }
               }
             })

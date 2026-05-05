@@ -1,14 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useDataRefresh } from '../context';
 import { CD_Blue } from '../Assets';
 import api from '../api/axios';
-import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, PieChart, CalendarClock, Building2, Settings, ChevronLeft, ChevronRight, LogOut, StickyNote, AlertTriangle } from 'lucide-react';
+import { encodeId } from '../utils/idEncoder';
 
 const Navbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isCollapsed, setIsCollapsed] = useState(true);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const { isDirty, setIsDirty } = useDataRefresh();
+    const [showNavBlocker, setShowNavBlocker] = useState(false);
+    const [pendingPath, setPendingPath] = useState(null);
+
+    const handleSafeNavigate = (path) => {
+        if (isDirty) {
+            setPendingPath(path);
+            setShowNavBlocker(true);
+        } else {
+            navigate(path);
+        }
+    };
 
     const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
     const userName = (userEmail || '').split('@')[0] || 'User';
@@ -44,7 +58,7 @@ const Navbar = () => {
             <div className="h-full flex flex-col py-6 bg-mainTheme text-white relative">
 
                 <div
-                    onClick={() => navigate('/info/dashboard')}
+                    onClick={() => handleSafeNavigate('/info/dashboard')}
                     className={`px-3 mb-10 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity ${isCollapsed ? 'justify-center' : ''}`}
                     title="Go to Dashboard"
                 >
@@ -61,7 +75,7 @@ const Navbar = () => {
                         return (
                             <button
                                 key={index}
-                                onClick={() => navigate('/info/' + item.path)}
+                                onClick={() => handleSafeNavigate('/info/' + item.path)}
                                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 group relative
                                     ${isActive ? 'bg-white/10 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}
                                     ${isCollapsed ? 'justify-center' : ''}
@@ -90,16 +104,7 @@ const Navbar = () => {
                             try {
                                 const response = await api.get(`/employee/by-email/${encodeURIComponent(userEmail)}`);
                                 if (response.data && response.data.employee_id) {
-                                    navigate(`/info/employee/${response.data.employee_id}`, {
-                                        state: {
-                                            from: {
-                                                pathname: location.pathname,
-                                                search: location.search,
-                                                hash: location.hash,
-                                                state: location.state || null
-                                            }
-                                        }
-                                    });
+                                    handleSafeNavigate(`/info/employee/${encodeId(response.data.employee_id)}`);
                                 } else {
                                     alert(`No employee profile found for ${userEmail}. Please ensure your email is linked to an active employee record.`);
                                 }
@@ -169,6 +174,44 @@ const Navbar = () => {
                                         className="w-full py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
                                     >
                                         Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Global Unsaved Changes Blocker */}
+                {showNavBlocker && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="p-6">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
+                                        <AlertTriangle className="text-orange-500" size={24} />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="text-lg font-bold text-slate-800">Unsaved Changes</h3>
+                                        <p className="text-sm text-slate-500 font-medium">You have unsaved changes in your form. Do you want to discard them and leave?</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                    <button
+                                        onClick={() => setShowNavBlocker(false)}
+                                        className="px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
+                                    >
+                                        Stay & Save
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsDirty(false);
+                                            setShowNavBlocker(false);
+                                            if (pendingPath) navigate(pendingPath);
+                                        }}
+                                        className="px-5 py-2 text-sm font-bold bg-orange-600 text-white rounded-xl hover:bg-orange-700 shadow-lg shadow-orange-200 transition-all"
+                                    >
+                                        Discard Changes
                                     </button>
                                 </div>
                             </div>
