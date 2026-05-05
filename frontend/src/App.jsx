@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppDataProvider } from './context'
 import ProtectedRoute from './ProtectedRoute'
+import { Toaster } from 'react-hot-toast'
 
 const LoginRegister = lazy(() => import('./LoginRegister'))
 const Login = lazy(() => import('./login-register/Login'))
@@ -62,6 +63,7 @@ function withSuspense(element, label) {
 function App() {
   return (
     <AppDataProvider>
+      <Toaster position="top-right" reverseOrder={false} />
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>

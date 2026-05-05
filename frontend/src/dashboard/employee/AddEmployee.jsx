@@ -786,7 +786,7 @@ const AddEmployee = () => {
                 toast.success(isEditMode ? 'Employee updated successfully' : 'Employee created successfully', { id: toastId });
                 setIsDirty(false); // Reset dirty flag after successful save
                 
-                if (refreshData) refreshData();
+                if (triggerRefresh) triggerRefresh();
                 
                 // Redirect to profile
                 const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : response.employee_id || formData.employee_id;
