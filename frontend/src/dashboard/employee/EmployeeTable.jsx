@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ChevronRight, Search, Filter, SquarePen, Trash2, ArrowUpDown, Check, Undo2, Download, TrendingUp } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import EmployeeStatusTag, { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
@@ -198,9 +199,10 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
         try {
             await deleteEmployee(deleteTarget.employee_id, permanent);
             if (onEmployeeDelete) onEmployeeDelete(deleteTarget.employee_id);
+            toast.success(permanent ? 'Employee record permanently deleted' : 'Employee record archived');
         } catch (err) {
             console.error('Delete failed', err);
-            alert('Failed to delete employee.');
+            toast.error('Failed to delete employee.');
         } finally {
             setIsDeleting(false);
             setDeleteTarget(null);
@@ -435,11 +437,12 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                         onClick={async (event) => {
                                                             event.stopPropagation();
                                                             try {
-                                                                 await restoreEmployee(emp.employee_id);
-                                                                if (onRestore) onRestore();
-                                                            } catch (err) {
-                                                                alert('Failed to restore employee');
-                                                            }
+                                                                await restoreEmployee(emp.employee_id);
+                                                            if (onRestore) onRestore();
+                                                            toast.success('Employee record restored');
+                                                        } catch (err) {
+                                                            toast.error('Failed to restore employee');
+                                                        }
                                                         }}
                                                         className="inline-flex items-center gap-1 rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-100"
                                                     >
