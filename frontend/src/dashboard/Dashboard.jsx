@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar, Legend
 } from 'recharts';
+import { toast } from 'react-hot-toast';
 
 import {
   fetchDashboardData,
@@ -168,7 +169,11 @@ function Dashboard() {
     try {
       const updated = await toggleTodo(id);
       setActionableTodos(prev => prev.map(t => t.id === id ? { ...t, status: updated.status } : t));
-    } catch (e) { console.error(e); }
+      toast.success(updated.status === 'completed' ? 'Task completed' : 'Task reopened');
+    } catch (e) { 
+      console.error(e);
+      toast.error('Failed to update task');
+    }
   };
 
   const promptDeleteTodo = (todo) => {
@@ -181,9 +186,10 @@ function Dashboard() {
     try {
       await clearTodo(todoToDelete.id);
       setActionableTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
+      toast.success('Task deleted successfully');
     } catch (e) {
       console.error(e);
-      alert("Failed to delete task.");
+      toast.error("Failed to delete task.");
     } finally {
       setIsDeletingTodo(false);
       setTodoToDelete(null);
@@ -200,12 +206,17 @@ function Dashboard() {
         const updated = await updateTodo(realId, { message: msg, type: 'info' });
         setActionableTodos(prev => prev.map(todo => todo.id === editingTodoId ? { ...todo, ...updated } : todo));
         setEditingTodoId(null);
+        toast.success('Task updated');
       } else {
         const created = await addTodo(msg, 'info');
         setActionableTodos(prev => [created, ...prev]);
+        toast.success('Task added successfully');
       }
       setNewTodoText('');
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      toast.error('Failed to save task');
+    }
     finally { setTodoLoading(false); }
   };
 
@@ -268,9 +279,10 @@ function Dashboard() {
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
       if (res.todos) setActionableTodos(res.todos);
+      toast.success('Project created successfully');
     } catch (e) {
       console.error("Failed to add project", e);
-      alert("Failed to create project");
+      toast.error("Failed to create project");
     }
   };
 
@@ -283,9 +295,10 @@ function Dashboard() {
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
       if (res.todos) setActionableTodos(res.todos);
+      toast.success('Client created successfully');
     } catch (e) {
       console.error("Failed to add client", e);
-      alert("Failed to create client");
+      toast.error("Failed to create client");
     }
   };
 

@@ -67,13 +67,13 @@ export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
                 totalEmployees: info?.totalEmployees?.value ?? 0,
                 allocated: f?.allocations ?? 0
             })),
-            highAllocationProjects: highAlloc.map((p, idx) => ({
-                id: idx,
-                name: p?.project_name || "Unknown",
+            highAllocationProjects: highAlloc.map((p) => ({
+                id: p?.id,
+                name: p?.name || "Unknown",
                 resource_count: p?.resource_count ?? 0,
             })),
             topPerformers: performers.map((p) => ({
-                id: p?.employee_id,
+                id: p?.id,
                 name: p?.name || "Unknown",
                 role: p?.role || "Employee",
                 allocation: p?.allocation ?? 0,

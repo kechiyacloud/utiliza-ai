@@ -371,14 +371,16 @@ def get_dashboard_all(
         try:
             # High Allocation
             cur.execute(f"""
-                SELECT p.project_name, COUNT(pa.employee_id) AS resource_count, p.project_id
+                SELECT p.project_name, COUNT(DISTINCT pa.employee_id) AS resource_count, p.project_id
                 FROM projects p
                 JOIN projects_allocation pa ON p.project_id = pa.project_id
                 JOIN employee_master e ON pa.employee_id = e.employee_id
-                WHERE (
-                    pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(p.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
-                )
+                WHERE pa.allocation_start_date <= CURRENT_DATE
+                  AND (
+                      pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(p.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
+                  )
                   AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                  AND pa.allocation_percentage > 0
                   {e_filter}
                 GROUP BY p.project_name, p.project_id ORDER BY resource_count DESC LIMIT 5
             """, dept_params)
@@ -398,6 +400,7 @@ def get_dashboard_all(
                           
                       )
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                      AND pa.allocation_percentage > 0
                     GROUP BY pa.employee_id
                 )
                 SELECT e.employee_id, e.employee_name, e.role_designation, COALESCE(aa.total_alloc, 0)

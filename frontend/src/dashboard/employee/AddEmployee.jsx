@@ -544,13 +544,18 @@ const AddEmployee = () => {
             return;
         }
 
+        if (!currentProject.project_role?.trim()) {
+            toast.error('Please specify the employee\'s role in the project.');
+            return;
+        }
+
         if (!currentProject.project_start_date) {
             toast.error('Please specify a project start date.');
             return;
         }
 
 
-        if (currentProject.project_id && currentProject.project_allocation > 0 && currentProject.project_start_date) {
+        if (currentProject.project_id && currentProject.project_allocation > 0 && currentProject.project_start_date && currentProject.project_role?.trim()) {
             if (editingProjectIndex !== null) {
                 // Update existing project
                 setFormData(prev => {
@@ -559,12 +564,14 @@ const AddEmployee = () => {
                     return { ...prev, projects: updated };
                 });
                 setEditingProjectIndex(null);
+                toast.success('Project assignment updated');
             } else {
                 // Add new project
                 setFormData(prev => ({
                     ...prev,
                     projects: [...prev.projects, { ...currentProject }]
                 }));
+                toast.success('Project assigned successfully');
             }
             
             // Reset form
@@ -614,6 +621,7 @@ const AddEmployee = () => {
             ...prev,
             projects: prev.projects.filter((_, i) => i !== index)
         }));
+        toast.success('Project assignment removed');
     };
 
     // Validation functions for each section
@@ -665,6 +673,8 @@ const AddEmployee = () => {
         else if (formData.role_designation.length > 100) newErrors.role_designation = 'Designation too long';
 
         if (!formData.department) newErrors.department = 'Department is required';
+        if (!formData.reporting_manager_id) newErrors.reporting_manager_id = 'Reporting Manager is required';
+        if (!formData.employment_type) newErrors.employment_type = 'Employment Type is required';
         if (!formData.location) newErrors.location = 'Location is required';
         if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
         if (!formData.employee_status) newErrors.employee_status = 'Status is required';
@@ -1158,7 +1168,7 @@ const AddEmployee = () => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Status <span className="text-black ml-1">*</span></label>
                     <select
                         name="employee_status"
                         value={formData.employee_status}
@@ -1514,7 +1524,7 @@ const AddEmployee = () => {
                         <button
                             type="button"
                             onClick={addProject}
-                            disabled={!currentProject.project_id || currentProject.project_allocation <= 0}
+                            disabled={!currentProject.project_id || currentProject.project_allocation <= 0 || !currentProject.project_role?.trim() || !currentProject.project_start_date}
                             className={`px-4 py-2 text-white rounded text-sm font-medium transition-colors ${editingProjectIndex !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-gray-300 disabled:cursor-not-allowed`}
                         >
                             {editingProjectIndex !== null ? 'Update Assignment' : '+ Add Project'}
@@ -1771,7 +1781,16 @@ const AddEmployee = () => {
             {/* Action Buttons */}
             <div className="flex justify-between items-center pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
-                    onClick={() => navigate(-1)}
+                    onClick={() => {
+                        if (isDirty) {
+                            if (window.confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+                                toast.error('Changes discarded');
+                                navigate(-1);
+                            }
+                        } else {
+                            navigate(-1);
+                        }
+                    }}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                 >
                     Cancel
@@ -1812,6 +1831,8 @@ const AddEmployee = () => {
                                         setShowPreview(true);
                                     }
                                     setCurrentSection(nextSectionId);
+                                } else {
+                                    toast.error('Please fill all mandatory fields to proceed');
                                 }
                             }}
                             className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors bg-blue-600 hover:bg-blue-700`}
