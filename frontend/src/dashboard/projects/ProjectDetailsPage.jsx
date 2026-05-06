@@ -10,7 +10,9 @@ import cdBlueLogo from '../../assets/CD-Blue.svg';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import EditProjectPanel from './EditProjectPanel';
+import { usePermissions } from '../../hooks/usePermissions';
 import SearchableDropdown from '../../components/SearchableDropdown';
+
 
 const toMessage = (val, fallback = 'Something went wrong') => {
     if (!val && val !== 0) return fallback;
