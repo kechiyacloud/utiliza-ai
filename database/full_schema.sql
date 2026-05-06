@@ -463,6 +463,11 @@ CREATE TABLE public.employee_master_pro (
     notice_end_date date
 );
 
+COMMENT ON COLUMN public.employee_master_pro.pip_start_date IS 'Start date of Performance Improvement Plan';
+COMMENT ON COLUMN public.employee_master_pro.pip_end_date IS 'Expected end date of Performance Improvement Plan';
+COMMENT ON COLUMN public.employee_master_pro.notice_start_date IS 'Start date of employee notice period';
+COMMENT ON COLUMN public.employee_master_pro.notice_end_date IS 'End date of employee notice period';
+
 ALTER TABLE public.employee_master_pro OWNER TO postgres;
 
 
@@ -487,10 +492,13 @@ CREATE TABLE public.feedback_tickets (
     type character varying(50) NOT NULL,
     priority character varying(20) NOT NULL,
     status character varying(30) DEFAULT 'open'::character varying NOT NULL,
+    assigned_to character varying(255) DEFAULT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT feedback_tickets_priority_check CHECK (((priority)::text = ANY (ARRAY[('Low'::character varying)::text, ('Medium'::character varying)::text, ('High'::character varying)::text]))),
     CONSTRAINT feedback_tickets_type_check CHECK (((type)::text = ANY (ARRAY[('Bug'::character varying)::text, ('Feature Request'::character varying)::text, ('General'::character varying)::text])))
 );
+
+COMMENT ON COLUMN public.feedback_tickets.assigned_to IS 'Teammate name who claimed this ticket via the MCP agent';
 
 ALTER TABLE public.feedback_tickets OWNER TO postgres;
 
@@ -602,6 +610,8 @@ CREATE TABLE public.users (
     password_changed_at timestamp without time zone,
     department_id character varying(20),
     designation_id character varying(20),
+    role_id integer NOT NULL,
+    sub_role_id integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -624,6 +634,120 @@ CREATE TABLE public.weekly_allocations (
 );
 
 ALTER TABLE public.weekly_allocations OWNER TO postgres;
+
+
+--
+-- Name: roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.roles (
+    role_id integer NOT NULL,
+    role_name character varying(50) NOT NULL,
+    role_label character varying(100) NOT NULL,
+    description text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.roles OWNER TO postgres;
+
+--
+-- Name: roles_role_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.roles_role_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.roles_role_id_seq OWNER TO postgres;
+
+ALTER SEQUENCE public.roles_role_id_seq OWNED BY public.roles.role_id;
+
+ALTER TABLE ONLY public.roles ALTER COLUMN role_id SET DEFAULT nextval('public.roles_role_id_seq'::regclass);
+
+
+--
+-- Name: permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.permissions (
+    permission_id integer NOT NULL,
+    resource_name character varying(100) NOT NULL,
+    action character varying(50) NOT NULL,
+    description text
+);
+
+ALTER TABLE public.permissions OWNER TO postgres;
+
+--
+-- Name: permissions_permission_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.permissions_permission_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.permissions_permission_id_seq OWNER TO postgres;
+
+ALTER SEQUENCE public.permissions_permission_id_seq OWNED BY public.permissions.permission_id;
+
+ALTER TABLE ONLY public.permissions ALTER COLUMN permission_id SET DEFAULT nextval('public.permissions_permission_id_seq'::regclass);
+
+
+--
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.role_permissions (
+    role_id integer NOT NULL,
+    permission_id integer NOT NULL
+);
+
+ALTER TABLE public.role_permissions OWNER TO postgres;
+
+
+--
+-- Name: sub_roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.sub_roles (
+    sub_role_id integer NOT NULL,
+    name character varying(100) NOT NULL,
+    label character varying(150) NOT NULL,
+    description text,
+    base_role character varying(50) NOT NULL,
+    page_access text[] DEFAULT '{}'::text[] NOT NULL,
+    field_restrictions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.sub_roles OWNER TO postgres;
+
+--
+-- Name: sub_roles_sub_role_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.sub_roles_sub_role_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.sub_roles_sub_role_id_seq OWNER TO postgres;
+
+ALTER SEQUENCE public.sub_roles_sub_role_id_seq OWNED BY public.sub_roles.sub_role_id;
+
+ALTER TABLE ONLY public.sub_roles ALTER COLUMN sub_role_id SET DEFAULT nextval('public.sub_roles_sub_role_id_seq'::regclass);
 
 
 -- ============================================================
@@ -704,6 +828,28 @@ ALTER TABLE ONLY public.weekly_allocations
 
 ALTER TABLE ONLY public.weekly_allocations
     ADD CONSTRAINT weekly_allocations_pkey PRIMARY KEY (id);
+
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (role_id);
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_role_name_key UNIQUE (role_name);
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (permission_id);
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_resource_name_action_key UNIQUE (resource_name, action);
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_pkey PRIMARY KEY (role_id, permission_id);
+
+ALTER TABLE ONLY public.sub_roles
+    ADD CONSTRAINT sub_roles_name_key UNIQUE (name);
+
+ALTER TABLE ONLY public.sub_roles
+    ADD CONSTRAINT sub_roles_pkey PRIMARY KEY (sub_role_id);
 
 
 -- ============================================================
@@ -790,6 +936,9 @@ CREATE TRIGGER trg_updated_at_users BEFORE UPDATE ON public.users FOR EACH ROW E
 CREATE TRIGGER trg_validate_iso_week BEFORE INSERT OR UPDATE ON public.weekly_allocations FOR EACH ROW EXECUTE FUNCTION public.fn_validate_iso_week();
 
 
+CREATE TRIGGER trg_updated_at_sub_roles BEFORE UPDATE ON public.sub_roles FOR EACH ROW EXECUTE FUNCTION public.fn_set_updated_at();
+
+
 -- ============================================================
 -- FOREIGN KEY CONSTRAINTS
 -- ============================================================
@@ -853,3 +1002,19 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.weekly_allocations
     ADD CONSTRAINT weekly_allocations_allocation_id_fkey FOREIGN KEY (allocation_id) REFERENCES public.projects_allocation(allocation_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES public.permissions(permission_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.sub_roles
+    ADD CONSTRAINT sub_roles_base_role_fkey FOREIGN KEY (base_role) REFERENCES public.roles(role_name) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id);
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_sub_role_id_fkey FOREIGN KEY (sub_role_id) REFERENCES public.sub_roles(sub_role_id) ON DELETE SET NULL;
