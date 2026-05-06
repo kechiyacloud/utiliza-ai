@@ -211,14 +211,9 @@ def register_user(data: RegisterRequest):
         if cur.fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists.")
 
-        # Get default role_id for 'viewer'
-        cur.execute("SELECT role_id FROM roles WHERE role_name = 'viewer'")
-        role_row = cur.fetchone()
-        default_role_id = role_row[0] if role_row else None
-
         cur.execute(
-            "INSERT INTO users (email, password_hash, role_id) VALUES (%s, %s, %s)",
-            (email, password_hash, default_role_id)
+            "INSERT INTO users (email, password_hash) VALUES (%s, %s)",
+            (email, password_hash)
         )
         cur.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
         conn.commit()
@@ -244,7 +239,7 @@ class LoginRequest(BaseModel):
 
 @router.post("/login")
 def login_user(data: LoginRequest, response: Response):
-    email = data.email.lower().strip()
+    email = data.email
     password = data.password
 
     print("Login request received:", email)
