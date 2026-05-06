@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check, X, Search, Building2 } from 'lucide-react';
 
-const MultiSelectDropdown = ({ 
-  options = [], 
-  selectedValues = [], 
-  onChange, 
+const MultiSelectDropdown = ({
+  options = [],
+  selectedValues = [],
+  onChange,
   placeholder = "Select Departments",
   label = "Departments",
   icon: Icon = Building2,
@@ -24,23 +24,37 @@ const MultiSelectDropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const [tempSelected, setTempSelected] = useState(selectedValues);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTempSelected(selectedValues);
+    }
+  }, [isOpen, selectedValues]);
+
   const toggleOption = (option) => {
-    if (selectedValues.includes(option)) {
-      onChange(selectedValues.filter(v => v !== option));
+    if (tempSelected.includes(option)) {
+      setTempSelected(tempSelected.filter(v => v !== option));
     } else {
-      onChange([...selectedValues, option]);
+      setTempSelected([...tempSelected, option]);
     }
   };
 
   const selectAll = () => {
-    if (selectedValues.length === options.length) {
-      onChange([]);
+    if (tempSelected.length === options.length) {
+      setTempSelected([]);
     } else {
-      onChange([...options]);
+      setTempSelected([...options]);
     }
   };
 
+  const applyChanges = () => {
+    onChange(tempSelected);
+    setIsOpen(false);
+  };
+
   const filteredOptions = options.filter(opt => 
+
     opt.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -74,7 +88,7 @@ const MultiSelectDropdown = ({
       </div>
 
       {isOpen && (
-        <div 
+        <div
           className="origin-top-right absolute right-0 mt-2 w-72 rounded-2xl shadow-2xl bg-white border border-slate-100 ring-1 ring-black ring-opacity-5 focus:outline-none z-[100] animate-in fade-in zoom-in-95 duration-100"
           role="menu"
           aria-orientation="vertical"
@@ -100,11 +114,11 @@ const MultiSelectDropdown = ({
               onClick={selectAll}
               className="group flex items-center justify-between w-full px-4 py-2 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors mb-1"
             >
-              <span>{selectedValues.length === options.length ? "Deselect All" : "Select All"}</span>
-              {selectedValues.length === options.length && <Check size={14} className="text-blue-600" />}
+              <span>All Department</span>
+              {tempSelected.length === options.length && <Check size={14} className="text-blue-600" />}
             </button>
             <div className="h-px bg-slate-50 mx-2 mb-1"></div>
-            
+
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-3 text-xs text-slate-400 text-center italic">No departments found</div>
             ) : (
@@ -115,14 +129,14 @@ const MultiSelectDropdown = ({
                   className="group flex items-center justify-between w-full px-4 py-2.5 text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-all"
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
-                    <span className={`${selectedValues.includes(option) ? 'font-bold text-slate-900 text-sm' : ''} truncate`}>
+                    <span className={`${tempSelected.includes(option) ? 'font-bold text-slate-900 text-sm' : ''} truncate`}>
                       {option}
                     </span>
                     {counts && counts[option] !== undefined && (
                       <span className="text-[10px] font-bold text-slate-400">({counts[option]})</span>
                     )}
                   </div>
-                  {selectedValues.includes(option) && (
+                  {tempSelected.includes(option) && (
                     <div className="bg-blue-600 rounded-full p-0.5 animate-in zoom-in duration-200">
                       <Check size={10} className="text-white" />
                     </div>
@@ -132,19 +146,39 @@ const MultiSelectDropdown = ({
             )}
           </div>
 
-          {selectedValues.length > 0 && selectedValues.length < options.length && (
-            <div className="p-2 border-t border-slate-50 flex justify-between items-center bg-slate-50/50 rounded-b-2xl">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-2">
-                {selectedValues.length} Selected
+          <div className="p-3 border-t border-slate-50 bg-slate-50/50 rounded-b-2xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {tempSelected.length} Selected
               </span>
-              <button 
-                onClick={() => onChange([])}
-                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider mr-2 px-2 py-1 hover:bg-blue-50 rounded-md transition-colors"
-              >
-                Clear
-              </button>
+              {tempSelected.length > 0 && (
+                <button 
+                  onClick={() => setTempSelected([])}
+                  className="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase transition-colors"
+                >
+                  Clear
+                </button>
+              )}
             </div>
-          )}
+            
+            {tempSelected.length > 0 && (
+              <button
+                onClick={applyChanges}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all shadow-md shadow-blue-100"
+              >
+                Apply Filter
+              </button>
+            )}
+            
+            {tempSelected.length === 0 && selectedValues.length > 0 && (
+              <button
+                onClick={applyChanges}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-600 px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
+              >
+                Apply All
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

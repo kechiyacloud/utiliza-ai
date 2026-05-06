@@ -18,7 +18,9 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import { clearDashboardCache } from '../../api/dashboardApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
+import { usePermissions } from '../../hooks/usePermissions'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
+import { decodeId } from '../../utils/idEncoder'
 
 const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -41,33 +43,11 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 
                 {/* Right Side: Allocation Pill */}
                 <div className="flex items-center gap-2">
-                        {project.value === 0 ? "No project allocation" : `${project.value}%`}
                     <ChevronRight
                         size={14}
                         className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
                     />
                 </div>
-            </div>
-
-            {/* Static Tag Placement */}
-            <div className="ml-[22px] flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                    <EmployeeStatusTag status={rawProject.status} size="sm" />
-                    {rawProject.billable && (
-                        <span
-                            className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}
-                        >
-                            {String(rawProject.billable).toLowerCase() === 'yes' || String(rawProject.billable).toLowerCase() === 'billable' ? 'Billable' : 'Non-Billable'}
-                        </span>
-                    )}
-                </div>
-                {rawProject.project_manager && (
-                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                        <Users size={10} className="text-slate-400 flex-shrink-0" />
-                        <span className="font-semibold text-slate-600">{rawProject.project_manager}</span>
-                        <span className="text-slate-400">· PM</span>
-                    </div>
-                )}
             </div>
 
             {/* Expanded Content Area */}
@@ -76,7 +56,12 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            navigate('/info/projects', { state: { search: project.name } });
+                            const pid = rawProject?.project_id || rawProject?.id;
+                            if (pid) {
+                                navigate(`/info/projects/${pid}`);
+                            } else {
+                                navigate('/info/projects', { state: { search: project.name } });
+                            }
                         }}
                         className="w-full text-center bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-100 py-1.5 rounded-lg text-[11px] font-bold text-blue-700 transition-colors shadow-sm flex justify-center items-center gap-1.5 group"
                     >
@@ -95,6 +80,7 @@ const EmployeeDetails = () => {
     const location = useLocation();
     const { id } = useParams();
     const { triggerRefresh } = useDataRefresh();
+    const { isFieldHidden } = usePermissions();
     // State
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -127,9 +113,10 @@ const EmployeeDetails = () => {
     useEffect(() => {
         const fetchEmployeeDetails = async () => {
             if (!id) return;
+            const decodedId = decodeId(id);
 
             try {
-                const res = await getEmployeeById(id);
+                const res = await getEmployeeById(decodedId);
                 // Extract inner data if nested
                 const sourceData = res.data || res;
 
@@ -163,6 +150,20 @@ const EmployeeDetails = () => {
                     value: p.allocation_percentage || p.project_allocation || p.value || 0
                 }));
 
+                // Calculate dynamic status based on actual allocation, respecting manual overrides
+                const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
+                const currentStatus = sourceData.employee_status || (sourceData.status && sourceData.status.allocated) || 'Bench';
+                const isManual = MANUAL_STATUSES.some(s => currentStatus.toLowerCase().includes(s));
+                const totalAllocation = enhancedProjects.reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0);
+                
+                let displayStatus = currentStatus;
+                if (!isManual) {
+                    if (totalAllocation >= 81) displayStatus = 'Allocated';
+                    else if (totalAllocation >= 41) displayStatus = 'Partially allocated';
+                    else if (totalAllocation >= 1) displayStatus = 'Partially bench';
+                    else displayStatus = 'Bench';
+                }
+
                 // Map backend keys to what the JSX components previously expected
                 setUserData({
                     ...sourceData,
@@ -180,7 +181,7 @@ const EmployeeDetails = () => {
                     cdExperience: sourceData.experience_in_cd !== undefined ? sourceData.experience_in_cd : (sourceData.cd_experience !== undefined ? sourceData.cd_experience : sourceData.cdExperience),
                     shiftTiming: sourceData.shift || sourceData.shiftTiming,
                     status: {
-                        allocated: sourceData.employee_status,
+                        allocated: displayStatus,
                         workMode: sourceData.work_mode || sourceData.mode_of_work,
                         location: sourceData.location || (sourceData.status && sourceData.status.location)
                     },
@@ -344,15 +345,38 @@ const EmployeeDetails = () => {
         return {
             name: p.project_name || p.name,
             value: p.allocation_percentage || p.project_allocation || p.value || 0,
+            status: p.status || 'Allocated',
             color: COLORS[index % COLORS.length],
             startWeek,
             durationWeeks,
             isVisibleInTimeline,
             isCurrent,
-            isFuture
+            isFuture,
+            project_id: p.project_id || p.id
         };
     });
 
+    const CustomPieTooltip = ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-100 flex flex-col gap-2 z-50 min-w-[150px]">
+                    <p className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-1">{data.name}</p>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Allocation</span>
+                            <span className="text-sm font-bold text-blue-600">{data.value}%</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
+                            <EmployeeStatusTag status={data.status} size="sm" />
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
@@ -442,10 +466,12 @@ const EmployeeDetails = () => {
                                 <span>{userData.email}</span>
                             </a>
                         </div>
+                        {!isFieldHidden('employees', 'phone') && !isFieldHidden('employees', 'phone_number') && (
                         <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                             <Phone size={16} />
                             <span>{userData.phone}</span>
                         </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -566,14 +592,22 @@ const EmployeeDetails = () => {
                     <div className="h-40 w-full relative" style={{ minHeight: '160px' }}>
                         <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
+                                <Tooltip 
+                                    content={<CustomPieTooltip />} 
+                                    cursor={false} 
+                                    position={{ x: 190, y: 100 }}
+                                    allowEscapeViewBox={{ x: true, y: true }}
+                                    wrapperStyle={{ zIndex: 100 }} 
+                                />
                                 <Pie
                                     data={chartData.filter(item => item.isCurrent)}
                                     cx="50%"
                                     cy="50%"
-                                    innerRadius={45}
-                                    outerRadius={60}
-                                    paddingAngle={5}
+                                    innerRadius={55}
+                                    outerRadius={70}
+                                    paddingAngle={0}
                                     dataKey="value"
+                                    stroke="none"
                                 >
                                     {chartData.filter(item => item.isCurrent).map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -583,70 +617,15 @@ const EmployeeDetails = () => {
                             </PieChart>
                         </ResponsiveContainer>
                         {/* Center Text */}
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center">
-                                {(() => {
-                                    const total = chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
-                                    return total === 0 ? "No project allocation" : `${total}%`;
-                                })()}
+                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[50%] text-center text-slate-800 font-bold text-lg">
+                            {(() => {
+                                const total = chartData.filter(item => item.isCurrent).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+                                return total === 0 ? "0%" : `${total}%`;
+                            })()}
                         </div>
                     </div>
 
-                    {/* Project Skills Detail */}
-                    <div className="flex flex-col gap-2 overflow-y-auto flex-1 max-h-[140px] pr-2 custom-scrollbar py-1">
-                        {chartData.filter(p => p.isCurrent).map((project, idx) => (
-                            <ProjectAllocationDropdown
-                                key={idx}
-                                project={project}
-                                rawProject={projects[idx]}
-                                navigate={navigate}
-                            />
-                        ))}
-                        
-                        {/* Upcoming Projects (Future) */}
-                        {chartData.some(p => p.isFuture) && (
-                            <div className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">
-                                Upcoming Assignments
-                            </div>
-                        )}
-                        {chartData.filter(p => p.isFuture).map((project, idx) => (
-                            <div key={`future-${idx}`} className="opacity-60 grayscale-[0.5]">
-                                <ProjectAllocationDropdown
-                                    project={project}
-                                    rawProject={projects[chartData.indexOf(project)]}
-                                    navigate={navigate}
-                                />
-                            </div>
-                        ))}
-                        
-                        {/* Completed Projects Dropdown Toggle */}
-                        {completedProjectsList.length > 0 && (
-                            <div className="mt-2 text-sm">
-                                <details className="group border border-slate-200 rounded-lg bg-slate-50 cursor-pointer overflow-hidden transition-all shadow-sm">
-                                    <summary className="flex items-center justify-between font-semibold text-slate-600 p-3 hover:bg-slate-100 transition-colors list-none">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            Completed Projects ({completedProjectsList.length})
-                                        </div>
-                                        <span className="transition group-open:rotate-180">
-                                            <ChevronRight size={16} />
-                                        </span>
-                                    </summary>
-                                    <div className="p-3 bg-white border-t border-slate-100 flex flex-col gap-2 max-h-[120px] overflow-y-auto custom-scrollbar">
-                                        {completedProjectsList.map((cp, idx) => (
-                                            <ProjectAllocationDropdown
-                                                key={`comp-${idx}`}
-                                                project={{ name: cp.name, value: cp.value, color: '#94a3b8' }}
-                                                rawProject={cp}
-                                                navigate={navigate}
-                                            />
-                                        ))}
-                                    </div>
-                                </details>
-                            </div>
-                        )}
-                    </div>
+
                 </div>
 
 
@@ -830,7 +809,19 @@ const EmployeeDetails = () => {
                             <div className="w-[180px] shrink-0 bg-white sticky left-0 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                 <div className="py-4 space-y-3">
                                     {chartData.filter(p => p.isVisibleInTimeline).length > 0 ? chartData.filter(p => p.isVisibleInTimeline).map((project, idx) => (
-                                        <div key={idx} className="h-10 pr-4 flex flex-col justify-center text-right hover:bg-slate-50 pl-3 border-r-2 border-transparent hover:border-blue-400 transition-colors group cursor-default">
+                                        <div 
+                                            key={idx} 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const pid = project.project_id || projects[idx]?.project_id || projects[idx]?.id;
+                                                if (pid) {
+                                                    navigate(`/info/projects/${pid}`);
+                                                } else {
+                                                    navigate('/info/projects', { state: { search: project.name } });
+                                                }
+                                            }}
+                                            className="h-10 pr-4 flex flex-col justify-center text-right hover:bg-slate-50 pl-3 border-r-2 border-transparent hover:border-blue-400 transition-colors group cursor-pointer"
+                                        >
                                             <span className="text-[13px] font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors" title={project.name}>{project.name}</span>
                                             <span className="text-[10px] text-slate-500 font-semibold capitalize tracking-wide">{projects[idx]?.status || 'Allocated'}</span>
                                         </div>
@@ -859,6 +850,15 @@ const EmployeeDetails = () => {
                                         <div key={idx} className="grid grid-cols-12 gap-0 items-center h-10 hover:bg-slate-100/50 transition-colors group">
                                             {/* Bar Container */}
                                             <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const pid = project.project_id || projects[idx]?.project_id || projects[idx]?.id;
+                                                    if (pid) {
+                                                        navigate(`/info/projects/${pid}`);
+                                                    } else {
+                                                        navigate('/info/projects', { state: { search: project.name } });
+                                                    }
+                                                }}
                                                 className="col-span-1 relative h-[26px] rounded-md flex items-center shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-gradient-to-r overflow-hidden ml-1"
                                                 style={{
                                                     backgroundColor: project.color,
@@ -876,7 +876,7 @@ const EmployeeDetails = () => {
 
                                                 {/* Inside Label */}
                                                 <span className="ml-3 text-[11px] text-white font-bold px-2 truncate drop-shadow-sm relative z-10 flex items-center leading-none">
-                                                    <span>{project.value === 0 ? "No project allocation" : `${project.value}%`}</span>
+                                                    <span>{project.value === 0 ? "No Allocation" : `${project.value}%`}</span>
                                                 </span>
                                             </div>
                                         </div>

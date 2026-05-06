@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.database import get_db_connection, release_db_connection
+from app.rbac_utils import require_min_role
 from pydantic import BaseModel
 from typing import Optional
 import psycopg2
 
-router = APIRouter(prefix="/clients", tags=["Clients"])
+router = APIRouter(prefix="/clients", tags=["Clients"], dependencies=[Depends(require_min_role("restricted_viewer"))])
 api_router = APIRouter(prefix="/api", tags=["Clients"])
 
 class ClientCreate(BaseModel):
@@ -223,7 +224,7 @@ def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None)
         cur.close()
         release_db_connection(conn)
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_min_role("editor"))])
 def create_client(client: ClientCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -264,7 +265,7 @@ def create_client(client: ClientCreate):
         release_db_connection(conn)
 
 
-@router.put("/{client_id}")
+@router.put("/{client_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_client(client_id: str, client: ClientUpdate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -313,7 +314,7 @@ def update_client(client_id: str, client: ClientUpdate):
         release_db_connection(conn)
 
 
-@router.delete("/{client_id}")
+@router.delete("/{client_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_client(client_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -380,7 +381,7 @@ def list_simple_clients():
         release_db_connection(conn)
 
 
-@router.post("/simple")
+@router.post("/simple", dependencies=[Depends(require_min_role("editor"))])
 def create_simple_client(payload: EntityNameCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -416,7 +417,7 @@ def create_simple_client(payload: EntityNameCreate):
         release_db_connection(conn)
 
 
-@router.put("/simple/{client_id}")
+@router.put("/simple/{client_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_simple_client(client_id: str, payload: EntityNameCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -453,7 +454,7 @@ def update_simple_client(client_id: str, payload: EntityNameCreate):
         release_db_connection(conn)
 
 
-@router.delete("/simple/{client_id}")
+@router.delete("/simple/{client_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_simple_client(client_id: str):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -502,7 +503,7 @@ def list_partners():
         release_db_connection(conn)
 
 
-@router.post("/partners")
+@router.post("/partners", dependencies=[Depends(require_min_role("editor"))])
 def create_partner(payload: EntityNameCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -528,7 +529,7 @@ def create_partner(payload: EntityNameCreate):
         release_db_connection(conn)
 
 
-@router.put("/partners/{partner_id}")
+@router.put("/partners/{partner_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_partner(partner_id: str, payload: EntityNameCreate):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -556,7 +557,7 @@ def update_partner(partner_id: str, payload: EntityNameCreate):
         release_db_connection(conn)
 
 
-@router.delete("/partners/{partner_id}")
+@router.delete("/partners/{partner_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_partner(partner_id: str):
     conn = get_db_connection()
     cur = conn.cursor()

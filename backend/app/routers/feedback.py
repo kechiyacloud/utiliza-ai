@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db_connection, release_db_connection
+from app.rbac_utils import require_min_role
 import os
 import smtplib
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 
 class FeedbackRequest(BaseModel):

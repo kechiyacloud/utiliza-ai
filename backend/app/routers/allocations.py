@@ -1,16 +1,17 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from typing import Optional, List, Dict
 from datetime import datetime, date
 import calendar
 import textwrap
 from pydantic import BaseModel
 from app.database import get_db_connection, release_db_connection, db_cursor
+from app.rbac_utils import require_min_role
 from app.routers.allocation_utils import (
     TeamMemberCreate, _save_single_resource, _resolve_employee_id,
     _fetch_existing_weekly_load, _available_capacity_pct, _normalize_text
 )
 
-router = APIRouter(prefix="/allocations", tags=["Allocations"])
+router = APIRouter(prefix="/allocations", tags=["Allocations"], dependencies=[Depends(require_min_role("restricted_viewer"))])
 
 class ImportAllocationsRequest(BaseModel):
     records: List[Dict]
@@ -96,7 +97,7 @@ def allocation_metrics(
                   AND (
                       pa.allocation_end_date IS NULL 
                       OR pa.allocation_end_date >= CURRENT_DATE
-                      OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                      OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live')
                   )
                   AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                 GROUP BY pa.employee_id
@@ -123,10 +124,8 @@ def allocation_metrics(
                                     THEN eb.employee_id END)                                            AS bench_strength,
                 COUNT(DISTINCT CASE WHEN es.is_notice = 1 THEN eb.employee_id END)                      AS notice_count,
                 ROUND(
-                    (
-                        COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) +
-                        COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END)
-                    ) * 100.0 / NULLIF(COUNT(DISTINCT eb.employee_id), 0),
+                    COALESCE(SUM(CASE WHEN es.is_notice = 0 THEN aa.total_pct ELSE 0 END), 0) / 
+                    NULLIF(COUNT(DISTINCT eb.employee_id), 0),
                 1)                                                                                      AS avg_utilization,
                 COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) > 100
                                     THEN eb.employee_id END)                                            AS overallocated
@@ -646,7 +645,7 @@ def get_possible_projects(employee_id: str):
         cur.close()
         release_db_connection(conn)
 
-@router.post("/import")
+@router.post("/import", dependencies=[Depends(require_min_role("editor"))])
 def import_allocations(payload: ImportAllocationsRequest = Body(...)):
     """
     Handles bulk/monthly allocation imports.

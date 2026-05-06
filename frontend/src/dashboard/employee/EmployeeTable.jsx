@@ -25,8 +25,8 @@ const AllocationBar = ({ percentage, status }) => {
     return (
         <div className="w-full max-w-[110px]">
             <div className="flex justify-end mb-1">
-                <span className="text-[10px] font-bold text-gray-600">
-                    {percentage === 0 ? 'No project allocation' : `${percentage}%`}
+                <span className="text-[10px] font-semibold text-gray-600">
+                    {percentage === 0 ? 'No Allocation' : `${percentage}%`}
                 </span>
             </div>
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
@@ -53,7 +53,7 @@ const BillableStatusTag = ({ billable }) => {
 };
 
 // Main EmployeeTable
-const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, onRestore, showArchived, filters, searchValue, onSearchChange, onFilterClick }) => {
+const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmployeeEdit, onEmployeeDelete, onRestore, showArchived, filters, searchValue, onSearchChange, onFilterClick, hideControls = false }) => {
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -139,6 +139,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 if (cf === 'non-billable') return !isNoticeOrPip && emp.billable === 'non-billable' && (emp.employee_allocations || 0) > 0;
                 if (cf === 'notice') return isNoticeOrPip;
                 if (cf === 'overallocated') return (emp.employee_allocations || 0) > 100;
+                if (cf === 'certifications') return (emp.cert_count || 0) > 0;
                 if (cf === 'new-joiner') {
                     const now = new Date();
                     const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
@@ -222,7 +223,8 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         {sortedEmployees.length} employees
                     </span>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
+                {!hideControls && (
+                    <div className="flex items-center gap-3 flex-wrap">
                     {/* Search */}
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -306,18 +308,25 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                         Export
                     </button>
                 </div>
+            )}
             </div>
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <table className="w-full relative">
                     <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
-                        <tr className="text-left text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        <tr className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                             <th className="px-6 py-3">Employee</th>
-                            <th className="px-6 py-3">Designation</th>
-                            <th className="px-6 py-3">Status</th>
-                            <th className="px-6 py-3">Allocation</th>
-                            <th className="px-6 py-3">Location</th>
+                            {filters?.cardFilter !== 'certifications' ? (
+                                <>
+                                    <th className="px-6 py-3">Designation</th>
+                                    <th className="px-6 py-3">Status</th>
+                                    <th className="px-6 py-3">Allocation</th>
+                                    <th className="px-6 py-3">Location</th>
+                                </>
+                            ) : (
+                                <th className="px-6 py-3">Certifications</th>
+                            )}
                             <th className="px-6 py-3 text-right">Actions</th>
                         </tr>
                     </thead>
@@ -341,32 +350,60 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                         className="w-8 h-8 rounded-full object-cover border border-gray-200"
                                                     />
                                                 ) : (
-                                                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100 uppercase">
+                                                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-semibold border border-blue-100 uppercase">
                                                         {(emp.employee_name || 'Unknown Name').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'UN'}
                                                     </div>
                                                 )}
                                                 <div className="flex flex-col justify-center">
-                                                    <span className="font-bold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
+                                                    <span className="font-semibold text-gray-800 text-sm truncate max-w-[150px]" title={emp.employee_name || 'Unknown Name'}>
                                                         {emp.employee_name || 'Unknown Name'}
                                                     </span>
                                                     <span className="text-xs text-gray-500 font-mono">{emp.employee_id || 'N/A'}</span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-2">
-                                            <div className="text-sm text-gray-700 font-medium">{emp.role_designation}</div>
-                                            <div className="text-xs text-gray-400">{emp.department}</div>
-                                        </td>
-                                        <td className="px-6 py-2">
-                                            <div className="flex flex-col gap-1">
-                                                <EmployeeStatusTag status={emp.employee_status} />
-                                                <BillableStatusTag billable={emp.billable} />
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-2">
-                                            <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
-                                        </td>
-                                        <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
+                                        
+                                        {filters?.cardFilter !== 'certifications' ? (
+                                            <>
+                                                <td className="px-6 py-2">
+                                                    <div className="text-sm text-gray-700 font-medium">{emp.role_designation}</div>
+                                                    <div className="text-xs text-gray-400">{emp.department}</div>
+                                                </td>
+                                                <td className="px-6 py-2">
+                                                    {(() => {
+                                                        const tag = getEmployeeTag(emp.employee_status);
+                                                        const isBillable = emp.billable === 'billable';
+                                                        return (
+                                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${tag.color} whitespace-nowrap shadow-sm`}>
+                                                                {tag.label}
+                                                                <span className="mx-1"></span>
+                                                                <span className={isBillable ? '' : 'opacity-70'}>
+                                                                    {isBillable ? 'Billable' : 'Non-Billable'}
+                                                                </span>
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </td>
+                                                <td className="px-6 py-2">
+                                                    <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
+                                                </td>
+                                                <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
+                                            </>
+                                        ) : (
+                                            <td className="px-6 py-2">
+                                                <div className="flex flex-wrap gap-1.5 max-w-[500px]">
+                                                    {(emp.cert_list || []).map((cert, idx) => (
+                                                        <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-100 text-[10px] font-bold uppercase tracking-tight shadow-sm">
+                                                            {cert}
+                                                        </span>
+                                                    ))}
+                                                    {(!emp.cert_list || emp.cert_list.length === 0) && (
+                                                        <span className="text-xs text-gray-400 italic font-medium">No certifications listed</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
+                                        
                                         <td className="px-6 py-2 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
@@ -375,7 +412,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                         event.stopPropagation();
                                                         onEmployeeEdit && onEmployeeEdit(emp);
                                                     }}
-                                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-600 transition-colors hover:bg-blue-100"
+                                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-blue-600 transition-colors hover:bg-blue-100"
                                                 >
                                                     <SquarePen size={13} />
                                                     Edit
@@ -387,7 +424,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                             event.stopPropagation();
                                                             setDeleteTarget(emp);
                                                         }}
-                                                        className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100"
+                                                        className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-100"
                                                     >
                                                         <Trash2 size={13} />
                                                         Delete

@@ -101,9 +101,14 @@ const ProjectsOverview = ({
                             className="pl-8 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-sm font-normal text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 hover:border-gray-300 transition-all cursor-pointer appearance-none min-w-[160px] shadow-sm"
                         >
                             <option value="">All Department</option>
-                            {departments.map((dept) => (
-                                <option key={dept.id || dept} value={dept.id || dept}>{dept.name || dept}</option>
-                            ))}
+                            {departments.map((dept, idx) => {
+                                const optValue = dept?.id ?? dept?.name ?? dept;
+                                const optLabel = dept?.name ?? dept;
+                                const optKey = dept?.id ?? dept?.name ?? idx;
+                                return (
+                                    <option key={optKey} value={optValue}>{optLabel}</option>
+                                );
+                            })}
                         </select>
                         <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
                             <ChevronDown size={14} className="text-gray-400 group-hover:text-slate-600 transition-colors" />

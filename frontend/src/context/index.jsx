@@ -3,22 +3,23 @@ import { EmployeeProvider, useEmployees as useEmployeesHook } from './EmployeeCo
 import { ClientProvider, useClients as useClientsHook } from './ClientContext';
 import { ProjectProvider, useProjects as useProjectsHook } from './ProjectContext';
 import { DataRefreshProvider, useDataRefresh as useDataRefreshHook } from './DataRefreshContext';
+import { AuthProvider } from './AuthContext';
 
-/**
- * Composite provider that wraps all data contexts
- * This provides a single entry point for all data management
- */
+export { useAuth } from './AuthContext';
+
 export const AppDataProvider = ({ children }) => {
     return (
-        <DataRefreshProvider>
-            <EmployeeProvider>
-                <ClientProvider>
-                    <ProjectProvider>
-                        {children}
-                    </ProjectProvider>
-                </ClientProvider>
-            </EmployeeProvider>
-        </DataRefreshProvider>
+        <AuthProvider>
+            <DataRefreshProvider>
+                <EmployeeProvider>
+                    <ClientProvider>
+                        <ProjectProvider>
+                            {children}
+                        </ProjectProvider>
+                    </ClientProvider>
+                </EmployeeProvider>
+            </DataRefreshProvider>
+        </AuthProvider>
     );
 };
 

@@ -24,9 +24,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except Exception:
         return False
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user_id: int, email: str, role: str = "viewer") -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "email": email, "exp": expire, "type": "access"}
+    payload = {"sub": str(user_id), "email": email, "role": role, "exp": expire, "type": "access"}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_refresh_token(user_id: int, email: str) -> str:
@@ -58,7 +58,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if user_id is None:
             print("DEBUG: Token payload missing 'sub'")
             raise credentials_exception
-        return {"user_id": user_id, "email": email}
+        role: str = payload.get("role", "viewer")
+        return {"user_id": user_id, "email": email, "role": role}
     except JWTError as e:
         print(f"DEBUG: JWT validation failed: {str(e)}")
         raise credentials_exception

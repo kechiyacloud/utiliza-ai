@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, User, Briefcase, FolderKanban, Check } from 'lucide-react';
+import { ArrowLeft, User, Briefcase, FolderKanban, Check, AlertTriangle } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+
 import PhoneInputField from '../../components/PhoneInputField';
+import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
 import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation } from '../../api/employeeApi';
@@ -72,6 +75,10 @@ const AddEmployee = () => {
     const [isAddingNewDesig, setIsAddingNewDesig] = useState(false);
     const [newDeptName, setNewDeptName] = useState('');
     const [newDesigName, setNewDesigName] = useState('');
+    const [isDirty, setIsDirty] = useState(false);
+    const [showNavigationBlocker, setShowNavigationBlocker] = useState(false);
+    const [pendingNavigate, setPendingNavigate] = useState(null);
+
 
     const SHIFT_PRESETS = [
         { label: 'General',    start: '10:00', end: '19:00' },
@@ -101,6 +108,16 @@ const AddEmployee = () => {
         const en = found ? found.end   : shiftEnd;
         if (found) { setShiftStart(s); setShiftEnd(en); }
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(val || 'Custom', s, en) }));
+        
+        if (errors.shift) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.shift;
+                return newErrors;
+            });
+        }
+        setIsDirty(true);
+
     };
 
     const handleShiftTimeChange = (field, value) => {
@@ -109,6 +126,16 @@ const AddEmployee = () => {
         if (field === 'start') setShiftStart(value);
         else setShiftEnd(value);
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(shiftPreset || 'Custom', s, en) }));
+
+        if (errors.shift) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.shift;
+                return newErrors;
+            });
+        }
+        setIsDirty(true);
+
     };
 
     // Form state
@@ -148,25 +175,26 @@ const AddEmployee = () => {
     useEffect(() => {
         const applyEditData = (source) => {
             if (!source) return;
+            console.log("AddEmployee: Applying source data:", source);
 
             setFormData({
-                employee_id: source.id || source.employee_id || '',
-                employee_name: source.name || source.employee_name || '',
-                email: source.email || source.email_id || '',
+                employee_id: source.employee_id || source.id || '',
+                employee_name: source.employee_name || source.name || '',
+                email: source.email_id || source.email || '',
                 phone: source.phone === null || source.phone === undefined 
                     ? (source.phone_number === null || source.phone_number === undefined ? '' : String(source.phone_number))
                     : String(source.phone),
                 date_of_birth: normalizeDate(source.date_of_birth),
                 address: source.address || '',
                 photo_url: source.photo_url || source.profilePic || '',
-                date_of_joining: normalizeDate(source.joiningDate || source.date_of_joining),
-                role_designation: source.designation || source.role_designation || '',
+                date_of_joining: normalizeDate(source.date_of_joining || source.joiningDate),
+                role_designation: source.role_designation || source.designation || '',
                 department: source.department || '',
                 employment_type: normalizeEmploymentType(source.employment_type),
-                location: source.status?.location || source.location || '',
-                work_mode: normalizeWorkMode(source.status?.workMode || source.work_mode || source.mode_of_work),
-                employee_status: source.status?.allocated || source.employee_status || 'Bench',
-                shift: source.shift || '',
+                location: source.location || source.status?.location || '',
+                work_mode: normalizeWorkMode(source.work_mode || source.mode_of_work || source.status?.workMode),
+                employee_status: source.employee_status || source.status?.allocated || 'Bench',
+                shift: source.shift || source.shiftTiming || '',
                 employee_allocations: typeof source.employee_allocations === 'number' ? source.employee_allocations : 0,
                 reporting_manager_id: source.reporting_manager_id || '',
                 date_of_resign: normalizeDate(source.date_of_resign),
@@ -174,12 +202,15 @@ const AddEmployee = () => {
                 pip_end_date: normalizeDate(source.pip_end_date),
                 notice_start_date: normalizeDate(source.notice_start_date),
                 notice_end_date: normalizeDate(source.notice_end_date),
-                skills: (source.masterSkills || source.skills || []).map(s => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean),
+                skills: (source.skills || source.masterSkills || []).map(s => {
+                    if (typeof s === 'string') return s;
+                    return s.skill_name || s.skill || s.name || '';
+                }).filter(Boolean),
                 certificates: (source.certificates || []).map(c => ({ name: typeof c === 'string' ? c : (c.name || ''), file: null, fileData: '' })),
                 projects: (source.projects || []).map(p => ({
                     project_id: p.project_id || '',
-                    project_role: p.project_role || '',
-                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation, 10) || 0),
+                    project_role: p.project_role || p.role_in_project || '',
+                    project_allocation: typeof p.project_allocation === 'number' ? p.project_allocation : (parseInt(p.project_allocation || p.allocation_percentage, 10) || 0),
                     project_start_date: normalizeDate(p.project_start_date || p.allocation_start_date || p.start_date),
                     project_end_date: normalizeDate(p.project_end_date || p.allocation_end_date || p.end_date),
                     project_tags: p.project_tags || p.billable || 'billable'
@@ -187,13 +218,11 @@ const AddEmployee = () => {
             });
 
             // Parse existing shift string to restore preset + time pickers in edit mode
-            const rawShift = source.shift || '';
+            const rawShift = source.shift || source.shiftTiming || '';
             if (rawShift) {
-                // Try to match "Label (HH:MM AM - HH:MM PM)"
                 const match = rawShift.match(/^(.+?)\s*\((\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))\)$/i);
                 if (match) {
                     const presetLabel = match[1].trim();
-                    // Convert 12-hr to 24-hr for input[type=time]
                     const to24 = (t12) => {
                         const [time, ap] = t12.trim().split(/\s+/);
                         let [h, m] = time.split(':').map(Number);
@@ -211,23 +240,51 @@ const AddEmployee = () => {
 
             setShowPreview(true);
             setCompletedSections(['personal', 'professional', 'project', 'preview']);
-
         };
+
+        // 1. Initial application of data if available from router state
+        if (isEditMode && editData) {
+            applyEditData(editData);
+        }
 
         const loadEditData = async () => {
             if (!isEditMode || !editEmployeeId) return;
 
             try {
-                // Always fetch fresh data from API to ensure we have the latest record
+                // Fetch fresh data from API
                 const fullEmployee = await getEmployeeById(editEmployeeId);
-                applyEditData(fullEmployee);
+                if (fullEmployee) {
+                    applyEditData(fullEmployee);
+                }
             } catch (error) {
-                console.error('Failed to load employee details for edit', error);
+                console.error('Failed to load employee details for edit:', error);
             }
         };
 
         loadEditData();
     }, [isEditMode, editData, editEmployeeId]);
+
+    // Handle unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (isDirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+
+        const handleBackAction = (e) => {
+            if (isDirty) {
+                // We'll handle this via a custom navigation blocker if possible,
+                // but for now we'll just alert or let the browser handle it
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isDirty]);
+
+
 
     useEffect(() => {
         const loadEmployees = async () => {
@@ -270,7 +327,7 @@ const AddEmployee = () => {
     const sections = [
         { id: 'personal', label: 'Personal', icon: User },
         { id: 'professional', label: 'Professional', icon: Briefcase },
-        { id: 'project', label: 'Project', icon: FolderKanban },
+        ...(formData.employee_status !== 'Bench' ? [{ id: 'project', label: 'Project', icon: FolderKanban }] : []),
         { id: 'preview', label: 'Preview', icon: Check }
     ];
 
@@ -315,12 +372,23 @@ const AddEmployee = () => {
                 }));
             }
         } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
+            setFormData(prev => {
+                const newState = { ...prev, [name]: value };
+                // If user explicitly forces status to Bench, automatically wipe any existing projects/allocations
+                if (name === 'employee_status' && value === 'Bench') {
+                    newState.projects = [];
+                    newState.employee_allocations = 0;
+                }
+                return newState;
+            });
         }
+        setIsDirty(true);
+
     };
 
     const handlePhoneChange = (value) => {
         setFormData(prev => ({ ...prev, phone: value }));
+        setIsDirty(true);
         if (errors.phone) {
             setErrors(prev => {
                 const newErrors = { ...prev };
@@ -328,6 +396,7 @@ const AddEmployee = () => {
                 return newErrors;
             });
         }
+
     };
 
     const compressImage = (file) => {
@@ -374,23 +443,26 @@ const AddEmployee = () => {
         if (file) {
             // Validate file type
             if (!file.type.startsWith('image/')) {
-                alert('Please select a valid image file');
+                toast.error('Please select a valid image file');
                 return;
             }
 
+
             // Relaxed file size limit (let compressor handle large files)
             if (file.size > 10 * 1024 * 1024) {
-                alert('Image size is too large (max 10MB)');
+                toast.error('Image size is too large (max 10MB)');
                 return;
             }
+
 
             try {
                 const compressedBase64 = await compressImage(file);
                 setFormData(prev => ({ ...prev, photo_url: compressedBase64 }));
             } catch (err) {
                 console.error("Image compression error:", err);
-                alert("Failed to process image. Please try another one.");
+                toast.error("Failed to process image. Please try another one.");
             }
+
         }
     };
 
@@ -462,7 +534,23 @@ const AddEmployee = () => {
     };
 
     const addProject = () => {
-        if (currentProject.project_id && currentProject.project_allocation > 0) {
+        if (!currentProject.project_id) {
+            toast.error('Please select a project.');
+            return;
+        }
+
+        if (!currentProject.project_allocation || currentProject.project_allocation <= 0) {
+            toast.error('Please specify a valid allocation percentage greater than 0.');
+            return;
+        }
+
+        if (!currentProject.project_start_date) {
+            toast.error('Please specify a project start date.');
+            return;
+        }
+
+
+        if (currentProject.project_id && currentProject.project_allocation > 0 && currentProject.project_start_date) {
             if (editingProjectIndex !== null) {
                 // Update existing project
                 setFormData(prev => {
@@ -578,8 +666,8 @@ const AddEmployee = () => {
 
         if (!formData.department) newErrors.department = 'Department is required';
         if (!formData.location) newErrors.location = 'Location is required';
-        if (!formData.reporting_manager_id) newErrors.reporting_manager_id = 'Reporting Manager is required';
         if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
+        if (!formData.employee_status) newErrors.employee_status = 'Status is required';
 
         if (showErrors) setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -602,17 +690,20 @@ const AddEmployee = () => {
 
     // Auto-calculate status and allocation based on project selection.
     // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
-    // Auto-calculate status and allocation based on project selection.
-    // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
-    // Auto-calculate status and allocation based on project selection.
-    // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     useEffect(() => {
         const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
         const totalAllocation = formData.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
         
         setFormData(prev => {
             // Calculate what the auto-status SHOULD be based on project list
-            const autoStatus = (formData.projects.length > 0 && totalAllocation > 0) ? 'Allocated' : 'Bench';
+            let autoStatus = 'Bench';
+            if (totalAllocation >= 81) {
+                autoStatus = 'Allocated';
+            } else if (totalAllocation >= 41) {
+                autoStatus = 'Partially allocated';
+            } else if (totalAllocation >= 1) {
+                autoStatus = 'Partially bench';
+            }
             
             // If current status is manual (Notice/PIP/Resign), keep status but sync allocation %
             if (MANUAL_STATUSES.some(s => (prev.employee_status || '').toLowerCase().includes(s))) {
@@ -623,7 +714,6 @@ const AddEmployee = () => {
             }
             
             // If current status is an auto-type (Bench/Allocated) but doesn't match projects, enforce the rule
-            // We only enforce if the status isn't already "Notice/PIP/Resign"
             if (prev.employee_status !== autoStatus || prev.employee_allocations !== totalAllocation) {
                 return { 
                     ...prev, 
@@ -633,9 +723,12 @@ const AddEmployee = () => {
             }
             return prev;
         });
-    }, [formData.projects]); // REMOVED formData.employee_status from dependencies to prevent immediate reversion during manual selection
+    }, [formData.projects]);
 
-    const handleSubmit = async () => {
+
+    const handleSubmit = async (e) => {
+        if (e) e.preventDefault();
+
         // Run all validations as a final check
         const isPersonalValid = validatePersonalSection();
         const isProfessionalValid = validateProfessionalSection();
@@ -643,22 +736,14 @@ const AddEmployee = () => {
         if (!isPersonalValid || !isProfessionalValid) {
             if (!isPersonalValid) setCurrentSection('personal');
             else if (!isProfessionalValid) setCurrentSection('professional');
-            alert('Please fix the validation errors before submitting.');
+            toast.error('Please fix the validation errors before submitting.');
             return;
         }
 
         setLoading(true);
-        try {
-            // Handle new metadata creation first if needed
-            if (isAddingNewDept && newDeptName.trim()) {
-                await createDepartment(newDeptName.trim());
-                formData.department = newDeptName.trim();
-            }
-            if (isAddingNewDesig && newDesigName.trim()) {
-                await createDesignation(newDesigName.trim());
-                formData.role_designation = newDesigName.trim();
-            }
+        const toastId = toast.loading(isEditMode ? 'Updating employee...' : 'Creating employee...');
 
+        try {
             const payload = {
                 employee_id: formData.employee_id,
                 employee_name: formData.employee_name,
@@ -690,36 +775,48 @@ const AddEmployee = () => {
                 }))
             };
 
-            console.log('Saving employee with payload:', payload);
+            let response;
             if (isEditMode) {
-                await updateEmployee(editEmployeeId || formData.employee_id, payload);
+                response = await updateEmployee(editEmployeeId || formData.employee_id, payload);
             } else {
-                await createEmployee(payload);
+                response = await createEmployee(payload);
             }
 
-            triggerRefresh(); // global signal that data changed
-            clearDashboardCache(); // Sync dashboard
-            
-            // Redirect to the newly created/updated employee details page
-            const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id;
-            navigate(`/info/employee/${targetId}`);
+            if (response && response.success) {
+                toast.success(isEditMode ? 'Employee updated successfully' : 'Employee created successfully', { id: toastId });
+                setIsDirty(false); // Reset dirty flag after successful save
+                
+                if (triggerRefresh) triggerRefresh();
+                
+                // Redirect to profile
+                const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : response.employee_id || formData.employee_id;
+                if (targetId) {
+                    navigate(`/dashboard/employee/profile/${encodeId(targetId)}`);
+                } else {
+                    navigate('/dashboard/employee');
+                }
+            } else {
+                toast.error(response?.message || 'Operation failed', { id: toastId });
+            }
         } catch (error) {
             console.error('Error saving employee:', error);
             const detail = error.response?.data?.detail;
             const errorMsg = typeof detail === 'string' 
                 ? detail 
                 : (typeof detail === 'object' ? JSON.stringify(detail) : error.message);
-            alert('Failed to save employee. ' + errorMsg);
+            toast.error('Failed to save employee: ' + errorMsg, { id: toastId });
         } finally {
             setLoading(false);
         }
     };
 
+
     const renderPersonalSection = () => (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Employee ID *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Employee ID <span className="text-black ml-1">*</span></label>
+
                     <input
                         type="text"
                         name="employee_id"
@@ -734,7 +831,8 @@ const AddEmployee = () => {
                     {errors.employee_id && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employee_id}</p>}
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Full Name *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Full Name <span className="text-black ml-1">*</span></label>
+
                     <input
                         type="text"
                         name="employee_name"
@@ -751,7 +849,8 @@ const AddEmployee = () => {
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Email *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Email <span className="text-black ml-1">*</span></label>
+
                     <input
                         type="email"
                         name="email"
@@ -789,7 +888,8 @@ const AddEmployee = () => {
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Date of Joining *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Date of Joining <span className="text-black ml-1">*</span></label>
+
                     <input
                         type="date"
                         name="date_of_joining"
@@ -873,7 +973,8 @@ const AddEmployee = () => {
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Designation *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Designation <span className="text-black ml-1">*</span></label>
+
                     <input
                         type="text"
                         name="role_designation"
@@ -887,7 +988,8 @@ const AddEmployee = () => {
                     {errors.role_designation && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.role_designation}</p>}
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Department *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Department <span className="text-black ml-1">*</span></label>
+
                     {!isAddingNewDept ? (
                         <div className="flex gap-2">
                             <select
@@ -942,7 +1044,8 @@ const AddEmployee = () => {
             </div>
 
             <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Reporting Manager *</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Reporting Manager <span className="text-black ml-1">*</span></label>
+
                 <select
                     name="reporting_manager_id"
                     value={formData.reporting_manager_id}
@@ -965,7 +1068,8 @@ const AddEmployee = () => {
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Employment Type *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Employment Type <span className="text-black ml-1">*</span></label>
+
                     <select
                         name="employment_type"
                         value={formData.employment_type}
@@ -978,7 +1082,8 @@ const AddEmployee = () => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Location *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Location <span className="text-black ml-1">*</span></label>
+
                     <select
                         name="location"
                         value={formData.location}
@@ -997,7 +1102,8 @@ const AddEmployee = () => {
 
             <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-1">
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Shift Timing <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Shift Timing <span className="text-black ml-1">*</span></label>
+
                     {/* Preset picker */}
                     <select
                         value={shiftPreset}
@@ -1053,30 +1159,24 @@ const AddEmployee = () => {
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
-                    {isEditMode ? (
-                        <select
-                            name="employee_status"
-                            value={formData.employee_status}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                            <optgroup label="Auto-calculated (based on projects)">
-                                <option value="Bench">Bench</option>
-                                <option value="Partially bench">Partially bench</option>
-                                <option value="Partially allocated">Partially allocated</option>
-                                <option value="Allocated">Allocated</option>
-                            </optgroup>
-                            <optgroup label="Manually set">
-                                <option value="Notice period">Notice period</option>
-                                <option value="PIP">PIP</option>
-                                <option value="Resigned">Resigned</option>
-                            </optgroup>
-                        </select>
-                    ) : (
-                        <div className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-50 text-gray-600">
-                            {formData.employee_status}
-                        </div>
-                    )}
+                    <select
+                        name="employee_status"
+                        value={formData.employee_status}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                        <optgroup label="Auto-calculated (based on projects)">
+                            <option value="Bench">Bench</option>
+                            <option value="Partially bench">Partially bench</option>
+                            <option value="Partially allocated">Partially allocated</option>
+                            <option value="Allocated">Allocated</option>
+                        </optgroup>
+                        <optgroup label="Manually set">
+                            <option value="Notice period">Notice period</option>
+                            <option value="PIP">PIP</option>
+                            <option value="Resigned">Resigned</option>
+                        </optgroup>
+                    </select>
                     <p className="text-[10px] text-gray-400 mt-1 font-medium italic">
                         * Bench/Allocated statuses are auto-calculated based on project details in Section 3.
                     </p>
@@ -1314,7 +1414,8 @@ const AddEmployee = () => {
 
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Project <span className="text-red-500">*</span></label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Project <span className="text-black ml-1">*</span></label>
+
                         {allProjects.length > 0 ? (
                             <select
                                 value={currentProject.project_id}
@@ -1338,7 +1439,8 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-4 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Role in Project <span className="text-black ml-1">*</span></label>
+
                             <input
                                 type="text"
                                 value={currentProject.project_role}
@@ -1348,7 +1450,8 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Billability <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Billability <span className="text-black ml-1">*</span></label>
+
                             <select
                                 value={currentProject.project_tags}
                                 onChange={(e) => handleProjectChange('project_tags', e.target.value)}
@@ -1359,7 +1462,8 @@ const AddEmployee = () => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Hours per Day <span className="text-black ml-1">*</span></label>
+
                             <input
                                 type="number"
                                 value={currentProject.daily_hours}
@@ -1371,7 +1475,8 @@ const AddEmployee = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation % <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Allocation % <span className="text-black ml-1">*</span></label>
+
                             <input
                                 type="number"
                                 value={currentProject.project_allocation}
@@ -1385,7 +1490,8 @@ const AddEmployee = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Start Date <span className="text-black ml-1">*</span></label>
+
                             <input
                                 type="date"
                                 value={currentProject.project_start_date}
@@ -1550,44 +1656,46 @@ const AddEmployee = () => {
             </div>
 
             {/* Projects */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-gray-800">Projects ({formData.projects.length})</h3>
-                    <button
-                        type="button"
-                        onClick={() => setCurrentSection('project')}
-                        className="px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 font-medium transition-colors"
-                    >
-                        Edit
-                    </button>
-                </div>
-                {formData.projects.length > 0 ? (
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="text-left p-2 border">Project</th>
-                                <th className="text-left p-2 border">Role</th>
-                                <th className="text-left p-2 border">Allocation</th>
-                                <th className="text-left p-2 border">Dates</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {formData.projects.map((project, i) => (
-                                <tr key={i} className="border-t">
-                                    <td className="p-2 border">
-                                        {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
-                                    </td>
-                                    <td className="p-2 border">{project.project_role}</td>
-                                    <td className="p-2 border">{project.project_allocation}% ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)</td>
-                                    <td className="p-2 border text-xs">{project.project_start_date} to {project.project_end_date || 'Ongoing'}</td>
+            {formData.employee_status !== 'Bench' && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-gray-800">Projects ({formData.projects.length})</h3>
+                        <button
+                            type="button"
+                            onClick={() => setCurrentSection('project')}
+                            className="px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 font-medium transition-colors"
+                        >
+                            Edit
+                        </button>
+                    </div>
+                    {formData.projects.length > 0 ? (
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="text-left p-2 border">Project</th>
+                                    <th className="text-left p-2 border">Role</th>
+                                    <th className="text-left p-2 border">Allocation</th>
+                                    <th className="text-left p-2 border">Dates</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <p className="text-gray-500 text-sm">No projects assigned</p>
-                )}
-            </div>
+                            </thead>
+                            <tbody>
+                                {formData.projects.map((project, i) => (
+                                    <tr key={i} className="border-t">
+                                        <td className="p-2 border">
+                                            {allProjects.find(p => p.id === project.project_id)?.name || project.project_id}
+                                        </td>
+                                        <td className="p-2 border">{project.project_role}</td>
+                                        <td className="p-2 border">{project.project_allocation}% ({Math.round((project.project_allocation / 100) * 8 * 100) / 100}h/day)</td>
+                                        <td className="p-2 border text-xs">{project.project_start_date} to {project.project_end_date || 'Ongoing'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <p className="text-gray-500 text-sm">No projects assigned</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 
@@ -1697,18 +1805,18 @@ const AddEmployee = () => {
                                         setCompletedSections([...completedSections, currentSection]);
                                     }
 
-                                    if (currentSection === 'project') {
+                                    const idx = sections.findIndex(s => s.id === currentSection);
+                                    const nextSectionId = sections[idx + 1].id;
+                                    
+                                    if (nextSectionId === 'preview') {
                                         setShowPreview(true);
-                                        setCurrentSection('preview');
-                                    } else {
-                                        const idx = sections.findIndex(s => s.id === currentSection);
-                                        setCurrentSection(sections[idx + 1].id);
                                     }
+                                    setCurrentSection(nextSectionId);
                                 }
                             }}
                             className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors bg-blue-600 hover:bg-blue-700`}
                         >
-                            {currentSection === 'project' ? 'Review & Submit' : 'Next'}
+                            {sections[sections.findIndex(s => s.id === currentSection) + 1]?.id === 'preview' ? 'Review & Submit' : 'Next'}
                         </button>
                     ) : (
                         <button

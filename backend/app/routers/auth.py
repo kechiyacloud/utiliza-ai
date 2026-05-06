@@ -249,7 +249,12 @@ def login_user(data: LoginRequest, response: Response):
 
     try:
         cur.execute(
-            "SELECT id, password_hash FROM users WHERE email = %s",
+            """
+            SELECT u.id, u.password_hash, COALESCE(r.role_name, 'viewer') AS role_name
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.role_id
+            WHERE u.email = %s
+            """,
             (email,)
         )
         user = cur.fetchone()
@@ -260,7 +265,7 @@ def login_user(data: LoginRequest, response: Response):
                 detail="Invalid email or password"
             )
 
-        user_id, stored_hash = user
+        user_id, stored_hash, role_name = user
 
         if not verify_password(password, stored_hash):
             raise HTTPException(
@@ -268,7 +273,7 @@ def login_user(data: LoginRequest, response: Response):
                 detail="Invalid email or password"
             )
 
-        token = create_access_token(user_id, email)
+        token = create_access_token(user_id, email, role=role_name)
         refresh_token = create_refresh_token(user_id, email)
         set_refresh_cookie(response, refresh_token)
         print("Login successful")
@@ -315,7 +320,21 @@ def refresh_access_token(request: Request, response: Response):
     if not user_id or not email:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    new_access_token = create_access_token(int(user_id), email)
+    # Re-fetch role from DB so role changes propagate on next token refresh
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT COALESCE(r.role_name, 'viewer') FROM users u LEFT JOIN roles r ON u.role_id = r.role_id WHERE u.id = %s",
+            (int(user_id),)
+        )
+        row = cur.fetchone()
+        role_name = row[0] if row else "viewer"
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+    new_access_token = create_access_token(int(user_id), email, role=role_name)
     new_refresh_token = create_refresh_token(int(user_id), email)
     set_refresh_cookie(response, new_refresh_token)
 

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_db_connection, release_db_connection, db_cursor
+from app.rbac_utils import require_min_role, require_role, get_role, strip_fields
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
@@ -94,7 +95,7 @@ def _sync_employee_allocations(cur, employee_ids):
             WHERE p.employee_id = ANY(%s)
               AND (pa.allocation_id IS NULL OR (
                   pa.allocation_start_date <= CURRENT_DATE
-                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing'))
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
               ))
             GROUP BY p.employee_id
@@ -160,7 +161,8 @@ class NominationInput(BaseModel):
     feedback_text: str
     month: str
 
-router = APIRouter()
+_require_viewer = require_min_role("restricted_viewer")
+router = APIRouter(dependencies=[Depends(_require_viewer)])
 
 @router.get("/employees/count")
 def get_total_employee_count():
@@ -186,9 +188,8 @@ def get_bench_employee_count():
                 WHERE pa.employee_id = m.employee_id 
                   AND pa.allocation_start_date <= CURRENT_DATE
                   AND (
-                      pa.allocation_end_date IS NULL 
-                      OR pa.allocation_end_date >= CURRENT_DATE 
-                      OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing')
+                      pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
+                      
                   )
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) <= 0
@@ -225,7 +226,7 @@ def get_employee_roles():
         
         return {"roles": sorted(list(unified))}
 
-@router.post("/employees/sync-all")
+@router.post("/employees/sync-all", dependencies=[Depends(require_role("master_admin"))])
 def sync_all_employees():
     """Forces a global synchronization of all active employee allocations and statuses."""
     with db_cursor() as cur:
@@ -237,7 +238,7 @@ def sync_all_employees():
         return {"status": "success", "synced_count": len(ids)}
 
 @router.get("/employees/list")
-def get_all_employees(include_resigned: bool = False, include_deleted: bool = False):
+def get_all_employees(include_resigned: bool = False, include_deleted: bool = False, _user: dict = Depends(_require_viewer)):
     print("API: Fetching all employees...")
     with db_cursor() as cur:
         # Optimization: Perform schema checks once in a consolidated query
@@ -288,10 +289,19 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "      AND ( "
             "          pa.allocation_end_date IS NULL "
             "          OR pa.allocation_end_date >= CURRENT_DATE "
-            "          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') "
+            "          OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') "
             "      ) "
             "      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
             "    GROUP BY pa.employee_id"
+            "), "
+            "CertsAgg AS ("
+            "    SELECT "
+            "        ec.employee_id, "
+            "        COUNT(*) as cert_count, "
+            "        JSON_AGG(c.certificate_name) as cert_list "
+            "    FROM employee_certificates ec "
+            "    JOIN certificates c ON ec.certificate_id = c.certificate_id "
+            "    GROUP BY ec.employee_id"
             ") "
             "SELECT "
             "    m.employee_id, m.employee_name, m.role_designation, m.department, m.location, "
@@ -319,11 +329,14 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "    " + pip_end_expr + " as pip_end_date, "
             "    " + notice_start_expr + " as notice_start_date, "
             "    " + notice_end_expr + " as notice_end_date, "
-            "    COALESCE(sk.skills, ARRAY[]::text[]) as skills "
+            "    COALESCE(sk.skills, ARRAY[]::text[]) as skills, "
+            "    COALESCE(ca.cert_count, 0) as cert_count, "
+            "    COALESCE(ca.cert_list, '[]'::json) as cert_list "
             "FROM employee_master m "
             "LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id "
             "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
             "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
+            "LEFT JOIN CertsAgg ca ON m.employee_id = ca.employee_id "
             "WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE OR %s = TRUE) "
             "  AND " + is_deleted_expr + " "
             "ORDER BY m.employee_name ASC"
@@ -331,12 +344,13 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
         cur.execute(query, (include_resigned, include_deleted))
         columns = [desc[0] for desc in cur.description]
         
+        role = get_role(_user)
         results = []
         for row in cur.fetchall():
             d = dict(zip(columns, row))
             if d.get('role_designation', '').strip().upper() == 'CSE':
                 d['role_designation'] = 'Cloud Solution Engineer'
-            results.append(d)
+            results.append(strip_fields(d, role, "employee"))
         return results
 
 @router.get("/employees/upcoming-bench")
@@ -420,7 +434,7 @@ def fetch_employee_of_month():
                 m.photo_url,
                 COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
-            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
             WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
             HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
@@ -441,7 +455,7 @@ def fetch_employee_of_month():
         cur.close()
         release_db_connection(conn)
 
-@router.post("/employees/nominate")
+@router.post("/employees/nominate", dependencies=[Depends(require_min_role("editor"))])
 def nominate_employee(nom: NominationInput):
     return {"detail": "Nominations are not supported in the current schema version."}
 
@@ -612,7 +626,7 @@ def get_employee_id_by_email(email_id: str):
         release_db_connection(conn)
 
 @router.get("/employees/{employee_id}")
-def get_employee_by_id(employee_id: str):
+def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer)):
     with db_cursor() as cur:
         _ensure_employee_columns(cur)
         has_pip_start_date = _table_has_column(cur, "employee_master_pro", "pip_start_date")
@@ -660,9 +674,8 @@ def get_employee_by_id(employee_id: str):
                     JOIN projects pj ON pa.project_id = pj.project_id 
                     WHERE pa.allocation_start_date <= CURRENT_DATE 
                       AND ( 
-                          pa.allocation_end_date IS NULL 
-                          OR pa.allocation_end_date >= CURRENT_DATE 
-                          OR LOWER(pj.project_status) IN ('in-progress', 'active', 'ongoing') 
+                          pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
+                           
                       ) 
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
                     GROUP BY employee_id 
@@ -846,7 +859,7 @@ def get_employee_by_id(employee_id: str):
             "projects": projects
         }
 
-        return response
+        return strip_fields(response, get_role(_user), "employee")
 
 def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
     """Internal helper to perform a full update of an employee record."""
@@ -962,7 +975,7 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
             cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (employee_id, cert_id))
 
 
-@router.post("/employees")
+@router.post("/employees", dependencies=[Depends(require_min_role("editor"))])
 def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
     with db_cursor() as cur:
         _ensure_employee_columns(cur)
@@ -1054,7 +1067,7 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
 
         return {"detail": "Employee created successfully"}
 
-@router.put("/employees/{employee_id}")
+@router.put("/employees/{employee_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
     with db_cursor() as cur:
         # Check if the identifier is an email (contains '@')
@@ -1070,7 +1083,7 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
         _perform_employee_update(cur, actual_id, emp)
         return {"detail": "Employee updated successfully", "new_id": actual_id}
 
-@router.delete("/employees/{employee_id}")
+@router.delete("/employees/{employee_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_employee(employee_id: str, permanent: bool = Query(False)):
     with db_cursor() as cur:
         # Check if the identifier is an email (contains '@')
@@ -1107,7 +1120,7 @@ def delete_employee(employee_id: str, permanent: bool = Query(False)):
             return {"detail": "Employee soft-deleted (archived) successfully"}
 
 
-@router.put("/employees/{employee_id}/restore")
+@router.put("/employees/{employee_id}/restore", dependencies=[Depends(require_min_role("editor"))])
 def restore_employee(employee_id: str):
     with db_cursor() as cur:
         cur.execute("SELECT employee_id FROM employee_master WHERE employee_id = %s", (employee_id,))
