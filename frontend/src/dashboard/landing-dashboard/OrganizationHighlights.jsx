@@ -32,7 +32,9 @@ const OrganizationHighlights = ({
         const total = transitions.length;
         const entries = transitions.filter(t => t.type === 'Project Entry' || t.type === 'New Assignment').length;
         const exits = transitions.filter(t => t.type === 'Exit').length;
-        return { total, entries, exits };
+        const transfers = transitions.filter(t => t.type === 'Transfer').length;
+        const notice = transitions.filter(t => t.type === 'Notice').length;
+        return { total, entries, exits, transfers, notice };
     }, [transitions]);
 
     const tabs = [
@@ -89,17 +91,17 @@ const OrganizationHighlights = ({
 
     const renderTopAllocation = () => {
         const data = utilizationSubTab === 'EMPLOYEE' ? highUtilizationEmployee : highUtilizationProject;
-        
+
         return (
             <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="flex gap-2 mb-1">
-                    <button 
+                    <button
                         onClick={() => setUtilizationSubTab('EMPLOYEE')}
                         className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-all ${utilizationSubTab === 'EMPLOYEE' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         EMPLOYEE
                     </button>
-                    <button 
+                    <button
                         onClick={() => setUtilizationSubTab('PROJECTS')}
                         className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-all ${utilizationSubTab === 'PROJECTS' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                     >
@@ -109,8 +111,8 @@ const OrganizationHighlights = ({
 
                 <div className="space-y-2">
                     {data.length > 0 ? data.slice(0, 5).map((item, idx) => (
-                        <div 
-                            key={idx} 
+                        <div
+                            key={idx}
                             className={`group relative ${((utilizationSubTab === 'EMPLOYEE' && item.id) || (utilizationSubTab === 'PROJECTS' && item.id)) && item.id !== '0' ? 'cursor-pointer' : ''}`}
                             onClick={() => {
                                 if (item.id && item.id !== '0') {
@@ -139,8 +141,8 @@ const OrganizationHighlights = ({
                                         </div>
                                     </div>
                                     <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(59,130,246,0.2)]" 
+                                        <div
+                                            className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(59,130,246,0.2)]"
                                             style={{ width: `${utilizationSubTab === 'EMPLOYEE' ? item.allocation : Math.min(100, (item.resource_count * 10))}%` }}
                                         ></div>
                                     </div>
@@ -161,8 +163,8 @@ const OrganizationHighlights = ({
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {availability.length > 0 ? availability.map((item, idx) => (
-                    <div 
-                        key={idx} 
+                    <div
+                        key={idx}
                         className={`p-2 rounded-xl border border-slate-50 hover:border-blue-100 hover:shadow-sm transition-all group flex items-center gap-2 bg-white ${item.id && item.id !== '0' ? 'cursor-pointer' : ''}`}
                         onClick={() => item.id && item.id !== '0' && navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } })}
                     >
@@ -170,7 +172,7 @@ const OrganizationHighlights = ({
                             {item.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h5 
+                            <h5
                                 className="text-xs font-medium text-slate-800 uppercase truncate group-hover:text-blue-600"
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -181,7 +183,7 @@ const OrganizationHighlights = ({
                             >
                                 {item.name}
                             </h5>
-                            <p 
+                            <p
                                 className="text-[10px] text-slate-500 font-medium hover:text-blue-600 cursor-pointer"
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -245,43 +247,68 @@ const OrganizationHighlights = ({
                             <UserMinus size={12} className="text-rose-500" />
                             <span className="text-[10px] font-bold text-rose-600 uppercase tracking-tight">{movementStats.exits} Exits</span>
                         </div>
+                        {movementStats.transfers > 0 && (
+                            <>
+                                <div className="w-px h-3 bg-slate-200 self-center"></div>
+                                <div className="flex items-center gap-1.5">
+                                    <ArrowRight size={12} className="text-indigo-500" />
+                                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight">{movementStats.transfers} Transfers</span>
+                                </div>
+                            </>
+                        )}
+                        {movementStats.notice > 0 && (
+                            <>
+                                <div className="w-px h-3 bg-slate-200 self-center"></div>
+                                <div className="flex items-center gap-1.5">
+                                    <Clock size={12} className="text-orange-500" />
+                                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-tight">{movementStats.notice} Notice</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
-                <div className="space-y-1">
+                <div className="space-y-2">
                     {transitions.length > 0 ? transitions.map((item, idx) => (
-                        <div 
-                            key={idx} 
-                            className={`flex items-center gap-2 p-1.5 rounded-xl bg-slate-50/50 border border-slate-50 hover:bg-white hover:shadow-sm transition-all ${item.id && item.id !== '0' ? 'cursor-pointer group' : ''}`}
+                        <div
+                            key={idx}
+                            className={`flex items-start gap-3 p-3 rounded-2xl bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-50/50 transition-all duration-300 ${item.id && item.id !== '0' ? 'cursor-pointer group' : ''}`}
                             onClick={() => item.id && item.id !== '0' && navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } })}
                         >
-                            <div className={`p-1.5 rounded-lg flex-shrink-0 ${item.type === 'Exit' ? 'bg-rose-100 text-rose-600' : item.type === 'Notice' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                                <Activity size={14} />
+                            <div className={`mt-0.5 p-2 rounded-xl flex-shrink-0 transition-colors ${item.type === 'Exit' ? 'bg-rose-50 text-rose-600 group-hover:bg-rose-100' : item.type === 'Notice' ? 'bg-orange-50 text-orange-600 group-hover:bg-orange-100' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100'}`}>
+                                {item.type === 'Exit' ? <UserMinus size={16} /> : item.type === 'New Assignment' || item.type === 'Project Entry' ? <UserPlus size={16} /> : <Activity size={16} />}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                    <h5 className="text-xs font-medium text-slate-800 uppercase truncate group-hover:text-indigo-600">{item.employee}</h5>
-                                    {item.type && (
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${getMovementBadgeStyles(item.type)}`}>
-                                            {item.type}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase truncate max-w-[80px]">{item.from_project || item.fromProject || 'Bench'}</span>
-                                    <ArrowRight size={10} className="text-slate-300 flex-shrink-0" />
-                                    <span className="text-[10px] font-bold text-indigo-600 uppercase truncate max-w-[120px]">{item.to_project || item.toProject}</span>
-                                </div>
-                            </div>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter whitespace-nowrap">
-                                {item.date ? (
-                                    new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                                ) : (
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                                        <div className="w-1 h-1 rounded-full bg-slate-400 animate-pulse"></div>
-                                        <span>Current</span>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <h5 className="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{item.employee}</h5>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight whitespace-nowrap bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                                            {item.date ? (
+                                                new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                            ) : (
+                                                <span className="text-orange-600 font-black">Current</span>
+                                            )}
+                                        </div>
+                                        {item.type && (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border shadow-sm ${getMovementBadgeStyles(item.type)}`}>
+                                                {item.type}
+                                            </span>
+                                        )}
                                     </div>
-                                )}
+                                </div>
+                                <div className="flex items-center gap-3 bg-slate-50/80 p-2 rounded-xl border border-slate-100 group-hover:bg-slate-50 group-hover:border-indigo-100 transition-all">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[9px] text-slate-400 font-black uppercase mb-0.5">From</p>
+                                        <p className="text-[11px] font-bold text-slate-600 truncate">{item.from_project || item.fromProject || 'Bench'}</p>
+                                    </div>
+                                    <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-slate-100 shadow-sm">
+                                        <ArrowRight size={12} className="text-indigo-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0 text-right">
+                                        <p className="text-[9px] text-indigo-400 font-black uppercase mb-0.5">To</p>
+                                        <p className="text-[11px] font-bold text-indigo-600 truncate">{item.to_project || item.toProject}</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )) : (
@@ -298,8 +325,8 @@ const OrganizationHighlights = ({
         return (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {benchAging.length > 0 ? benchAging.map((item, idx) => (
-                    <div 
-                        key={idx} 
+                    <div
+                        key={idx}
                         className={`p-2 rounded-xl border border-slate-50 bg-white hover:border-rose-100 transition-all ${item.id && item.id !== '0' ? 'cursor-pointer group' : ''}`}
                         onClick={() => item.id && item.id !== '0' && navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } })}
                     >
@@ -310,7 +337,7 @@ const OrganizationHighlights = ({
                             </div>
                         </div>
                         <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
-                            <div 
+                            <div
                                 className={`h-full ${item.days_in_year > 30 ? 'bg-rose-500' : 'bg-slate-300'}`}
                                 style={{ width: `${Math.min(100, (item.days_in_year / 120) * 100)}%` }}
                             ></div>
@@ -329,8 +356,8 @@ const OrganizationHighlights = ({
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {certifications.length > 0 ? certifications.map((item, idx) => (
-                    <div 
-                        key={idx} 
+                    <div
+                        key={idx}
                         className={`p-2 rounded-xl bg-teal-50/30 border border-teal-50 hover:bg-white hover:shadow-md transition-all group relative min-h-[85px] ${item.id && item.id !== '0' ? 'cursor-pointer' : ''}`}
                         onClick={() => item.id && item.id !== '0' && navigate(`/info/employee/${item.id}`, { state: { from: 'highlights' } })}
                     >
@@ -340,7 +367,7 @@ const OrganizationHighlights = ({
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h5 className="text-xs font-medium text-slate-800 uppercase truncate mb-1 group-hover:text-teal-600">{item.employee}</h5>
-                                
+
                                 <div className="space-y-1">
                                     {(item.certs || []).slice(0, 2).map((cert, cIdx) => (
                                         <div key={cIdx}>
@@ -349,7 +376,7 @@ const OrganizationHighlights = ({
                                             </p>
                                         </div>
                                     ))}
-                                    
+
                                     {item.count > 2 && (
                                         <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-full bg-teal-100 text-[10px] font-bold text-teal-700 uppercase">
                                             +{item.count - 2} More Certificates
@@ -364,10 +391,10 @@ const OrganizationHighlights = ({
                         No upcoming expiries
                     </div>
                 )}
-                
+
                 {activeTab === 'Certificates' && certifications.length >= 12 && (
                     <div className="col-span-full mt-4 flex justify-center">
-                        <button 
+                        <button
                             onClick={() => navigate('/info/view-resources?type=certifications', { state: { from: 'highlights' } })}
                             className="flex items-center gap-2 px-6 py-2 bg-teal-50 text-teal-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-teal-100 transition-all border border-teal-100/50"
                         >
@@ -400,11 +427,10 @@ const OrganizationHighlights = ({
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${
-                                activeTab === tab.id
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${activeTab === tab.id
                                     ? 'bg-white text-blue-600 shadow-sm'
                                     : 'text-slate-500 hover:text-slate-800'
-                            }`}
+                                }`}
                         >
                             <tab.icon size={12} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
                             <span className="hidden sm:inline">{tab.label}</span>
@@ -417,7 +443,7 @@ const OrganizationHighlights = ({
             <div className="min-h-[280px] max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 {renderContent()}
             </div>
-            
+
             {/* Subtle bottom detail */}
             <div className="mt-8 pt-4 border-t border-slate-50 flex justify-between items-center">
                 <div className="flex items-center gap-2">

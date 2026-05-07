@@ -95,7 +95,7 @@ def _sync_employee_allocations(cur, employee_ids):
             WHERE p.employee_id = ANY(%s)
               AND (pa.allocation_id IS NULL OR (
                   pa.allocation_start_date <= CURRENT_DATE
-                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
               ))
             GROUP BY p.employee_id
@@ -187,10 +187,7 @@ def get_bench_employee_count():
                 LEFT JOIN projects pj ON pa.project_id = pj.project_id
                 WHERE pa.employee_id = m.employee_id 
                   AND pa.allocation_start_date <= CURRENT_DATE
-                  AND (
-                      pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
-                      
-                  )
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) <= 0
         """)
@@ -286,11 +283,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "    FROM projects_allocation pa "
             "    LEFT JOIN projects pj ON pa.project_id = pj.project_id "
             "    WHERE pa.allocation_start_date <= CURRENT_DATE "
-            "      AND ( "
-            "          pa.allocation_end_date IS NULL "
-            "          OR pa.allocation_end_date >= CURRENT_DATE "
-            "          OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') "
-            "      ) "
+            "      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) "
             "      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
             "    GROUP BY pa.employee_id"
             "), "
@@ -434,8 +427,14 @@ def fetch_employee_of_month():
                 m.photo_url,
                 COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
-            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
+            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id 
+            LEFT JOIN projects pj ON pa.project_id = pj.project_id
             WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+              AND (pa.allocation_id IS NULL OR (
+                  pa.allocation_start_date <= CURRENT_DATE
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+              ))
             GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
             HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
             ORDER BY employee_allocations DESC, m.date_of_joining ASC
@@ -673,10 +672,7 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     FROM projects_allocation pa 
                     JOIN projects pj ON pa.project_id = pj.project_id 
                     WHERE pa.allocation_start_date <= CURRENT_DATE 
-                      AND ( 
-                          pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
-                           
-                      ) 
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) 
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
                     GROUP BY employee_id 
             ) 

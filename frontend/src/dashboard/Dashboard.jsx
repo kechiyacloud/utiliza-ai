@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar, Legend
 } from 'recharts';
+import { toast } from 'react-hot-toast';
 
 import {
   fetchDashboardData,
@@ -121,10 +122,10 @@ function Dashboard() {
       if (forceRefresh) {
         lastHandledRefreshKeyRef.current = refreshKey;
       }
-      
+
       try {
         setLoading(true);
-        
+
         // Pass signal to fetchDashboardData if possible, or handle post-fetch cancellation
         const [dashRes, empListRes, deptsRes] = await Promise.allSettled([
           fetchDashboardData(forceRefresh, filters),
@@ -168,7 +169,11 @@ function Dashboard() {
     try {
       const updated = await toggleTodo(id);
       setActionableTodos(prev => prev.map(t => t.id === id ? { ...t, status: updated.status } : t));
-    } catch (e) { console.error(e); }
+      toast.success(updated.status === 'completed' ? 'Task completed' : 'Task reopened');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update task');
+    }
   };
 
   const promptDeleteTodo = (todo) => {
@@ -181,9 +186,10 @@ function Dashboard() {
     try {
       await clearTodo(todoToDelete.id);
       setActionableTodos(prev => prev.filter(t => t.id !== todoToDelete.id));
+      toast.success('Task deleted successfully');
     } catch (e) {
       console.error(e);
-      alert("Failed to delete task.");
+      toast.error("Failed to delete task.");
     } finally {
       setIsDeletingTodo(false);
       setTodoToDelete(null);
@@ -200,12 +206,17 @@ function Dashboard() {
         const updated = await updateTodo(realId, { message: msg, type: 'info' });
         setActionableTodos(prev => prev.map(todo => todo.id === editingTodoId ? { ...todo, ...updated } : todo));
         setEditingTodoId(null);
+        toast.success('Task updated');
       } else {
         const created = await addTodo(msg, 'info');
         setActionableTodos(prev => [created, ...prev]);
+        toast.success('Task added successfully');
       }
       setNewTodoText('');
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save task');
+    }
     finally { setTodoLoading(false); }
   };
 
@@ -268,9 +279,10 @@ function Dashboard() {
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
       if (res.todos) setActionableTodos(res.todos);
+      toast.success('Project created successfully');
     } catch (e) {
       console.error("Failed to add project", e);
-      alert("Failed to create project");
+      toast.error("Failed to create project");
     }
   };
 
@@ -283,9 +295,10 @@ function Dashboard() {
       const res = await fetchDashboardData(true, deptParam);
       setData(res.data);
       if (res.todos) setActionableTodos(res.todos);
+      toast.success('Client created successfully');
     } catch (e) {
       console.error("Failed to add client", e);
-      alert("Failed to create client");
+      toast.error("Failed to create client");
     }
   };
 
@@ -295,94 +308,94 @@ function Dashboard() {
   const contextLabel = Array.isArray(selectedDepartments) && selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
   const dynamicKpiData = [
-    { 
-      title: "Total Employee", 
-      value: _metrics?.totalEmployees || 0, 
-      subtext: "Across all departments", 
-      icon: UsersIcon, 
-      color: "text-slate-500", 
-      bg: "bg-slate-50", 
-      border: "border-slate-100", 
-      route: "/info/employees/list", 
-      state: { cardFilter: null, fromDashboard: true, departmentFilter: selectedDepartments } 
+    {
+      title: "Total Employee",
+      value: _metrics?.totalEmployees || 0,
+      subtext: "Across all departments",
+      icon: UsersIcon,
+      color: "text-slate-500",
+      bg: "bg-slate-50",
+      border: "border-slate-100",
+      route: "/info/employees/list",
+      state: { cardFilter: null, fromDashboard: true, departmentFilter: selectedDepartments }
     },
-    { 
-      title: "Billable Headcount", 
-      value: _metrics?.billableHeadcount || 0, 
-      subtext: `out of ${String(_metrics?.totalEmployees || 0)} total`, 
-      icon: UserCheck, 
-      color: "text-blue-500", 
-      bg: "bg-blue-50", 
-      border: "border-blue-100", 
-      route: "/info/employees/list", 
-      state: { cardFilter: 'billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    {
+      title: "Billable Headcount",
+      value: _metrics?.billableHeadcount || 0,
+      subtext: `out of ${String(_metrics?.totalEmployees || 0)} total`,
+      icon: UserCheck,
+      color: "text-blue-500",
+      bg: "bg-blue-50",
+      border: "border-blue-100",
+      route: "/info/employees/list",
+      state: { cardFilter: 'billable', fromDashboard: true, departmentFilter: selectedDepartments }
     },
-    { 
-      title: "Non-Billable Headcount", 
-      value: _metrics?.internalHeadcount || 0, 
-      subtext: "Internal & Shared services", 
-      icon: Activity, 
-      color: "text-emerald-500", 
-      bg: "bg-emerald-50", 
-      border: "border-emerald-100", 
-      route: "/info/employees/list", 
-      state: { cardFilter: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments } 
+    {
+      title: "Non-Billable Headcount",
+      value: _metrics?.internalHeadcount || 0,
+      subtext: "Internal & Shared services",
+      icon: Activity,
+      color: "text-emerald-500",
+      bg: "bg-emerald-50",
+      border: "border-emerald-100",
+      route: "/info/employees/list",
+      state: { cardFilter: 'non-billable', fromDashboard: true, departmentFilter: selectedDepartments }
     },
-    { 
-      title: "Bench Headcount", 
-      value: _metrics?.benchHeadcount || 0, 
-      subtext: "resources currently idle", 
-      icon: UserMinus, 
-      color: "text-rose-500", 
-      bg: "bg-rose-50", 
-      border: "border-rose-100", 
-      route: "/info/employees/list", 
-      state: { cardFilter: 'bench', fromDashboard: true, departmentFilter: selectedDepartments } 
+    {
+      title: "Bench Headcount",
+      value: _metrics?.benchHeadcount || 0,
+      subtext: "resources currently idle",
+      icon: UserMinus,
+      color: "text-rose-500",
+      bg: "bg-rose-50",
+      border: "border-rose-100",
+      route: "/info/employees/list",
+      state: { cardFilter: 'bench', fromDashboard: true, departmentFilter: selectedDepartments }
     },
-    { 
-      title: `${String(contextLabel)} Allocation`, 
-      value: `${_metrics?.companyUtilization || 0}%`, 
-      subtext: "Target 85%", 
-      icon: TrendingUp, 
-      color: "text-emerald-500", 
-      bg: "bg-emerald-50", 
-      border: "border-emerald-100", 
-      route: "/info/allocation", 
-      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true } 
+    {
+      title: `${String(contextLabel)} Allocation`,
+      value: `${_metrics?.companyUtilization || 0}%`,
+      subtext: "Target 85%",
+      icon: TrendingUp,
+      color: "text-emerald-500",
+      bg: "bg-emerald-50",
+      border: "border-emerald-100",
+      route: "/info/allocation",
+      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true }
     },
-    { 
-      title: "Active Clients", 
-      value: data?.executiveCards?.activeClients?.value || 0, 
-      subtext: data?.executiveCards?.activeClients?.change || "Current month", 
-      icon: Building2, 
-      color: "text-blue-600", 
-      bg: "bg-blue-50", 
-      border: "border-blue-100", 
-      route: "/info/client", 
-      state: { showBack: true, fromDashboard: true } 
+    {
+      title: "Active Clients",
+      value: data?.executiveCards?.activeClients?.value || 0,
+      subtext: data?.executiveCards?.activeClients?.change || "Current month",
+      icon: Building2,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "border-blue-100",
+      route: "/info/client",
+      state: { showBack: true, fromDashboard: true }
     },
-    { 
-      title: "Running Projects", 
-      value: data?.executiveCards?.runningProjects?.value || 0, 
-      subtext: data?.executiveCards?.runningProjects?.change || "Active delivery", 
-      icon: Briefcase, 
-      color: "text-amber-500", 
-      bg: "bg-amber-50", 
-      border: "border-amber-100", 
-      route: "/info/projects", 
-      state: { showBack: true, fromDashboard: true } 
+    {
+      title: "Running Projects",
+      value: data?.executiveCards?.runningProjects?.value || 0,
+      subtext: data?.executiveCards?.runningProjects?.change || "Active delivery",
+      icon: Briefcase,
+      color: "text-amber-500",
+      bg: "bg-amber-50",
+      border: "border-amber-100",
+      route: "/info/projects",
+      state: { showBack: true, fromDashboard: true }
     },
-    { 
-      title: "Upcoming Bench (30days)", 
-      value: _metrics?.upcomingBench || 0, 
-      subtext: "Resources roll-off", 
-      icon: Clock, 
-      color: "text-amber-500", 
-      bg: "bg-amber-50", 
-      border: "border-amber-100", 
-      route: "/info/allocation", 
+    {
+      title: "Upcoming Bench (30days)",
+      value: _metrics?.upcomingBench || 0,
+      subtext: "Resources roll-off",
+      icon: Clock,
+      color: "text-amber-500",
+      bg: "bg-amber-50",
+      border: "border-amber-100",
+      route: "/info/allocation",
       hash: "#forecast-bench",
-      state: { showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } 
+      state: { showBack: true, fromDashboard: true, departmentFilter: Array.isArray(selectedDepartments) && selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined }
     }
   ];
 
@@ -462,8 +475,8 @@ function Dashboard() {
         <div className="text-red-500 text-xs font-medium bg-red-50/50 px-4 py-2 rounded-lg border border-red-100/50 max-w-md truncate">
           {error}
         </div>
-        <button 
-          onClick={() => window.location.reload()} 
+        <button
+          onClick={() => window.location.reload()}
           className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95"
         >
           Retry Connection
@@ -687,21 +700,19 @@ function Dashboard() {
                         <div
                           key={todo.id}
                           className={`group relative flex items-start gap-3 p-3 rounded-xl border transition-all duration-200
-                            ${
-                              isDone
-                                ? 'bg-slate-50/60 border-slate-100'
-                                : isSuggestion
+                            ${isDone
+                              ? 'bg-slate-50/60 border-slate-100'
+                              : isSuggestion
                                 ? 'bg-amber-50/40 border-amber-100 hover:border-amber-200'
                                 : isWarning
-                                ? 'bg-rose-50/40 border-rose-100 hover:border-rose-200'
-                                : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-sm'
+                                  ? 'bg-rose-50/40 border-rose-100 hover:border-rose-200'
+                                  : 'bg-white border-slate-200 hover:border-blue-200 hover:shadow-sm'
                             }`}
                         >
                           {/* Left accent line */}
                           {!isDone && (
-                            <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${
-                              isSuggestion ? 'bg-amber-400' : isWarning ? 'bg-rose-400' : 'bg-blue-400'
-                            }`} />
+                            <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${isSuggestion ? 'bg-amber-400' : isWarning ? 'bg-rose-400' : 'bg-blue-400'
+                              }`} />
                           )}
 
                           {/* Checkbox / Icon */}
@@ -713,10 +724,9 @@ function Dashboard() {
                             <button
                               onClick={() => handleToggleTodo(todo.id)}
                               className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200
-                                ${
-                                  isDone
-                                    ? 'bg-emerald-500 border-emerald-500 text-white'
-                                    : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
+                                ${isDone
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
                                 }`}
                             >
                               {isDone && <Check size={11} strokeWidth={3} />}
@@ -737,9 +747,8 @@ function Dashboard() {
                               </div>
                             ) : (
                               <div className="flex flex-col gap-1">
-                                <p className={`text-sm font-semibold leading-snug break-words ${
-                                  isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'
-                                }`}>
+                                <p className={`text-sm font-semibold leading-snug break-words ${isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'
+                                  }`}>
                                   {todo.message || todo.text}
                                 </p>
                                 <div className="flex items-center gap-1.5 flex-wrap">
