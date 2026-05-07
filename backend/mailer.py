@@ -30,14 +30,15 @@ def send_email(to_email, subject, html_body):
             server.login(smtp_user, smtp_password)
             result = server.sendmail(smtp_from, to_email, msg.as_string())
             print(f'[MAILER] Email sent successfully to {to_email}! SMTP response: {result}')
-    except smtplib.SMTPAuthenticationError as e:
-        print(f'[MAILER] SMTP AUTH FAILED: {e}')
     except smtplib.SMTPRecipientsRefused as e:
-        print(f'[MAILER] RECIPIENTS REFUSED (SES sandbox?): {e}')
+        print(f'[MAILER] ERROR: Recipient {to_email} refused by the mail server. (This usually happens in AWS SES Sandbox if the email is not verified).')
+        print(f'[MAILER] SMTP DETAILS: {e}')
+    except smtplib.SMTPAuthenticationError as e:
+        print(f'[MAILER] SMTP AUTH FAILED: Check your SMTP_USER and SMTP_PASS. {e}')
     except smtplib.SMTPException as e:
         print(f'[MAILER] SMTP ERROR: {e}')
     except Exception as e:
-        print(f'[MAILER] UNEXPECTED ERROR: {type(e).__name__}: {e}')
+        print(f'[MAILER] UNEXPECTED ERROR during email send: {type(e).__name__}: {e}')
 
 if __name__ == "__main__":
     try:

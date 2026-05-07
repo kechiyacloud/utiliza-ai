@@ -132,7 +132,8 @@ def send_registration_otp(data: SendRegistrationOtpRequest, bg: BackgroundTasks)
     cur = conn.cursor()
 
     try:
-        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+        # Use LOWER() to ensure case-insensitive matching, which is critical for RBAC consistency
+        cur.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(%s)", (email,))
         if cur.fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists.")
 
@@ -159,6 +160,9 @@ def send_registration_otp(data: SendRegistrationOtpRequest, bg: BackgroundTasks)
             intro="Use the OTP below to complete your Utiliza AI registration. It expires in <strong>10 minutes</strong>.",
             otp=otp,
         )
+        # DEBUG: Log the OTP to console so development can proceed even if email delivery fails.
+        print(f"\n[MAILER DEBUG] Registration OTP for {email}: {otp}\n")
+
         bg.add_task(send_email, email, "Your Utiliza AI Registration OTP", html)
 
         return {"message": "OTP sent to your email."}
@@ -205,7 +209,7 @@ def register_user(data: RegisterRequest):
             raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
 
         cur.execute(
-            "SELECT id FROM users WHERE email = %s",
+            "SELECT id FROM users WHERE LOWER(email) = LOWER(%s)",
             (email,)
         )
         if cur.fetchone():
@@ -260,7 +264,7 @@ def login_user(data: LoginRequest, response: Response):
             SELECT u.id, u.password_hash, COALESCE(r.role_name, 'viewer') AS role_name
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.role_id
-            WHERE u.email = %s
+            WHERE LOWER(u.email) = LOWER(%s)
             """,
             (email,)
         )
@@ -360,17 +364,22 @@ def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
     cur = conn.cursor()
 
     try:
-        cur.execute("SELECT id FROM users WHERE email = %s AND is_active = true", (email,))
+        # Ensure case-insensitive lookup for forgot-password
+        cur.execute("SELECT id, is_active FROM users WHERE LOWER(email) = LOWER(%s)", (email,))
         user = cur.fetchone()
 
         if not user:
             raise HTTPException(status_code=404, detail="This email ID is not registered.")
+        
+        user_id, is_active = user
+        if not is_active:
+             raise HTTPException(status_code=403, detail="This account is inactive. Please contact your administrator.")
 
         otp = str(random.randint(100000, 999999))
         expiry = datetime.utcnow() + timedelta(minutes=10)
 
         cur.execute(
-            "UPDATE users SET reset_otp = %s, reset_otp_expiry = %s WHERE email = %s",
+            "UPDATE users SET reset_otp = %s, reset_otp_expiry = %s WHERE LOWER(email) = LOWER(%s)",
             (otp, expiry, email)
         )
         conn.commit()
@@ -380,6 +389,9 @@ def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
             intro="Use the OTP below to reset your Utiliza AI password. It expires in <strong>10 minutes</strong>.",
             otp=otp,
         )
+        # DEBUG: Log the OTP to console so development can proceed even if email delivery fails.
+        print(f"\n[MAILER DEBUG] Password Reset OTP for {email}: {otp}\n")
+
         bg.add_task(send_email, email, "Your Utiliza AI Password Reset OTP", html)
 
         return {"message": "If that email exists, an OTP has been sent."}
