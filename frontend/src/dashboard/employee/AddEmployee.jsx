@@ -7,7 +7,7 @@ import PhoneInputField from '../../components/PhoneInputField';
 import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
-import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation, checkDuplicateEmployee } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
@@ -121,10 +121,29 @@ const AddEmployee = () => {
     };
 
     const handleShiftTimeChange = (field, value) => {
-        const s  = field === 'start' ? value : shiftStart;
-        const en = field === 'end'   ? value : shiftEnd;
-        if (field === 'start') setShiftStart(value);
-        else setShiftEnd(value);
+        let s = shiftStart;
+        let en = shiftEnd;
+
+        if (field === 'start') {
+            s = value;
+            if (s) {
+                const [h, m] = s.split(':').map(Number);
+                const endH = (h + 9) % 24;
+                en = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                setShiftEnd(en);
+            }
+            setShiftStart(s);
+        } else {
+            en = value;
+            if (en) {
+                const [h, m] = en.split(':').map(Number);
+                const startH = (h - 9 + 24) % 24;
+                s = `${String(startH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                setShiftStart(s);
+            }
+            setShiftEnd(en);
+        }
+
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(shiftPreset || 'Custom', s, en) }));
 
         if (errors.shift) {
@@ -135,7 +154,6 @@ const AddEmployee = () => {
             });
         }
         setIsDirty(true);
-
     };
 
     // Form state
@@ -145,6 +163,7 @@ const AddEmployee = () => {
         employee_name: '',
         email: '',
         phone: '',
+        dialCode: '',
         date_of_birth: '',
         address: '',
         photo_url: '',
@@ -184,6 +203,7 @@ const AddEmployee = () => {
                 phone: source.phone === null || source.phone === undefined 
                     ? (source.phone_number === null || source.phone_number === undefined ? '' : String(source.phone_number))
                     : String(source.phone),
+                dialCode: '',  // Will be set when phone input re-renders
                 date_of_birth: normalizeDate(source.date_of_birth),
                 address: source.address || '',
                 photo_url: source.photo_url || source.profilePic || '',
@@ -383,11 +403,61 @@ const AddEmployee = () => {
             });
         }
         setIsDirty(true);
-
     };
 
-    const handlePhoneChange = (value) => {
-        setFormData(prev => ({ ...prev, phone: value }));
+    const handleBlur = async (e) => {
+        const { name, value } = e.target;
+        if (!value || value.trim() === '') return;
+
+        // Email domain validation
+        if (name === 'email' && value) {
+            if (!value.toLowerCase().endsWith('@clouddestinations.com')) {
+                setErrors(prev => ({
+                    ...prev,
+                    email: 'Only @clouddestinations.com domain is allowed'
+                }));
+                return;
+            }
+        }
+
+        // Fields to check for duplicates
+        const fieldsToCheck = {
+            'email': 'email',
+            'employee_id': 'employee_id',
+            'phone': 'phone'
+        };
+
+        if (fieldsToCheck[name]) {
+            try {
+                let checkValue = value.trim();
+                if (name === 'email') {
+                    checkValue = value.toLowerCase().trim();
+                } else if (name === 'phone' && formData.dialCode) {
+                    // Strip the dialCode prefix from phone number before sending to backend
+                    checkValue = value.startsWith(formData.dialCode) 
+                        ? value.slice(formData.dialCode.length).trim() 
+                        : value.trim();
+                }
+                const result = await checkDuplicateEmployee(fieldsToCheck[name], checkValue, isEditMode ? formData.employee_id : null);
+                
+                if (result.exists) {
+                    setErrors(prev => ({
+                        ...prev,
+                        [name]: `This ${name.replace(/_/g, ' ')} already exists in the system`
+                    }));
+                }
+            } catch (error) {
+                console.error(`Error checking duplicate ${name}:`, error);
+            }
+        }
+    };
+
+    const handlePhoneChange = (value, data) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            phone: value,
+            dialCode: data?.dialCode || ''
+        }));
         setIsDirty(true);
         if (errors.phone) {
             setErrors(prev => {
@@ -608,8 +678,10 @@ const AddEmployee = () => {
             project_id: '',
             project_role: '',
             project_allocation: 0,
+            daily_hours: 0,
             project_start_date: '',
-            project_end_date: ''
+            project_end_date: '',
+            project_tags: 'billable'
         });
     };
 
@@ -639,6 +711,7 @@ const AddEmployee = () => {
         } else {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(formData.email)) newErrors.email = 'Invalid email format';
+            else if (!formData.email.toLowerCase().endsWith('@clouddestinations.com')) newErrors.email = 'Only @clouddestinations.com domain is allowed';
             else if (formData.email.length > 100) newErrors.email = 'Email must be under 100 chars';
         }
 
@@ -678,6 +751,18 @@ const AddEmployee = () => {
         if (!formData.location) newErrors.location = 'Location is required';
         if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
         if (!formData.employee_status) newErrors.employee_status = 'Status is required';
+
+        // Certificate validation: If any certificate is added, it must have a name and a file
+        if (formData.certificates && formData.certificates.length > 0) {
+            const hasInvalidName = formData.certificates.some(cert => !cert.name?.trim());
+            const hasInvalidFile = formData.certificates.some(cert => !cert.file);
+            
+            if (hasInvalidName) {
+                newErrors.certificates = 'Please enter names for all certificates';
+            } else if (hasInvalidFile) {
+                newErrors.certificates = 'Please upload files for all certificates';
+            }
+        }
 
         if (showErrors) setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -792,21 +877,28 @@ const AddEmployee = () => {
                 response = await createEmployee(payload);
             }
 
-            if (response && response.success) {
+            // Check success: backend returns { success: true, employee_id: ... }
+            // Also accept { detail: '...successfully...' } as a fallback for older deployments
+            const isSuccess = response && (
+                response.success === true ||
+                (typeof response.detail === 'string' && response.detail.toLowerCase().includes('successfully'))
+            );
+
+            if (isSuccess) {
                 toast.success(isEditMode ? 'Employee updated successfully' : 'Employee created successfully', { id: toastId });
                 setIsDirty(false); // Reset dirty flag after successful save
                 
                 if (triggerRefresh) triggerRefresh();
                 
                 // Redirect to profile
-                const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : response.employee_id || formData.employee_id;
+                const targetId = response.employee_id || (isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id);
                 if (targetId) {
-                    navigate(`/dashboard/employee/profile/${encodeId(targetId)}`);
+                    navigate(`/info/employee/${encodeId(targetId)}`, { replace: true });
                 } else {
-                    navigate('/dashboard/employee');
+                    navigate('/info/employee', { replace: true });
                 }
             } else {
-                toast.error(response?.message || 'Operation failed', { id: toastId });
+                toast.error(response?.detail || response?.message || 'Operation failed', { id: toastId });
             }
         } catch (error) {
             console.error('Error saving employee:', error);
@@ -833,6 +925,7 @@ const AddEmployee = () => {
                         value={formData.employee_id}
                         onChange={handleInputChange}
                         maxLength={20}
+                        onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         placeholder="CDIN001"
                         required
@@ -867,8 +960,9 @@ const AddEmployee = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         maxLength={100}
+                        onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="john.doe@organization.com"
+                        placeholder="john.doe@clouddestinations.com"
                         required
                     />
                     {errors.email && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.email}</p>}
@@ -878,6 +972,7 @@ const AddEmployee = () => {
                     <PhoneInputField
                         value={formData.phone}
                         onChange={handlePhoneChange}
+                        onBlur={() => handleBlur({ target: { name: 'phone', value: formData.phone } })}
                         error={errors.phone}
                         placeholder="+1 (234) 567-890"
                     />
@@ -1404,6 +1499,12 @@ const AddEmployee = () => {
                 >
                     + Add Certificate
                 </button>
+                {errors.certificates && (
+                    <p className="text-[10px] text-red-600 mt-2 font-bold flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        {errors.certificates}
+                    </p>
+                )}
             </div>
         </div>
     );
@@ -1604,7 +1705,17 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Employee ID:</span> {formData.employee_id || 'N/A'}</div>
                     <div><span className="font-semibold">Name:</span> {formData.employee_name || 'N/A'}</div>
                     <div><span className="font-semibold">Email:</span> {formData.email || 'N/A'}</div>
-                    <div><span className="font-semibold">Phone:</span> {formData.phone || 'N/A'}</div>
+                    <div>
+                        <span className="font-semibold">Phone:</span> 
+                        {formData.dialCode ? (
+                            <span className="inline-flex items-center gap-1 ml-1">
+                                <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold">+{formData.dialCode}</span>
+                                <span>{formData.phone.startsWith(formData.dialCode) ? formData.phone.slice(formData.dialCode.length) : formData.phone}</span>
+                            </span>
+                        ) : (
+                            formData.phone || 'N/A'
+                        )}
+                    </div>
                     <div><span className="font-semibold">Date of Birth:</span> {formData.date_of_birth || 'N/A'}</div>
                     <div><span className="font-semibold">Joining Date:</span> {formData.date_of_joining || 'N/A'}</div>
                 </div>

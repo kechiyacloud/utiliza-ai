@@ -6,7 +6,7 @@ import 'react-phone-input-2/lib/style.css';
  * A reusable phone input component with country code picker.
  * Styled to match the application's design system.
  */
-const PhoneInputField = ({ value, onChange, error, placeholder = "Select phone number" }) => {
+const PhoneInputField = ({ value, onChange, onBlur, error, placeholder = "Select phone number" }) => {
     return (
         <div className="phone-input-container w-full">
             <style>
@@ -73,12 +73,14 @@ const PhoneInputField = ({ value, onChange, error, placeholder = "Select phone n
             <PhoneInput
                 country={'in'}
                 value={value}
-                onChange={(phone) => onChange(phone)}
+                onChange={(phone, data) => onChange(phone, data)}
                 enableSearch={true}
                 placeholder={placeholder}
+                onBlur={onBlur}
                 inputProps={{
                     name: 'phone',
                     required: true,
+                    onBlur: onBlur // Some versions of react-phone-input-2 use inputProps.onBlur
                 }}
                 containerClass="phone-input-wrapper"
             />
