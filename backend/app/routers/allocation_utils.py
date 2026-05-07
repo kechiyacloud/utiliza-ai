@@ -160,8 +160,10 @@ def _fetch_existing_weekly_load(cur, employee_id: str, start_date: date, end_dat
             wa.week_number,
             wa.allocated_hours
         FROM projects_allocation pa
+        JOIN projects pj ON pa.project_id = pj.project_id
         LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
         WHERE pa.employee_id = %s {ignore_clause}
+          AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
     """, tuple(params))
     rows = cur.fetchall()
     weekly_load = {}
@@ -219,10 +221,12 @@ def _capacity_snapshot(cur, employee_ids: list):
     placeholders = ",".join(["%s"] * len(employee_ids))
     cur.execute(f"""
         SELECT employee_id, COALESCE(SUM(allocation_percentage), 0) AS used_pct
-        FROM projects_allocation
-        WHERE employee_id IN ({placeholders})
-          AND (allocation_end_date IS NULL OR allocation_end_date >= CURRENT_DATE)
-        GROUP BY employee_id
+        FROM projects_allocation pa
+        JOIN projects pj ON pa.project_id = pj.project_id
+        WHERE pa.employee_id IN ({placeholders})
+          AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+          AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+        GROUP BY pa.employee_id
     """, tuple(employee_ids))
     data = {}
     for emp_id, used_pct in cur.fetchall():
