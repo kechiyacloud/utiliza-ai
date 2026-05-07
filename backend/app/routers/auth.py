@@ -211,16 +211,9 @@ def register_user(data: RegisterRequest):
         if cur.fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists.")
 
-        # Assign default 'master_admin' role to newly registered users
-        cur.execute("SELECT role_id FROM roles WHERE role_name = 'master_admin'")
-        role_row = cur.fetchone()
-        if not role_row:
-             raise HTTPException(status_code=500, detail="Default role 'master_admin' not found in database.")
-        master_admin_role_id = role_row[0]
-
         cur.execute(
-            "INSERT INTO users (email, password_hash, role_id) VALUES (%s, %s, %s)",
-            (email, password_hash, master_admin_role_id)
+            "INSERT INTO users (email, password_hash) VALUES (%s, %s)",
+            (email, password_hash)
         )
         cur.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
         conn.commit()
