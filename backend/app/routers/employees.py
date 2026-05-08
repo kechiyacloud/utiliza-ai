@@ -1119,8 +1119,8 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
                 INSERT INTO projects_allocation (
                     allocation_id, employee_id, project_id, role_in_project,
                     allocation_percentage, allocation_start_date, allocation_end_date, project_tags
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
-            """, (allocation_id, emp.employee_id, proj.project_id, proj.project_role, proj.project_allocation, proj.project_start_date, proj.project_end_date))
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (allocation_id, emp.employee_id, proj.project_id, proj.project_role, proj.project_allocation, proj.project_start_date, proj.project_end_date, proj.project_tags or 'billable'))
 
         _sync_employee_allocations(cur, [emp.employee_id])
 
