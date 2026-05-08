@@ -44,7 +44,7 @@ const Navbar = () => {
         { icon: PieChart, label: 'Allocations', path: 'allocation', minRole: 'restricted_viewer' },
         { icon: CalendarClock, label: 'Availability', path: 'availability', minRole: 'restricted_viewer' },
         { icon: Building2, label: 'Clients', path: 'client', minRole: 'restricted_viewer' },
-        { icon: BarChart2, label: 'Reports', path: 'settings?tab=reports', minRole: 'viewer' },
+        { icon: BarChart2, label: 'Reports', path: 'reports', minRole: 'viewer' },
     ];
 
     const menuItems = allMenuItems.filter(item => isAtLeast(item.minRole) && canAccessPage(item.path.split('?')[0]));

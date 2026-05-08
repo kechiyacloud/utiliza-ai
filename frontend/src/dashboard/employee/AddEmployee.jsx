@@ -564,6 +564,9 @@ const AddEmployee = () => {
                     fileData: reader.result
                 };
                 setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+                if (errors.certificates) {
+                    setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -573,6 +576,9 @@ const AddEmployee = () => {
         const updatedCerts = [...formData.certificates];
         updatedCerts[index] = { ...updatedCerts[index], name };
         setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+        if (errors.certificates) {
+            setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+        }
     };
 
     const addCertificate = () => {
@@ -1238,12 +1244,13 @@ const AddEmployee = () => {
                         name="employment_type"
                         value={formData.employment_type}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employment_type ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     >
                         {EMPLOYMENT_TYPES.map((type) => (
                             <option key={type} value={type}>{type}</option>
                         ))}
                     </select>
+                    {errors.employment_type && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employment_type}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Location <span className="text-black ml-1">*</span></label>
@@ -1327,7 +1334,7 @@ const AddEmployee = () => {
                         name="employee_status"
                         value={formData.employee_status}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_status ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     >
                         <optgroup label="Auto-calculated (based on projects)">
                             <option value="Bench">Bench</option>
@@ -1976,6 +1983,7 @@ const AddEmployee = () => {
                         <button
                             onClick={() => {
                                 const idx = sections.findIndex(s => s.id === currentSection);
+                                setErrors({});
                                 setCurrentSection(sections[idx - 1].id);
                             }}
                             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
