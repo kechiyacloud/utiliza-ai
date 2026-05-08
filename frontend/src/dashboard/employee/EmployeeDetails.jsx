@@ -120,13 +120,22 @@ const EmployeeDetails = () => {
                 // Extract inner data if nested
                 const sourceData = res.data || res;
 
-                // Filter out projects with status "End" or "Ended" or "Completed"
+                // Filter out projects with status "End" or "Ended" or "Completed" OR if end_date is in the past
                 const activeProjects = [];
                 const completedProjects = [];
-                
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+
                 (sourceData.projects || []).forEach(p => {
                     const s = (p.status || "").toLowerCase();
-                    if (s.includes('end') || s.includes('complet')) {
+                    const rawEndDate = p.end_date || p.allocation_end_date || p.project_end_date;
+                    const pEnd = rawEndDate ? new Date(rawEndDate) : null;
+                    if (pEnd) pEnd.setHours(23, 59, 59, 999); // End of the day
+
+                    const isPast = pEnd && pEnd < now;
+                    const isEndedStatus = s.includes('end') || s.includes('complet');
+
+                    if (isEndedStatus || isPast) {
                         completedProjects.push(p);
                     } else {
                         activeProjects.push(p);
@@ -141,7 +150,7 @@ const EmployeeDetails = () => {
                     name: p.project_name || p.name,
                     value: p.allocation_percentage || p.project_allocation || p.value || 0
                 }));
-                
+
                 const enhancedCompletedProjects = completedProjects.map(p => ({
                     ...p,
                     status: p.status || 'Completed',
@@ -155,7 +164,7 @@ const EmployeeDetails = () => {
                 const currentStatus = sourceData.employee_status || (sourceData.status && sourceData.status.allocated) || 'Bench';
                 const isManual = MANUAL_STATUSES.some(s => currentStatus.toLowerCase().includes(s));
                 const totalAllocation = enhancedProjects.reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0);
-                
+
                 let displayStatus = currentStatus;
                 if (!isManual) {
                     if (totalAllocation >= 81) displayStatus = 'Allocated';
@@ -242,7 +251,7 @@ const EmployeeDetails = () => {
     // Current date for relative calculations
     const TODAY = new Date();
     TODAY.setHours(0, 0, 0, 0);
-    
+
     // Anchor to the Monday of the current week to show only current and future data
     const getMondayOfDate = (d) => {
         const date = new Date(d);
@@ -251,7 +260,7 @@ const EmployeeDetails = () => {
         date.setHours(0, 0, 0, 0);
         return date;
     };
-    
+
     const TIMELINE_START = getMondayOfDate(TODAY);
     const TOTAL_WEEKS = 12; // 90-day window (~3 months)
 
@@ -262,7 +271,7 @@ const EmployeeDetails = () => {
             const d = new Date(TIMELINE_START);
             d.setDate(TIMELINE_START.getDate() + i * 7);
             const monthLabel = d.toLocaleString('default', { month: 'short' }) + " '" + d.getFullYear().toString().slice(-2);
-            
+
             if (monthGroups.length === 0 || monthGroups[monthGroups.length - 1].label !== monthLabel) {
                 monthGroups.push({ label: monthLabel, count: 1, startIndex: i });
             } else {
@@ -307,7 +316,7 @@ const EmployeeDetails = () => {
 
             // If the project status is NOT Ended/Completed, keep it visible even if date passed
             const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
-            
+
             if (eWeekRaw <= 0 && isEndedStatus) {
                 isVisibleInTimeline = false;
             }
@@ -337,9 +346,10 @@ const EmployeeDetails = () => {
         // A project is current if it's currently running (starts today or earlier) 
         // AND if its end date hasn't passed (or it's not marked as Ended/Completed)
         const isEndedStatus = (p.status || "").toLowerCase().includes('end') || (p.status || "").toLowerCase().includes('complet');
-        
+
         const nowWeekOffset = (TODAY.getTime() - TIMELINE_START.getTime()) / (7 * 24 * 60 * 60 * 1000);
-        const isCurrent = sWeekRaw <= nowWeekOffset + 0.01 && (eWeekRaw >= nowWeekOffset - 0.01 || !isEndedStatus);
+        // A project is current if it spans over the current week AND its end date hasn't passed
+        const isCurrent = sWeekRaw <= nowWeekOffset + 0.01 && eWeekRaw >= nowWeekOffset - 0.01;
         const isFuture = sWeekRaw > nowWeekOffset + 0.01;
 
         return {
@@ -415,12 +425,6 @@ const EmployeeDetails = () => {
 
             {/* 1. Top Profile Header */}
             <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
-                {/* Actions */}
-                <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || userData.id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors">Edit</button>
-                    <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors">Delete</button>
-                </div>
-
                 {/* Profile Image */}
                 <div className="flex-shrink-0">
                     <div className="w-24 h-24 rounded-full border-4 border-slate-50 overflow-hidden shadow-sm relative bg-white group">
@@ -439,8 +443,14 @@ const EmployeeDetails = () => {
                 </div>
 
                 {/* Info */}
-                <div className="flex-grow text-center md:text-left">
-                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{userData.name}</h1>
+                <div className="flex-grow text-center md:text-left min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                        <h1 className="text-2xl font-bold text-gray-800 tracking-tight break-words min-w-0">{userData.name}</h1>
+                        <div className="flex items-center justify-center md:justify-end gap-2 shrink-0">
+                            <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || userData.id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors shadow-sm">Edit</button>
+                            <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors shadow-sm">Delete</button>
+                        </div>
+                    </div>
                     <p className="text-sm font-medium text-gray-500 mb-2">{userData.designation}</p>
                     <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
                         <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
@@ -467,10 +477,10 @@ const EmployeeDetails = () => {
                             </a>
                         </div>
                         {!isFieldHidden('employees', 'phone') && !isFieldHidden('employees', 'phone_number') && (
-                        <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
-                            <Phone size={16} />
-                            <span>{userData.phone}</span>
-                        </div>
+                            <div className="flex items-center gap-2 hover:text-blue-600 transition-colors">
+                                <Phone size={16} />
+                                <span>{userData.phone}</span>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -592,12 +602,12 @@ const EmployeeDetails = () => {
                     <div className="h-40 w-full relative" style={{ minHeight: '160px' }}>
                         <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
-                                <Tooltip 
-                                    content={<CustomPieTooltip />} 
-                                    cursor={false} 
+                                <Tooltip
+                                    content={<CustomPieTooltip />}
+                                    cursor={false}
                                     position={{ x: 190, y: 100 }}
                                     allowEscapeViewBox={{ x: true, y: true }}
-                                    wrapperStyle={{ zIndex: 100 }} 
+                                    wrapperStyle={{ zIndex: 100 }}
                                 />
                                 <Pie
                                     data={chartData.filter(item => item.isCurrent)}
@@ -771,8 +781,8 @@ const EmployeeDetails = () => {
                                 {/* Months */}
                                 <div className="grid grid-cols-12 border-b border-slate-200">
                                     {monthGroups.map((mg, idx) => (
-                                        <div 
-                                            key={idx} 
+                                        <div
+                                            key={idx}
                                             className="text-center text-xs font-bold text-slate-700 border-r-2 border-slate-300 last:border-r-0 py-2 bg-slate-50"
                                             style={{ gridColumn: `span ${mg.count}` }}
                                         >
@@ -786,7 +796,7 @@ const EmployeeDetails = () => {
                                         const weekDate = new Date(TIMELINE_START);
                                         weekDate.setDate(TIMELINE_START.getDate() + i * 7);
                                         const isCurrentWeek = TODAY >= weekDate && TODAY < new Date(weekDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                                        
+
                                         // Find which month group this week belongs to to calculate W1, W2, etc.
                                         const mg = [...monthGroups].reverse().find(g => i >= g.startIndex);
                                         const weekNum = i - (mg?.startIndex || 0) + 1;
@@ -809,8 +819,8 @@ const EmployeeDetails = () => {
                             <div className="w-[180px] shrink-0 bg-white sticky left-0 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                 <div className="py-4 space-y-3">
                                     {chartData.filter(p => p.isVisibleInTimeline).length > 0 ? chartData.filter(p => p.isVisibleInTimeline).map((project, idx) => (
-                                        <div 
-                                            key={idx} 
+                                        <div
+                                            key={idx}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 const pid = project.project_id || projects[idx]?.project_id || projects[idx]?.id;
@@ -836,12 +846,12 @@ const EmployeeDetails = () => {
                                 {/* Background Grid Lines */}
                                 <div className="absolute inset-0 grid grid-cols-12 pointer-events-none z-0 min-h-full">
                                     {[...Array(12)].map((_, i) => {
-                                         const mg = [...monthGroups].reverse().find(g => i >= g.startIndex);
-                                         const isMonthEnd = mg && (mg.startIndex + mg.count - 1 === i);
-                                         return (
-                                             <div key={i} className={`border-r ${isMonthEnd ? 'border-slate-300 border-r-2' : 'border-slate-100/60'} h-full last:border-r-0`}></div>
-                                         );
-                                     })}
+                                        const mg = [...monthGroups].reverse().find(g => i >= g.startIndex);
+                                        const isMonthEnd = mg && (mg.startIndex + mg.count - 1 === i);
+                                        return (
+                                            <div key={i} className={`border-r ${isMonthEnd ? 'border-slate-300 border-r-2' : 'border-slate-100/60'} h-full last:border-r-0`}></div>
+                                        );
+                                    })}
                                 </div>
 
                                 {/* Project Bars Rows */}
