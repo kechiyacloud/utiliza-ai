@@ -82,7 +82,7 @@ def assign_role(user_id: int, payload: RoleAssignment):
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="User not found")
 
-        cur.execute("UPDATE users SET role_id = %s WHERE id = %s", (role_id, user_id))
+        cur.execute("UPDATE users SET role_id = %s, sub_role_id = NULL WHERE id = %s", (role_id, user_id))
         conn.commit()
         return {"message": f"Role updated to '{payload.role_name}'"}
     except HTTPException:

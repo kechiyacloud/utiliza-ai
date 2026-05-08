@@ -65,7 +65,7 @@ const SearchableDropdown = ({
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
                     ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : 'border-gray-200 hover:border-gray-300'}`}
             >
-                <span className={`truncate ${selectedItem ? 'text-gray-800 font-semibold' : 'text-gray-400'}`}>
+                <span className={`truncate ${selectedItem ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
                     {selectedItem ? (selectedItem.name || selectedItem.employee_name) : placeholder}
                 </span>
                 <Search size={14} className="text-gray-400 shrink-0" />

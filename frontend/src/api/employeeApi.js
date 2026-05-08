@@ -160,6 +160,14 @@ export const nominateEmployee = async (nominationData) => {
     return res.data;
 };
 
+// Check for duplicate employee data (Email, ID, Phone, etc)
+export const checkDuplicateEmployee = async (field, value, excludeId = null) => {
+    const params = { field, value };
+    if (excludeId) params.exclude_id = excludeId;
+    const res = await api.get('/employees/check-duplicate', { params });
+    return res.data; // { exists: bool, employee_id: string|null }
+};
+
 // Create new employee
 export const createEmployee = async (employeeData, upsert = false) => {
     const res = await api.post(`/employees?upsert=${upsert}`, employeeData);

@@ -141,7 +141,8 @@ const Client = () => {
       await loadData();
     } catch (error) {
       console.error("Failed to delete item", error);
-      alert(`Failed to delete ${type || 'item'} from DB`);
+      const errorMessage = error.response?.data?.detail || `Failed to delete ${type || 'item'} from DB`;
+      alert(errorMessage);
     }
 
     setDeleteModal({ isOpen: false, type: null, item: null });

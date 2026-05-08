@@ -29,6 +29,7 @@ const ResourceHighlights = lazy(() => import('./dashboard/employee/ResourceHighl
 const SkillsSummaryPage = lazy(() => import('./dashboard/employee/SkillsSummaryPage'))
 const UserManagement = lazy(() => import('./dashboard/UserManagement'))
 const TodoPage = lazy(() => import('./dashboard/TodoPage'))
+const Reports = lazy(() => import('./dashboard/Reports'))
 
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -102,6 +103,7 @@ function App() {
               <Route path='skills' element={withSuspense(<SkillsSummaryPage />, 'Loading skills analysis...')} />
               <Route path='WorkStatus' element={withSuspense(<WorkStatus />, 'Loading Status ...')} />
               <Route path='todo' element={withSuspense(<TodoPage />, 'Loading To-Do Board...')} />
+              <Route path='reports' element={withSuspense(<Reports />, 'Loading Reports...')} />
             </Route>
 
             {/* Standalone views without sidebar/layout */}

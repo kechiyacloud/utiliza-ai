@@ -270,123 +270,7 @@ const FeedbackSection = ({ employeeData }) => {
     );
 };
 
-// ─────────────────────────────────────────────
-// Section D — Reports
-// ─────────────────────────────────────────────
 
-const ReportsSection = () => {
-    const [downloading, setDownloading] = useState(null);
-
-    const reports = [
-        {
-            id: 'employees',
-            title: 'Employee Directory',
-            description: 'Full list of employees with their designations, departments, and contact info.',
-            icon: User,
-            endpoint: '/employees/list',
-            fileName: 'Employee_Directory_Report',
-            columns: [
-                { header: 'Name', dataKey: 'name' },
-                { header: 'Email', dataKey: 'email' },
-                { header: 'Department', dataKey: 'department' },
-                { header: 'Designation', dataKey: 'designation' },
-                { header: 'Status', dataKey: 'employee_status' }
-            ]
-        },
-        {
-            id: 'projects',
-            title: 'Projects Overview',
-            description: 'Consolidated list of all active and historical projects with status and timelines.',
-            icon: Briefcase,
-            endpoint: '/projects/list',
-            fileName: 'Projects_Overview_Report',
-            columns: [
-                { header: 'Project Name', dataKey: 'project_name' },
-                { header: 'Client', dataKey: 'client_name' },
-                { header: 'Status', dataKey: 'status' },
-                { header: 'Start Date', dataKey: 'start_date' },
-                { header: 'End Date', dataKey: 'end_date' }
-            ]
-        },
-        {
-            id: 'clients',
-            title: 'Client Roster',
-            description: 'Complete database of clients and associated partners.',
-            icon: Building2,
-            endpoint: '/clients',
-            fileName: 'Client_Roster_Report',
-            columns: [
-                { header: 'Client Name', dataKey: 'client_name' },
-                { header: 'Partner', dataKey: 'partner_name' },
-                { header: 'Location', dataKey: 'location' },
-                { header: 'Contact', dataKey: 'primary_contact' }
-            ]
-        }
-    ];
-
-    const handleDownload = async (report, format) => {
-        const downloadId = `${report.id}-${format}`;
-        setDownloading(downloadId);
-        try {
-            const res = await api.get(report.endpoint);
-            // Handle different API response structures
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-
-            if (format === 'csv') {
-                exportToCSV(data, report.fileName);
-            } else if (format === 'excel') {
-                exportToExcel(data, report.fileName);
-            } else if (format === 'pdf') {
-                await exportToPDF(data, report.columns, report.title, report.fileName);
-            }
-        } catch (err) {
-            console.error(`Export failed for ${report.title}`, err);
-            alert(`Failed to download ${report.title}. Please try again.`);
-        } finally {
-            setDownloading(null);
-        }
-    };
-
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {reports.map((report) => (
-                <div key={report.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col hover:border-CD_Blue/20 transition-all">
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="p-3 rounded-xl bg-slate-50 text-CD_Blue">
-                            <report.icon size={24} />
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-mainTheme text-lg">{report.title}</h3>
-                            <p className="text-sm text-gray-500 line-clamp-1">{report.description}</p>
-                        </div>
-                    </div>
-                    
-                    <div className="mt-auto pt-4 border-t border-gray-50 flex items-center gap-2">
-                        {['csv', 'excel', 'pdf'].map((format) => (
-                            <button
-                                key={format}
-                                disabled={downloading !== null}
-                                onClick={() => handleDownload(report, format)}
-                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all
-                                    ${downloading === `${report.id}-${format}` 
-                                        ? 'bg-slate-100 text-slate-400' 
-                                        : 'bg-slate-50 text-gray-600 hover:bg-mainTheme hover:text-white'
-                                    }`}
-                            >
-                                {downloading === `${report.id}-${format}` ? (
-                                    <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                    <Download size={14} />
-                                )}
-                                {format}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
 
 // ─────────────────────────────────────────────
 // Section E — Data
@@ -544,9 +428,9 @@ const IntegrationSection = () => {
 // ─────────────────────────────────────────────
 
 const ROLE_COLORS = {
-    master_admin:      'bg-purple-100 text-purple-800',
-    editor:            'bg-blue-100 text-blue-800',
-    viewer:            'bg-green-100 text-green-800',
+    master_admin: 'bg-purple-100 text-purple-800',
+    editor: 'bg-blue-100 text-blue-800',
+    viewer: 'bg-green-100 text-green-800',
     restricted_viewer: 'bg-gray-100 text-gray-600',
 };
 
@@ -580,7 +464,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
     const [showForm, setShowForm] = useState(false);
     const [editTarget, setEditTarget] = useState(null);
     const [submitting, setSubmitting] = useState(false);
-    
+
     const [form, setForm] = useState({
         name: '', label: '', description: '', base_role: 'viewer',
         page_access: [],
@@ -800,7 +684,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
                                 </span>
                             </div>
                             <p className="text-sm text-gray-500 mb-4 line-clamp-2 min-h-[40px]">{sr.description || 'No description provided.'}</p>
-                            
+
                             <div className="flex gap-4 mb-4 text-xs font-semibold text-gray-500">
                                 <div className="bg-slate-50 px-2 py-1 rounded border border-slate-100">
                                     {sr.page_access?.length || 0} Pages Restricted
@@ -860,7 +744,13 @@ const AccessControlSection = () => {
         setUpdating(prev => ({ ...prev, [userId]: 'role' }));
         try {
             await api.put(`/users/${userId}/role`, { role_name: roleName });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: roleName } : u));
+            setUsers(prev => prev.map(u => u.id === userId ? {
+                ...u,
+                role_name: roleName,
+                sub_role_id: null,
+                sub_role_name: null,
+                sub_role_label: null
+            } : u));
         } catch (err) {
             alert(err.response?.data?.detail || 'Failed to update role');
         } finally {
@@ -908,7 +798,7 @@ const AccessControlSection = () => {
         <div className="space-y-6 max-w-5xl">
             <div className="flex items-center justify-between">
                 <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-                    {[{id:'users',label:'Users'},{id:'sub-roles',label:'Sub-Roles'}].map(t => (
+                    {[{ id: 'users', label: 'Users' }, { id: 'sub-roles', label: 'Sub-Roles' }].map(t => (
                         <button key={t.id} onClick={() => setAcTab(t.id)}
                             className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all
                                 ${acTab === t.id ? 'bg-white shadow-sm text-mainTheme' : 'text-gray-500 hover:text-mainTheme'}`}>
@@ -1022,13 +912,13 @@ const Settings = () => {
     }, [searchParams, activeTab]);
 
     const TABS = useMemo(() => [
-        { id: 'profile',        label: 'Profile',         icon: User },
-        { id: 'reports',        label: 'Report',          icon: BarChart2 },
-        { id: 'data',           label: 'Data',            icon: Database },
-        { id: 'feedback',       label: 'Feedback',        icon: MessageSquare },
-        { id: 'mcp',            label: 'MCP and Other Integration', icon: SettingsIcon },
-        // ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
-        { id: 'appearance',     label: 'Appearance',      icon: Laptop },
+        { id: 'profile', label: 'Profile', icon: User },
+
+        { id: 'data', label: 'Data', icon: Database },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+        { id: 'mcp', label: 'MCP Integration', icon: SettingsIcon },
+        ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
+        { id: 'appearance', label: 'Appearance', icon: Laptop },
     ], [isAdmin]);
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
@@ -1067,7 +957,7 @@ const Settings = () => {
         setIsExporting(true);
         try {
             console.log("Settings: Fetching employees for export...");
-            const data = await getEmployeeList(true, false, false); 
+            const data = await getEmployeeList(true, false, false);
             console.log("Settings: Received export data, count:", data?.length);
             setExportData(data);
             setShowExportModal(true);
@@ -1081,13 +971,13 @@ const Settings = () => {
 
     const handleSyncAll = async () => {
         if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
-        
+
         setIsSyncing(true);
         try {
             await api.post('/employees/sync-all');
             clearDashboardCache();
             alert("Global data synchronization completed successfully.");
-            window.location.reload(); 
+            window.location.reload();
         } catch (err) {
             console.error("Sync all failed", err);
             alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
@@ -1113,18 +1003,17 @@ const Settings = () => {
                         Settings
                     </button>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     <p className="px-3 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-2">Preferences</p>
                     {TABS.map(({ id, label, icon: Icon }) => (
                         <button
                             key={id}
                             onClick={() => setActiveTab(id)}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                activeTab === id
-                                    ? 'bg-white text-mainTheme shadow-sm border border-gray-100'
-                                    : 'text-gray-500 hover:bg-gray-200/50 hover:text-mainTheme border border-transparent'
-                            }`}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === id
+                                ? 'bg-white text-mainTheme shadow-sm border border-gray-100'
+                                : 'text-gray-500 hover:bg-gray-200/50 hover:text-mainTheme border border-transparent'
+                                }`}
                         >
                             <Icon size={16} className={activeTab === id ? 'text-CD_Blue' : 'text-gray-400'} />
                             {label}
@@ -1139,7 +1028,7 @@ const Settings = () => {
                     <h1 className="text-2xl font-bold text-gray-800 tracking-tight mb-8">
                         {TABS.find(t => t.id === activeTab)?.label || 'Settings'}
                     </h1>
-                    
+
                     {/* Tab content */}
                     {activeTab === 'profile' && (
                         <ProfileSection
@@ -1148,7 +1037,7 @@ const Settings = () => {
                             notLinked={empNotLinked}
                         />
                     )}
-                    {activeTab === 'reports' && <ReportsSection />}
+
                     {activeTab === 'data' && (
                         <DataSection
                             employeeData={employeeData}
@@ -1162,16 +1051,16 @@ const Settings = () => {
                     )}
                     {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
                     {activeTab === 'mcp' && <IntegrationSection />}
-                    {/* {activeTab === 'access-control' && <AccessControlSection />} */}
+                    {activeTab === 'access-control' && <AccessControlSection />}
                     {activeTab === 'appearance' && <PlaceholderSection title="Appearance" />}
                 </div>
             </div>
 
             {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
             {showExportModal && (
-                <ExportPreviewModal 
-                    employees={exportData} 
-                    onClose={() => setShowExportModal(false)} 
+                <ExportPreviewModal
+                    employees={exportData}
+                    onClose={() => setShowExportModal(false)}
                 />
             )}
         </div>

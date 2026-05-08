@@ -65,6 +65,10 @@ function EmployeeMasterList() {
   const [searchQuery, setSearchQuery] = useState(location.state?.search || "");
   const { showArchived, showDeleted } = useEmployees();
 
+  const handleCardClick = (filterType) => {
+    setCardFilter(prev => prev === filterType ? null : filterType);
+  };
+
   // Department chip selector
   const [selectedDepts, setSelectedDepts] = useState(() => {
     const initialDepartment = location.state?.departmentFilter;
@@ -294,7 +298,7 @@ function EmployeeMasterList() {
 
           {/* New Joiners Button */}
           <button
-            onClick={() => setCardFilter('new-joiner')}
+            onClick={() => handleCardClick('new-joiner')}
             className={`flex items-center gap-2.5 px-4 py-2.5 bg-white border rounded-xl transition-all shadow-sm ${cardFilter === 'new-joiner' ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-600 hover:border-green-300'}`}
             title="View New Joiners"
           >
@@ -337,7 +341,7 @@ function EmployeeMasterList() {
           loading={loading}
           error={error}
           isActive={cardFilter === 'billable'}
-          onClick={() => setCardFilter('billable')}
+          onClick={() => handleCardClick('billable')}
         />
         <StatCard
           label="NON-BILLABLE"
@@ -347,7 +351,7 @@ function EmployeeMasterList() {
           loading={loading}
           error={error}
           isActive={cardFilter === 'non-billable'}
-          onClick={() => setCardFilter('non-billable')}
+          onClick={() => handleCardClick('non-billable')}
         />
         <StatCard
           label="TOTAL BENCH"
@@ -357,7 +361,7 @@ function EmployeeMasterList() {
           loading={loading}
           error={error}
           isActive={cardFilter === 'bench'}
-          onClick={() => setCardFilter('bench')}
+          onClick={() => handleCardClick('bench')}
         />
         <StatCard
           label="NOTICE PERIOD"
@@ -367,7 +371,7 @@ function EmployeeMasterList() {
           loading={loading}
           error={error}
           isActive={cardFilter === 'notice'}
-          onClick={() => setCardFilter('notice')}
+          onClick={() => handleCardClick('notice')}
         />
       </div>
 

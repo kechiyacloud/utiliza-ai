@@ -1,0 +1,8 @@
+version: "2"
+authtoken: 3DOULtWSJ01NfFh2A85Y9Q7LxjU_j921wJ7udp7K3wjRHrGC
+
+tunnels:
+  frontend:
+    proto: http
+    addr: host.docker.internal:5174
+    domain: deface-entryway-primary.ngrok-free.dev

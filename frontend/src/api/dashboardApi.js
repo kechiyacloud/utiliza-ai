@@ -64,7 +64,7 @@ export const fetchDashboardData = async (forceUpdate = false, filters = {}) => {
             },
             resourceForecast: forecast.map((f) => ({
                 month: f?.month || "Unknown",
-                totalEmployees: info?.totalEmployees?.value ?? 0,
+                totalEmployees: f?.totalEmployees ?? (info?.totalEmployees?.value ?? 0),
                 allocated: f?.allocations ?? 0
             })),
             highAllocationProjects: highAlloc.map((p) => ({

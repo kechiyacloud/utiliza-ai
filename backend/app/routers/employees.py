@@ -3,9 +3,38 @@ from app.database import get_db_connection, release_db_connection, db_cursor
 from app.rbac_utils import require_min_role, require_role, get_role, strip_fields
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import date
+import re
+from datetime import datetime, date
 import uuid
 import textwrap
+
+def validate_shift_duration(shift_str: Optional[str]) -> bool:
+    """Validates that the shift string contains a duration of exactly 9 hours."""
+    if not shift_str:
+        return True  # If shift is optional, allow empty
+    
+    # Expected format: "Label (HH:MM AM/PM - HH:MM AM/PM)"
+    match = re.search(r'\((\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))\)', shift_str, re.IGNORECASE)
+    if not match:
+        return True  # If it doesn't match the format, we don't enforce 9h yet or it's a legacy format
+    
+    try:
+        start_str = match.group(1).strip().upper()
+        end_str = match.group(2).strip().upper()
+        
+        fmt = "%I:%M %p"
+        start_dt = datetime.strptime(start_str, fmt)
+        end_dt = datetime.strptime(end_str, fmt)
+        
+        # Calculate duration in hours
+        duration = (end_dt - start_dt).total_seconds() / 3600
+        if duration < 0:
+            duration += 24  # Handle overnight shifts
+            
+        # Enforce 9 hours (with a small margin for float precision)
+        return abs(duration - 9.0) < 0.01
+    except Exception:
+        return True # Fallback if parsing fails for any reason
 
 
 def _ensure_employee_columns(cur):
@@ -95,7 +124,7 @@ def _sync_employee_allocations(cur, employee_ids):
             WHERE p.employee_id = ANY(%s)
               AND (pa.allocation_id IS NULL OR (
                   pa.allocation_start_date <= CURRENT_DATE
-                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
               ))
             GROUP BY p.employee_id
@@ -160,9 +189,45 @@ class NominationInput(BaseModel):
     nominator_role: str
     feedback_text: str
     month: str
-
 _require_viewer = require_min_role("restricted_viewer")
 router = APIRouter(dependencies=[Depends(_require_viewer)])
+
+@router.get("/employees/check-duplicate")
+def check_duplicate_employee(
+    field: str = Query(...), 
+    value: str = Query(...), 
+    exclude_id: Optional[str] = Query(None)
+):
+    """Checks if an employee attribute already exists in the database."""
+    with db_cursor() as cur:
+        # Normalize field name to database column
+        col_map = {
+            "email": "email_id",
+            "employee_id": "employee_id",
+            "phone": "phone_number"
+        }
+        
+        col = col_map.get(field.lower())
+        if not col:
+            raise HTTPException(status_code=400, detail="Invalid field for duplicate check")
+            
+        # Case-insensitive check for strings, direct for numeric
+        if col in ["email_id", "employee_id", "employee_name"]:
+            query = f"SELECT employee_id FROM employee_master WHERE LOWER(TRIM({col})) = LOWER(TRIM(%s))"
+        else:
+            # For phone, strip non-digits if needed, but here we assume numeric
+            query = f"SELECT employee_id FROM employee_master WHERE {col} = %s"
+            
+        params = [value]
+        if exclude_id:
+            query += " AND employee_id != %s"
+            params.append(exclude_id)
+            
+        cur.execute(query, tuple(params))
+        match = cur.fetchone()
+        
+        return {"exists": bool(match), "employee_id": match[0] if match else None}
+
 
 @router.get("/employees/count")
 def get_total_employee_count():
@@ -187,10 +252,7 @@ def get_bench_employee_count():
                 LEFT JOIN projects pj ON pa.project_id = pj.project_id
                 WHERE pa.employee_id = m.employee_id 
                   AND pa.allocation_start_date <= CURRENT_DATE
-                  AND (
-                      pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
-                      
-                  )
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
                   AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             ), 0) <= 0
         """)
@@ -286,11 +348,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "    FROM projects_allocation pa "
             "    LEFT JOIN projects pj ON pa.project_id = pj.project_id "
             "    WHERE pa.allocation_start_date <= CURRENT_DATE "
-            "      AND ( "
-            "          pa.allocation_end_date IS NULL "
-            "          OR pa.allocation_end_date >= CURRENT_DATE "
-            "          OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') "
-            "      ) "
+            "      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) "
             "      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') "
             "    GROUP BY pa.employee_id"
             "), "
@@ -434,8 +492,14 @@ def fetch_employee_of_month():
                 m.photo_url,
                 COALESCE(SUM(pa.allocation_percentage), 0) as employee_allocations
             FROM employee_master m
-            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live'))
+            LEFT JOIN projects_allocation pa ON m.employee_id = pa.employee_id 
+            LEFT JOIN projects pj ON pa.project_id = pj.project_id
             WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+              AND (pa.allocation_id IS NULL OR (
+                  pa.allocation_start_date <= CURRENT_DATE
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+              ))
             GROUP BY m.employee_id, m.employee_name, m.role_designation, m.photo_url
             HAVING COALESCE(SUM(pa.allocation_percentage), 0) > 0
             ORDER BY employee_allocations DESC, m.date_of_joining ASC
@@ -673,10 +737,7 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     FROM projects_allocation pa 
                     JOIN projects pj ON pa.project_id = pj.project_id 
                     WHERE pa.allocation_start_date <= CURRENT_DATE 
-                      AND ( 
-                          pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE OR LOWER(pj.project_status) IN ('in progress', 'in-progress', 'active', 'ongoing', 'running', 'live') 
-                           
-                      ) 
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) 
                       AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
                     GROUP BY employee_id 
             ) 
@@ -876,6 +937,10 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
     has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
     has_address = _table_has_column(cur, "employee_master", "address")
 
+    # Shift Duration Validation
+    if not validate_shift_duration(emp.shift):
+        raise HTTPException(status_code=400, detail="Shift duration must be exactly 9 hours")
+
     # 1. Update employee_master
     phone_digits = "".join(filter(str.isdigit, str(emp.phone))) if emp.phone else ""
     phone_numeric = int(phone_digits) if phone_digits else None
@@ -984,7 +1049,7 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
         if cur.fetchone():
             if upsert:
                 _perform_employee_update(cur, emp.employee_id, emp)
-                return {"detail": "Employee updated successfully (Upsert)"}
+                return {"success": True, "detail": "Employee updated successfully (Upsert)", "employee_id": emp.employee_id}
             else:
                 raise HTTPException(status_code=400, detail="Employee ID already exists")
 
@@ -998,6 +1063,10 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
                 status_code=400, 
                 detail=f"Email '{emp.email}' already exists for another Employee ID ({matching_id})"
             )
+
+        # Shift Duration Validation
+        if not validate_shift_duration(emp.shift):
+            raise HTTPException(status_code=400, detail="Shift duration must be exactly 9 hours")
 
         # 1. Insert into employee_master (Standard Create)
         has_dob = _table_has_column(cur, "employee_master", "date_of_birth")
@@ -1050,8 +1119,8 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
                 INSERT INTO projects_allocation (
                     allocation_id, employee_id, project_id, role_in_project,
                     allocation_percentage, allocation_start_date, allocation_end_date, project_tags
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'billable')
-            """, (allocation_id, emp.employee_id, proj.project_id, proj.project_role, proj.project_allocation, proj.project_start_date, proj.project_end_date))
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (allocation_id, emp.employee_id, proj.project_id, proj.project_role, proj.project_allocation, proj.project_start_date, proj.project_end_date, proj.project_tags or 'billable'))
 
         _sync_employee_allocations(cur, [emp.employee_id])
 
@@ -1065,7 +1134,7 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
             if cid:
                 cur.execute("INSERT INTO employee_certificates (employee_id, certificate_id) VALUES (%s, %s)", (emp.employee_id, cid[0]))
 
-        return {"detail": "Employee created successfully"}
+        return {"success": True, "detail": "Employee created successfully", "employee_id": emp.employee_id}
 
 @router.put("/employees/{employee_id}", dependencies=[Depends(require_min_role("editor"))])
 def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
@@ -1081,7 +1150,7 @@ def update_employee(employee_id: str, emp: EmployeeCreateUpdate):
         
         actual_id = row[0]
         _perform_employee_update(cur, actual_id, emp)
-        return {"detail": "Employee updated successfully", "new_id": actual_id}
+        return {"success": True, "detail": "Employee updated successfully", "employee_id": actual_id}
 
 @router.delete("/employees/{employee_id}", dependencies=[Depends(require_min_role("editor"))])
 def delete_employee(employee_id: str, permanent: bool = Query(False)):
