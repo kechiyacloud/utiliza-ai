@@ -102,12 +102,25 @@ const getStatusBadgeStyle = (status, pct) => {
     return { backgroundColor: '#FEF2F2', color: '#991B1B' };
 };
 
+const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+};
 
-const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
+
+
+const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelected, onClick }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const progress = calculateProjectProgress(project);
     return (
-        <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full">
+        <div 
+            onClick={onClick}
+            className={`bg-white border rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all duration-300 ease-out group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full cursor-pointer
+                ${isSelected 
+                    ? 'border-blue-600 shadow-[0_10px_30px_rgba(37,99,235,0.12)] -translate-y-1 ring-4 ring-blue-50 bg-gradient-to-b from-white to-blue-50/20' 
+                    : 'border-slate-100/80 hover:border-blue-500/80 hover:shadow-[0_10px_30px_rgba(37,99,235,0.08)] hover:-translate-y-1 hover:bg-gradient-to-b hover:from-white hover:to-blue-50/10'
+                }`}
+        >
             {/* Action Buttons - Absolute positioned to avoid title overlap */}
             <div className="absolute top-4 right-4 z-10">
                 <div className="relative">
@@ -142,11 +155,18 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
             </div>
 
             <div className="flex items-center gap-3 mb-5 pr-12">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-sm transition-all duration-300 flex-shrink-0
+                    ${isSelected 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
+                    }`}
+                >
                     {project.icon || (project.name?.[0]?.toUpperCase() || '?')}
                 </div>
                 <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">
+                    <h3 className={`text-sm font-bold transition-colors duration-300
+                        ${isSelected ? 'text-blue-700' : 'text-slate-800 group-hover:text-blue-700'}`}
+                    >
                         <TruncatedText text={project.name} maxWidth="100%" />
                     </h3>
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">
@@ -190,14 +210,24 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
+                    <div className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all duration-300
+                        ${isSelected 
+                            ? 'bg-blue-50/40 border-blue-100/80' 
+                            : 'bg-slate-50/80 border-slate-100/50 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
+                        }`}
+                    >
                         <div className="flex items-center gap-1.5 text-slate-500">
                             <Users size={12} />
                             <span className="text-sm font-normal uppercase">Team</span>
                         </div>
                         <p className="text-sm font-normal text-gray-700">{project.resource_count || project.resources || 0} Members</p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1">
+                    <div className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all duration-300
+                        ${isSelected 
+                            ? 'bg-blue-50/40 border-blue-100/80' 
+                            : 'bg-slate-50/80 border-slate-100/50 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
+                        }`}
+                    >
                         <div className="flex items-center gap-1.5 text-slate-500">
                             <Calendar size={12} />
                             <span className="text-sm font-normal uppercase">Type</span>
@@ -232,8 +262,12 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus }) => {
                 )}
 
                 <button
-                    onClick={() => onView(project)}
-                    className="w-full py-2.5 mt-auto bg-slate-50 hover:bg-blue-600 hover:text-white text-gray-600 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-100 hover:border-blue-600 shadow-sm hover:shadow-md active:scale-[0.98]"
+                    onClick={(e) => { e.stopPropagation(); onView(project); }}
+                    className={`w-full py-2.5 mt-auto text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 border shadow-sm active:scale-[0.98]
+                        ${isSelected 
+                            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 hover:shadow-md' 
+                            : 'bg-slate-50 text-gray-600 border-slate-100 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-md'
+                        }`}
                 >
                     View Details
                     <ExternalLink size={14} />
@@ -268,6 +302,7 @@ const ProjectList = ({
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
     const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+    const [selectedCardId, setSelectedCardId] = useState(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -384,18 +419,40 @@ const ProjectList = ({
             // the filter window. Applied client-side as a defensive layer in addition
             // to the backend's matching SQL filter, so the list reacts immediately.
             let matchesDateFilter = true;
-            if (filters?.startDate) {
-                const fStart = new Date(filters.startDate);
-                const pEnd = new Date(project.endDate || project.end_date || '9999-12-31');
-                if (!Number.isNaN(fStart.getTime()) && !Number.isNaN(pEnd.getTime())) {
-                    matchesDateFilter = matchesDateFilter && pEnd >= fStart;
+            const pStartStr = project.startDate || project.start_date;
+            const pEndStr = project.endDate || project.end_date;
+
+            if (filters?.startDate && filters?.endDate) {
+                if (pStartStr && pEndStr) {
+                    const fStart = new Date(filters.startDate);
+                    const fEnd = new Date(filters.endDate);
+                    const pStart = new Date(pStartStr);
+                    const pEnd = new Date(pEndStr);
+                    if (!Number.isNaN(fStart.getTime()) && !Number.isNaN(fEnd.getTime()) && !Number.isNaN(pStart.getTime()) && !Number.isNaN(pEnd.getTime())) {
+                        matchesDateFilter = pStart >= fStart && pEnd <= fEnd;
+                    }
+                } else {
+                    matchesDateFilter = false;
                 }
-            }
-            if (filters?.endDate) {
-                const fEnd = new Date(filters.endDate);
-                const pStart = new Date(project.startDate || project.start_date || '1970-01-01');
-                if (!Number.isNaN(fEnd.getTime()) && !Number.isNaN(pStart.getTime())) {
-                    matchesDateFilter = matchesDateFilter && pStart <= fEnd;
+            } else if (filters?.startDate) {
+                if (pStartStr) {
+                    const fStart = new Date(filters.startDate);
+                    const pStart = new Date(pStartStr);
+                    if (!Number.isNaN(fStart.getTime()) && !Number.isNaN(pStart.getTime())) {
+                        matchesDateFilter = pStart >= fStart;
+                    }
+                } else {
+                    matchesDateFilter = false;
+                }
+            } else if (filters?.endDate) {
+                if (pEndStr) {
+                    const fEnd = new Date(filters.endDate);
+                    const pEnd = new Date(pEndStr);
+                    if (!Number.isNaN(fEnd.getTime()) && !Number.isNaN(pEnd.getTime())) {
+                        matchesDateFilter = pEnd <= fEnd;
+                    }
+                } else {
+                    matchesDateFilter = false;
                 }
             }
 
@@ -536,7 +593,7 @@ const ProjectList = ({
             await axios.put(`/projects/${identifier}`, payload);
             clearDashboardCache(); // Sync dashboard
             if (onRefresh) onRefresh();
-            setIsEditFormOpen(false);
+            // Panel will remain open as requested
         } catch (error) {
             console.error("Failed to update project", error);
             throw error;
@@ -598,7 +655,7 @@ const ProjectList = ({
                     <div className="flex items-center gap-5 shrink-0">
                         <button
                             onClick={() => onViewChange('table')}
-                            className={`text-sm font-bold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tableTitle} ({filteredProjects.length})
                         </button>
@@ -607,7 +664,7 @@ const ProjectList = ({
 
                         <button
                             onClick={() => onViewChange('chart')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Project Status Bar
                         </button>
@@ -616,7 +673,7 @@ const ProjectList = ({
 
                         <button
                             onClick={() => onViewChange('grid')}
-                            className={`text-sm font-medium tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Grid
                         </button>
@@ -628,7 +685,7 @@ const ProjectList = ({
                         <div className="relative group">
                             <button
                                 onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
                             >
                                 <Download size={14} />
                                 Export
@@ -658,7 +715,7 @@ const ProjectList = ({
                             <input
                                 type="text"
                                 placeholder="Search Project"
-                                className="w-full pl-10 pr-4 py-2 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all"
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-semibold placeholder:text-sm placeholder:font-semibold outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all text-slate-800 placeholder:text-slate-400"
                                 value={searchTerm}
                                 onChange={(e) => onSearchChange(e.target.value)}
                             />
@@ -690,10 +747,10 @@ const ProjectList = ({
                                     <>
                                         <button
                                             onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                                            className={`flex items-center gap-1.5 px-4 py-2.5 bg-white border rounded-xl text-sm font-medium transition-all shadow-sm ${sortBy ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
+                                            className={`flex items-center gap-1.5 px-4 py-2.5 bg-white border rounded-xl text-sm font-semibold transition-all shadow-sm ${sortBy ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
                                         >
                                             <span className="flex items-center gap-2">
-                                                {sortBy ? <span>Sort: <span className="font-bold">{activeSortLabel}</span></span> : 'Sort'}
+                                                {sortBy ? <span>Sort: <span className="font-semibold">{activeSortLabel}</span></span> : 'Sort'}
                                             </span>
                                             <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
                                         </button>
@@ -724,7 +781,7 @@ const ProjectList = ({
                         {hasActiveFilters && (
                             <button
                                 onClick={handleClearFilters}
-                                className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all"
+                                className="px-4 py-2.5 text-sm font-semibold bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all shadow-sm"
                             >
                                 Reset
                             </button>
@@ -742,6 +799,8 @@ const ProjectList = ({
                                     <th className="text-center py-5">Status</th>
                                     <th className="text-center py-5">Type</th>
                                     <th className="text-center py-5">Resource</th>
+                                    <th className="text-center py-5">Start Date</th>
+                                    <th className="text-center py-5">End Date</th>
                                     <th className="text-center py-5 px-6">Actions</th>
                                 </tr>
                             </thead>
@@ -757,8 +816,8 @@ const ProjectList = ({
                                                     {project.icon || project.name?.[0]?.toUpperCase()}
                                                 </div>
                                                 <div className="min-w-0 max-w-[200px] sm:max-w-[250px] lg:max-w-[300px]">
-                                                    <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight">
-                                                        <TruncatedText text={project.name} maxWidth="100%" />
+                                                    <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-700 transition-colors tracking-tight">
+                                                        <TruncatedText text={toTitleCase(project.name)} maxWidth="100%" />
                                                     </div>
                                                     <div className="text-sm text-slate-500 font-sans tracking-tight">
                                                         <TruncatedText text={project.project_id || project.id} maxWidth="100%" />
@@ -772,28 +831,29 @@ const ProjectList = ({
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-5 text-center">
-                                            <span
-                                                className="px-4 py-1.5 rounded-full text-xs font-normal uppercase tracking-wider font-sans whitespace-nowrap"
-                                                style={getStatusBadgeStyle(project.status, calculateProjectProgress(project).pct)}
-                                            >
-                                                {formatStatus(project)}
-                                            </span>
+                                        <td className="py-5 text-center text-xs font-semibold text-slate-600">
+                                            {toTitleCase(formatStatus(project))}
                                         </td>
                                         <td className="py-5 text-center">
                                             <span
-                                                className="px-3 py-1.5 rounded-xl text-xs font-normal uppercase tracking-wider border border-slate-100 bg-slate-50 text-slate-600 font-sans"
+                                                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-100 bg-slate-50 text-slate-600 font-sans tracking-wide"
                                             >
-                                                {project.type || 'Unknown'}
+                                                {toTitleCase(project.type || 'Unknown')}
                                             </span>
                                         </td>
 
                                         <td className="py-5 text-center align-middle">
                                             <div className="flex flex-col items-center justify-center">
-                                                <div className="text-slate-800 font-bold text-lg">
+                                                <div className="text-slate-600 font-semibold text-xs">
                                                     {project.resource_count || project.resources || 0}
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="py-5 text-center align-middle font-medium text-slate-600 text-xs font-mono">
+                                            {project.startDate || project.start_date ? (project.startDate || project.start_date).substring(0, 10) : 'TBD'}
+                                        </td>
+                                        <td className="py-5 text-center align-middle font-medium text-slate-600 text-xs font-mono">
+                                            {project.endDate || project.end_date ? (project.endDate || project.end_date).substring(0, 10) : 'TBD'}
                                         </td>
                                         <td className="py-5 px-6 align-middle min-w-[120px]">
                                             <div className="flex justify-center relative">
@@ -843,6 +903,8 @@ const ProjectList = ({
                                 onDelete={setProjectToDelete}
                                 onView={handleViewClick}
                                 formatStatus={formatStatus}
+                                isSelected={selectedCardId === project.id}
+                                onClick={() => setSelectedCardId(selectedCardId === project.id ? null : project.id)}
                             />
                         ))}
                         {filteredProjects.length === 0 && (
@@ -907,7 +969,7 @@ const ProjectList = ({
                             </div>
                         </div>
                         <p className="text-slate-600 mb-8 font-medium border-l-4 border-rose-100 pl-4 py-2">
-                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 uppercase tracking-tight">{projectToDelete.name}</span>? This action cannot be undone and all associated data will be lost.
+                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 uppercase tracking-tight break-all">{projectToDelete.name}</span>? This action cannot be undone and all associated data will be lost.
                         </p>
                         <div className="flex justify-end gap-3">
                             <button

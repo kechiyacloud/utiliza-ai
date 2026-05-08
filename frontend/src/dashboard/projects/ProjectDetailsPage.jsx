@@ -40,6 +40,25 @@ function getMonday(date) {
     return d;
 }
 
+/** Returns the Monday of the ISO week specified by a "YYYY-WW" string. */
+function getMondayFromISOWeek(yearWeekStr) {
+    if (!yearWeekStr) return null;
+    const parts = yearWeekStr.split('-');
+    if (parts.length !== 2) return null;
+    const year = parseInt(parts[0], 10);
+    const week = parseInt(parts[1], 10);
+    if (isNaN(year) || isNaN(week)) return null;
+
+    // Jan 4 is always in ISO week 1.
+    const simple = new Date(year, 0, 4);
+    const dayOfWeek = simple.getDay() || 7;
+    const dayOfISOWeek1Monday = 4 - dayOfWeek + 1; // Monday of week 1
+    const mondayOfTargetWeek = new Date(year, 0, dayOfISOWeek1Monday + (week - 1) * 7);
+    mondayOfTargetWeek.setHours(0, 0, 0, 0);
+    return mondayOfTargetWeek;
+}
+
+
 /** Returns ISO week number (1–53) for a given date. */
 function getISOWeekNumber(date) {
     const d = new Date(date);
@@ -463,7 +482,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
                     {/* Right: Hours Configuration */}
                     <div className="w-full md:w-64 p-4 flex flex-col gap-6 bg-slate-50/50">
                         <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Set Weekly Hours</label>
+                            <label className="text-[10px] font-black text-slate-400  tracking-widest">Set Weekly Hours</label>
                             <div className="grid grid-cols-2 gap-3">
                                 {['w1', 'w2', 'w3', 'w4'].map((wk, i) => (
                                     <div key={wk} className="space-y-1.5">
@@ -485,7 +504,7 @@ const BulkAllocationModal = ({ isOpen, onClose, onConfirm, employees }) => {
 
                         <div className="mt-auto pt-4 border-t border-gray-100 flex flex-col gap-2">
                             <div className="flex justify-between items-center text-[10px] font-bold">
-                                <span className="text-slate-400 uppercase">Selected</span>
+                                <span className="text-slate-400 ">Selected</span>
                                 <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{selectedEmployees.length}</span>
                             </div>
                             <button
@@ -725,8 +744,8 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
                                         <th className="px-4 py-2.5 text-left font-bold text-slate-600">Name</th>
                                         <th className="px-4 py-2.5 text-left font-bold text-slate-600">Role</th>
                                         <th className="px-4 py-2.5 text-left font-bold text-slate-600">Alloc %</th>
-                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Start Date</th>
-                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">End Date</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">Start date</th>
+                                        <th className="px-4 py-2.5 text-left font-bold text-slate-600">End date</th>
                                         <th className="px-4 py-2.5 text-left font-bold text-slate-600">Status</th>
                                     </tr>
                                 </thead>
@@ -956,7 +975,7 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                                     Selected <span className="ml-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">{count}</span>
                                 </h3>
                             </div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Global Allocation %</label>
+                            <label className="block text-[10px] font-black text-slate-400  tracking-widest mb-1">Global Allocation %</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm flex-1">
                                     <input type="number" min="2.5" max="100" value={globalPct}
@@ -998,14 +1017,14 @@ const ImportResourceModal = ({ isOpen, onClose, onAdd, employees, existingEmploy
                                             </button>
                                         </div>
                                         <div className="px-4 pt-3 pb-1">
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                                            <label className="block text-[10px] font-black text-slate-400  tracking-widest mb-1">
                                                 Role <span className="text-blue-400 font-normal normal-case">(auto-assigned)</span>
                                             </label>
                                             <input type="text" value={role} onChange={e => updateRow(emp.employee_id, 'role', e.target.value)}
                                                 className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-slate-50 font-medium" />
                                         </div>
                                         <div className="px-4 pt-2 pb-3">
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Allocation %</label>
+                                            <label className="block text-[10px] font-black text-slate-400  tracking-widest mb-1">Allocation %</label>
                                             <div className="flex items-center gap-2">
                                                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 flex-1">
                                                     <input type="number" min="2.5" max="100" value={empPct}
@@ -1215,6 +1234,17 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         } else if (field === 'allocation_start_date' || field === 'allocation_end_date') {
             setSaveError(''); // Clear previous errors
 
+            if (field === 'allocation_start_date') {
+                if (currentRow.allocation_end_date && value && new Date(value).getTime() > new Date(currentRow.allocation_end_date).getTime()) {
+                    currentRow.allocation_end_date = '';
+                }
+            }
+            if (field === 'allocation_end_date') {
+                if (currentRow.allocation_start_date && value && new Date(value).getTime() < new Date(currentRow.allocation_start_date).getTime()) {
+                    currentRow.allocation_end_date = '';
+                }
+            }
+
             // Allow clearing end date for resources
             if (field === 'allocation_end_date' && !value) {
                 currentRow[field] = value;
@@ -1294,7 +1324,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         if (field === 'allocation_pct') {
             const num = Number(value);
             if (value === '' || isNaN(num) || num < 10 || num > 100) {
-                setSaveError("Allocation must be between 10% and 100%");
+                setSaveError("Allocation percentage must be between 10 and 100.");
                 currentRow.allocation_pct = value;
             } else {
                 setSaveError(""); // Clear error if valid
@@ -1527,7 +1557,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         });
 
         if (hasInvalidAllocation) {
-            setSaveError("Please fix invalid allocation percentages (must be 10% - 100%) before saving.");
+            setSaveError("Allocation percentage must be between 10 and 100.");
             setIsSaving(false);
             return;
         }
@@ -1606,6 +1636,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         return getResourceAllocationPct(row);
     };
 
+    const validResourcesCount = localRows.filter(r => (r.name && r.name.trim() !== '') || r.employee_id).length;
+
     if (localRows.length === 0 && !isEditing) {
         return (
             <div className="p-8 text-center text-gray-400 italic bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
@@ -1632,7 +1664,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
                                 <Users size={14} /> Import Resources
                             </button>
-                            <button onClick={() => setIsDeleteAllModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors">
+                            <button 
+                                onClick={() => setIsDeleteAllModalOpen(true)} 
+                                disabled={validResourcesCount === 0}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                    validResourcesCount === 0 
+                                    ? 'bg-rose-50/50 text-rose-300 cursor-not-allowed border border-rose-100/50' 
+                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                }`}
+                            >
                                 <Trash2 size={14} /> Clear All Resources
                             </button>
                             <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
@@ -1647,7 +1687,12 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     <div className="relative group inline-block">
                         <button
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all shadow-sm"
+                            disabled={validResourcesCount === 0}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                validResourcesCount === 0 
+                                ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
                         >
                             <Download size={14} />
                             Export
@@ -1697,19 +1742,19 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 <table className="min-w-[1200px] text-sm">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[230px]">
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[230px]">
                                 <div className="flex items-center gap-1.5"><Users size={13} /> Resource</div>
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[140px]">Role</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. Start</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Alloc. End</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[100px]">
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[140px]">Role</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. Start</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. End</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[100px]">
                                 <div className="flex flex-col gap-0.5">
                                     <span>Allocation</span>
                                     <span className="font-normal text-slate-400 normal-case text-[10px] leading-tight">(100% = 40h)</span>
                                 </div>
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[120px]">Resource Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Resource Type</th>
                             {visibleWeeks.map((wk) => (
                                 <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${viewMode === 'previous' ? 'bg-rose-50/20' :
                                         viewMode === 'upcoming' ? 'bg-emerald-50/20' :
@@ -1727,8 +1772,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     </div>
                                 </th>
                             ))}
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Total</th>
-                            {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider min-w-[80px]">Actions</th>}
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Total</th>
+                            {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Actions</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -1835,7 +1880,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
                                             {canEditEndDate ? (
-                                                <input type="date" value={row.allocation_end_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                <input type="date" value={row.allocation_end_date || ''} min={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
                                             ) : (
                                                 row.allocation_end_date || '-'
                                             )}
@@ -2008,7 +2053,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     </tbody>
                     <tfoot>
                         <tr className="bg-slate-100 border-t-2 border-slate-200">
-                            <td className="px-4 py-3 font-extrabold text-slate-700 text-xs uppercase tracking-wider" colSpan={5}>
+                            <td className="px-4 py-3 font-extrabold text-slate-700 text-xs  tracking-wider" colSpan={5}>
                                 Total
                             </td>
                             <td></td>{ /* Resource Type placeholder */}
@@ -2266,7 +2311,61 @@ const OngoingProjectInfoCard = ({ project, resources, departments = [], onUpdate
     );
 };
 
-const SkillsSection = ({ project }) => {
+const SkillsSection = ({ project, onUpdate }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [skills, setSkills] = useState(project.skills || []);
+    const [newSkill, setNewSkill] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        setSkills(project.skills || []);
+    }, [project.skills]);
+
+    const handleAddSkill = (e) => {
+        if (e) e.preventDefault();
+        const trimmed = newSkill.trim();
+        if (trimmed && !skills.includes(trimmed)) {
+            setSkills([...skills, trimmed]);
+        }
+        setNewSkill('');
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddSkill();
+        }
+    };
+
+    const handleRemoveSkill = (skillToRemove) => {
+        setSkills(skills.filter(s => s !== skillToRemove));
+    };
+
+    const handleSave = async () => {
+        const pId = project.project_id || project.id;
+        if (!pId) return;
+        setIsSaving(true);
+        try {
+            await axios.put(`/projects/${pId}/details`, {
+                skills: skills
+            });
+            clearDashboardCache(); // Sync dashboard
+            setIsEditing(false);
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            console.error("Failed to save project skills", error);
+            alert("Failed to save changes. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancel = () => {
+        setSkills(project.skills || []);
+        setNewSkill('');
+        setIsEditing(false);
+    };
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full relative group w-full">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
@@ -2274,21 +2373,103 @@ const SkillsSection = ({ project }) => {
                     <Zap size={18} className="text-amber-500" />
                     Project Skills
                 </h4>
-            </div>
-            <div className="flex flex-wrap gap-2">
-                {project.skills && project.skills.length > 0 ? (
-                    project.skills.map((skill, i) => (
-                        <span
-                            key={`${skill}-${i}`}
-                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-100 shadow-sm transition-all hover:bg-white hover:border-blue-200 hover:text-blue-600"
-                        >
-                            {skill}
-                        </span>
-                    ))
-                ) : (
-                    <p className="text-sm text-slate-400 italic">No skills specified for this project.</p>
+                {!isEditing && (
+                    <button 
+                        onClick={() => setIsEditing(true)} 
+                        className="text-gray-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" 
+                        title="Edit Project Skills"
+                    >
+                        <Pencil size={14} />
+                    </button>
                 )}
             </div>
+
+            {isEditing ? (
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Current Skills (Click x to remove)</label>
+                        <div className="flex flex-wrap gap-2 p-2 bg-slate-50 border border-slate-100 rounded-xl min-h-[50px]">
+                            {skills.map((skill, i) => (
+                                <span
+                                    key={`${skill}-${i}`}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100 flex items-center gap-1 shadow-sm"
+                                >
+                                    {skill}
+                                    <button 
+                                        type="button"
+                                        onClick={() => handleRemoveSkill(skill)}
+                                        className="text-blue-400 hover:text-blue-600 p-0.5 rounded-full hover:bg-blue-100/50 transition-colors"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </span>
+                            ))}
+                            {skills.length === 0 && (
+                                <span className="text-xs text-slate-400 italic">No skills added yet.</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Add New Skill</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                placeholder="Type a skill and press Enter or Add"
+                                value={newSkill}
+                                onChange={e => setNewSkill(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                className="flex-1 text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddSkill}
+                                className="px-3.5 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold rounded-lg transition-colors border border-blue-100"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 justify-end mt-4 pt-2 border-t border-gray-50">
+                        <button 
+                            onClick={handleCancel} 
+                            disabled={isSaving}
+                            className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={handleSave} 
+                            disabled={isSaving}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+                        >
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                            Save
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    <div>
+                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Associated Skills</span>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                            {skills && skills.length > 0 ? (
+                                skills.map((skill, i) => (
+                                    <span
+                                        key={`${skill}-${i}`}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-50 text-slate-700 border border-slate-100 shadow-sm transition-all hover:bg-white hover:border-blue-200 hover:text-blue-600"
+                                    >
+                                        {skill}
+                                    </span>
+                                ))
+                            ) : (
+                                <p className="text-sm text-slate-400 italic">No skills specified for this project.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -2384,8 +2565,10 @@ const ProjectHealthCard = ({ project, resources }) => {
                     <span className="text-[10px] font-bold text-indigo-600/70 uppercase tracking-widest">Timeline</span>
                     <CalendarDays size={16} className="text-indigo-500" />
                 </div>
-                <div className="text-sm font-black text-slate-800 truncate">
-                    {timeline}
+                <div className="text-sm font-black text-slate-800 flex items-center justify-start gap-1 flex-wrap">
+                    <span className="font-sans">{startDate}</span>
+                    <span className="mx-1 text-slate-400 font-bold">–</span>
+                    <span className="font-sans">{endDate}</span>
                 </div>
             </div>
 
@@ -2415,7 +2598,9 @@ const ProjectHealthCard = ({ project, resources }) => {
 // ─── Editable Components ──────────────────────────────────────────────────────
 
 const CommercialSection = ({ project, onUpdate }) => {
-    const { isFieldHidden } = usePermissions();
+    const permissions = usePermissions();
+    console.log('[DEBUG] permissions hook returned:', permissions);
+    const isHiddenFieldCheck = typeof permissions?.isFieldHidden === 'function' ? permissions.isFieldHidden : (() => false);
     const [isEditing, setIsEditing] = useState(false);
 
     const [editData, setEditData] = useState({
@@ -2477,7 +2662,7 @@ const CommercialSection = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-fit relative group w-full">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full relative group w-full">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
                 <h4 className="font-bold text-gray-800 flex items-center gap-2">
                     <Briefcase size={18} className="text-blue-500" />
@@ -2497,38 +2682,38 @@ const CommercialSection = ({ project, onUpdate }) => {
             )}
 
             {isEditing ? (
-                <div className="space-y-3">
-                    {!isFieldHidden('project_detail', 'budget') && (
+                <div className="space-y-4">
+                    {!isHiddenFieldCheck('project_detail', 'budget') && (
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Project Budget</label>
-                            <input type="text" value={editData.budget} onChange={e => setEditData({ ...editData, budget: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Project Budget</label>
+                            <input type="text" value={editData.budget} onChange={e => setEditData({ ...editData, budget: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     )}
-                    {!isFieldHidden('project_detail', 'billing_type') && (
+                    {!isHiddenFieldCheck('project_detail', 'billing_type') && (
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Billing Type</label>
-                            <input type="text" value={editData.billingType} onChange={e => setEditData({ ...editData, billingType: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Billing Type</label>
+                            <input type="text" value={editData.billingType} onChange={e => setEditData({ ...editData, billingType: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     )}
-                    {!isFieldHidden('project_detail', 'contract_type') && (
+                    {!isHiddenFieldCheck('project_detail', 'contract_type') && (
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Contract Type</label>
-                            <input type="text" value={editData.contractType} onChange={e => setEditData({ ...editData, contractType: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Contract Type</label>
+                            <input type="text" value={editData.contractType} onChange={e => setEditData({ ...editData, contractType: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     )}
-                    {!isFieldHidden('project_detail', 'revenue_model') && (
+                    {!isHiddenFieldCheck('project_detail', 'revenue_model') && (
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Revenue Model</label>
-                            <input type="text" value={editData.revenueModel} onChange={e => setEditData({ ...editData, revenueModel: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Revenue Model</label>
+                            <input type="text" value={editData.revenueModel} onChange={e => setEditData({ ...editData, revenueModel: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     )}
-                    {!isFieldHidden('project_detail', 'commercial_notes') && (
+                    {!isHiddenFieldCheck('project_detail', 'commercial_notes') && (
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Commercial Notes</label>
-                            <textarea rows={2} value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white resize-none" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Commercial Notes</label>
+                            <textarea rows={2} value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white resize-none" />
                         </div>
                     )}
-                    <div className="flex gap-2 justify-end mt-4 pt-2">
+                    <div className="flex gap-2 justify-end mt-4 pt-2 border-t border-gray-50">
                         <button onClick={handleCancel} className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">Cancel</button>
                         <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                             <Save size={14} /> Save
@@ -2536,37 +2721,37 @@ const CommercialSection = ({ project, onUpdate }) => {
                     </div>
                 </div>
             ) : (
-                <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                        {!isFieldHidden('project_detail', 'budget') && (
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        {!isHiddenFieldCheck('project_detail', 'budget') && (
                             <div>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Project Budget</p>
-                                <p className="font-bold text-slate-800 text-sm">{project.budget || '$0'}</p>
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Project Budget</p>
+                                <p className="font-medium text-slate-700 text-xs">{project.budget || '$0'}</p>
                             </div>
                         )}
-                        {!isFieldHidden('project_detail', 'billing_type') && (
+                        {!isHiddenFieldCheck('project_detail', 'billing_type') && (
                             <div>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Billing Type</p>
-                                <p className="font-bold text-slate-800 text-sm">{project.billing_type || 'Not Set'}</p>
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Billing Type</p>
+                                <p className="font-medium text-slate-700 text-xs">{project.billing_type || 'Not Set'}</p>
                             </div>
                         )}
-                        {!isFieldHidden('project_detail', 'contract_type') && (
+                        {!isHiddenFieldCheck('project_detail', 'contract_type') && (
                             <div>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Contract Type</p>
-                                <p className="font-bold text-slate-800 text-sm">{project.contract_type || 'Not Set'}</p>
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Contract Type</p>
+                                <p className="font-medium text-slate-700 text-xs">{project.contract_type || 'Not Set'}</p>
                             </div>
                         )}
-                        {!isFieldHidden('project_detail', 'revenue_model') && (
+                        {!isHiddenFieldCheck('project_detail', 'revenue_model') && (
                             <div>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Revenue Model</p>
-                                <p className="font-bold text-slate-800 text-sm">{project.revenue_model || 'Not Set'}</p>
+                                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Revenue Model</p>
+                                <p className="font-medium text-slate-700 text-xs">{project.revenue_model || 'Not Set'}</p>
                             </div>
                         )}
                     </div>
-                    {!isFieldHidden('project_detail', 'commercial_notes') && (
-                        <div className="pt-2 border-t border-gray-50">
-                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Commercial Notes</p>
-                            <p className="text-sm font-medium text-slate-600">{project.commercial_notes || 'No notes.'}</p>
+                    {!isHiddenFieldCheck('project_detail', 'commercial_notes') && (
+                        <div className="pt-3 border-t border-gray-50">
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Commercial Notes</p>
+                            <p className="text-xs font-medium text-slate-600">{project.commercial_notes || 'No notes.'}</p>
                         </div>
                     )}
                 </div>
@@ -2631,7 +2816,7 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
     const displayEnd = maxAllocEnd || project.end_date || 'TBD';
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative group w-full">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full relative group w-full">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-50">
                 <h4 className="font-bold text-gray-800 flex items-center gap-2">
                     <Target size={18} className="text-blue-500" />
@@ -2645,34 +2830,34 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
             </div>
 
             {isEditing ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-0.5 block">Objective &amp; Scope</label>
-                        <textarea rows={2} value={editData.objective} onChange={e => setEditData({ ...editData, objective: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white resize-none" />
+                        <label className="text-xs text-slate-400 font-bold mb-1 block">Objective &amp; Scope</label>
+                        <textarea rows={2} value={editData.objective} onChange={e => setEditData({ ...editData, objective: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white resize-none" />
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-0.5 block">Key Deliverables</label>
-                        <input type="text" value={editData.deliverables} onChange={e => setEditData({ ...editData, deliverables: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                        <label className="text-xs text-slate-400 font-bold mb-1 block">Key Deliverables</label>
+                        <input type="text" value={editData.deliverables} onChange={e => setEditData({ ...editData, deliverables: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">Start Date</label>
-                            <input type="date" value={editData.startDate === 'Not Set' ? '' : editData.startDate} onChange={e => setEditData({ ...editData, startDate: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Start Date</label>
+                            <input type="date" value={editData.startDate === 'Not Set' ? '' : editData.startDate} onChange={e => setEditData({ ...editData, startDate: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-0.5 block">End Date</label>
-                            <input type="date" value={editData.endDate === 'TBD' ? '' : editData.endDate} onChange={e => setEditData({ ...editData, endDate: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">End Date</label>
+                            <input type="date" value={editData.endDate === 'TBD' ? '' : editData.endDate} onChange={e => setEditData({ ...editData, endDate: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-0.5 block">Major Milestones</label>
-                        <input type="text" value={editData.milestones} onChange={e => setEditData({ ...editData, milestones: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white" />
+                        <label className="text-xs text-slate-400 font-bold mb-1 block">Major Milestones</label>
+                        <input type="text" value={editData.milestones} onChange={e => setEditData({ ...editData, milestones: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-0.5 block">Timeline Notes</label>
-                        <textarea rows={2} value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} className="w-full text-sm border rounded px-2 py-1 outline-none focus:border-blue-400 bg-white resize-none" />
+                        <label className="text-xs text-slate-400 font-bold mb-1 block">Timeline Notes</label>
+                        <textarea rows={2} value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white resize-none" />
                     </div>
-                    <div className="flex gap-2 justify-end mt-4 pt-2">
+                    <div className="flex gap-2 justify-end mt-4 pt-2 border-t border-gray-50">
                         <button onClick={handleCancel} className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">Cancel</button>
                         <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                             <Save size={14} /> Save
@@ -2680,32 +2865,32 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
                     </div>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                     <div>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Objective &amp; Scope</p>
-                        <p className="font-medium text-sm text-slate-700">{project.objective || 'Not defined.'}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Objective &amp; Scope</p>
+                        <p className="font-medium text-xs text-slate-700">{project.objective || 'Not defined.'}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Key Deliverables</p>
-                        <p className="font-medium text-sm text-slate-700">{project.deliverables || 'No deliverables listed.'}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Key Deliverables</p>
+                        <p className="font-medium text-xs text-slate-700">{project.deliverables || 'No deliverables listed.'}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 py-1.5 border-y border-gray-50">
+                    <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-50">
                         <div>
-                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Start Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{displayStart}</p>
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Start Date</p>
+                            <p className="font-mono text-xs font-bold text-slate-800">{displayStart}</p>
                         </div>
                         <div>
-                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">End Date</p>
-                            <p className="font-mono text-sm font-semibold text-slate-700">{displayEnd}</p>
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">End Date</p>
+                            <p className="font-mono text-xs font-bold text-slate-800">{displayEnd}</p>
                         </div>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Major Milestones</p>
-                        <p className="font-medium text-sm text-slate-700">{project.milestones || 'No milestones listed.'}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Major Milestones</p>
+                        <p className="font-medium text-xs text-slate-700">{project.milestones || 'No milestones listed.'}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Timeline Notes</p>
-                        <p className="font-medium text-sm text-slate-600 italic">{project.timeline_notes || 'No timeline notes.'}</p>
+                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Timeline Notes</p>
+                        <p className="font-medium text-xs text-slate-600 italic">{project.timeline_notes || 'No timeline notes.'}</p>
                     </div>
                 </div>
             )}
@@ -2733,18 +2918,52 @@ const ProjectDetailsPage = () => {
     const [departments, setDepartments] = useState([]);
 
     const allocationStartBoundary = useMemo(() => {
-        const dateValues = [project?.start_date, ...(resources || []).map((r) => r?.allocation_start_date)];
+        const dateValues = [
+            project?.start_date,
+            project?.startDate,
+            project?.start
+        ];
+        (resources || []).forEach((r) => {
+            dateValues.push(r?.allocation_start_date);
+            dateValues.push(r?.start_date);
+            Object.keys(r?.weekly_hours || {}).forEach((weekKey) => {
+                const hours = r.weekly_hours[weekKey];
+                if (hours > 0) {
+                    const monday = getMondayFromISOWeek(weekKey);
+                    if (monday) dateValues.push(monday);
+                }
+            });
+        });
         const parsed = dateValues.map(parseDate).filter(Boolean);
         if (parsed.length === 0) return null;
         return new Date(Math.min(...parsed.map((d) => d.getTime())));
-    }, [project?.start_date, resources]);
+    }, [project, resources]);
 
     const allocationEndBoundary = useMemo(() => {
-        const dateValues = [project?.end_date, ...(resources || []).map((r) => r?.allocation_end_date)];
+        const dateValues = [
+            project?.end_date,
+            project?.endDate,
+            project?.end
+        ];
+        (resources || []).forEach((r) => {
+            dateValues.push(r?.allocation_end_date);
+            dateValues.push(r?.end_date);
+            Object.keys(r?.weekly_hours || {}).forEach((weekKey) => {
+                const hours = r.weekly_hours[weekKey];
+                if (hours > 0) {
+                    const monday = getMondayFromISOWeek(weekKey);
+                    if (monday) {
+                        const sunday = new Date(monday);
+                        sunday.setDate(monday.getDate() + 6);
+                        dateValues.push(sunday);
+                    }
+                }
+            });
+        });
         const parsed = dateValues.map(parseDate).filter(Boolean);
         if (parsed.length === 0) return null;
         return new Date(Math.max(...parsed.map((d) => d.getTime())));
-    }, [project?.end_date, resources]);
+    }, [project, resources]);
 
     const visibleWeeks = useMemo(() => {
         return getViewWeeks(viewMode, allocationStartBoundary, allocationEndBoundary);
@@ -2832,7 +3051,7 @@ const ProjectDetailsPage = () => {
         try {
             const response = await axios.put(`/projects/${id}`, payload);
             console.log('Project Update API Response:', response.data);
-            setIsEditPanelOpen(false);
+            // Panel will remain open as requested
             loadProjectData();
         } catch (error) {
             console.error('Project Update Error:', error);
@@ -2989,7 +3208,7 @@ const ProjectDetailsPage = () => {
                             <CommercialSection project={project} onUpdate={loadProjectData} />
                         </div>
                         <div key={`skills-${project.project_id || project.id}`}>
-                            <SkillsSection project={project} />
+                            <SkillsSection project={project} onUpdate={loadProjectData} />
                         </div>
                     </div>
                 </div>
@@ -3012,24 +3231,24 @@ const ProjectDetailsPage = () => {
                             </div>
                             <div>
                                 <h3 className="text-2xl font-black text-slate-900 leading-tight">Delete Project</h3>
-                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">Irreversible Action</p>
+                                <p className="text-slate-400 text-xs font-bold  tracking-widest mt-0.5">Irreversible Action</p>
                             </div>
                         </div>
                         <p className="text-slate-600 mb-8 font-medium border-l-4 border-rose-100 pl-4 py-2">
-                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 uppercase tracking-tight">{project.project_name || project.name}</span>? This action cannot be undone and all associated data will be lost.
+                            Are you absolutely sure you want to delete <span className="font-black text-slate-900 tracking-tight break-all">{project.project_name || project.name}</span>? This action cannot be undone and all associated data will be lost.
                         </p>
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => setIsDeleteConfirmOpen(false)}
                                 disabled={isDeleting}
-                                className="px-6 py-3 text-slate-500 font-bold uppercase tracking-widest text-[10px] hover:bg-slate-50 rounded-2xl transition-all"
+                                className="px-6 py-3 text-slate-500 font-bold  tracking-widest text-[10px] hover:bg-slate-50 rounded-2xl transition-all"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleProjectDelete}
                                 disabled={isDeleting}
-                                className="px-6 py-3 bg-rose-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center gap-2"
+                                className="px-6 py-3 bg-rose-600 text-white font-black  tracking-widest text-[10px] rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center gap-2"
                             >
                                 {isDeleting ? (
                                     <><Loader2 size={14} className="animate-spin" /> Deleting...</>

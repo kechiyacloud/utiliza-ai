@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Plus, Save, Trash2, Building, Users, Search, Pencil, AlertCircle, Check, ChevronDown } from 'lucide-react';
 import axios from '../../api/axios';
+import { toast } from 'react-hot-toast';
 import SearchableDropdown from '../../components/SearchableDropdown';
 import { fetchProjectDepartments } from '../../api/projectsApi';
 import {
@@ -69,7 +70,7 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                         </p>
                     ) : (
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{entityLabel} Name</label>
+                            <label className="text-xs font-bold text-gray-500  tracking-wider">{entityLabel} Name</label>
                             <input
                                 ref={inputRef}
                                 type="text"
@@ -114,6 +115,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const [partnerClients, setPartnerClients] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [saveError, setSaveError] = useState('');
+    const [saveSuccess, setSaveSuccess] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [entityError, setEntityError] = useState('');
     const [initialFormData, setInitialFormData] = useState(null);
@@ -139,12 +141,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     const [availableSkills, setAvailableSkills] = useState([]);
     const [isEntitiesLoading, setIsEntitiesLoading] = useState(false);
 
-    // ——— Toast State ———
-    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-    const showToast = (message, type = 'success') => {
-        setToast({ show: true, message, type });
-        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
-    };
+    const [skillError, setSkillError] = useState('');
+    const [isAddingSkill, setIsAddingSkill] = useState(false);
+    const [showNewSkillInput, setShowNewSkillInput] = useState(false);
+    const [newSkillText, setNewSkillText] = useState('');
 
     async function loadEntities() {
         setEntityError('');
@@ -166,6 +166,82 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             setIsEntitiesLoading(false);
         }
     }
+
+    const normalizeSkillValue = (skill) => String(skill || '').trim().replace(/\s+/g, ' ');
+    const normalizeSkillToken = (skill) => normalizeSkillValue(skill).toLowerCase();
+
+    const skillExistsInList = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).some((skill) => normalizeSkillToken(skill) === targetToken);
+    };
+
+    const findMatchingSkill = (skillsList, targetSkill) => {
+        const targetToken = normalizeSkillToken(targetSkill);
+        return (skillsList || []).find((skill) => normalizeSkillToken(skill) === targetToken) || null;
+    };
+
+    const addSkillToForm = async (rawSkillValue) => {
+        const normalizedSkill = normalizeSkillValue(rawSkillValue);
+        if (!normalizedSkill) {
+            setSkillError('Skill cannot be empty.');
+            return;
+        }
+
+        if (skillExistsInList(formData.skills, normalizedSkill)) {
+            setSkillError(`"${normalizedSkill}" is already added.`);
+            return;
+        }
+
+        let skillToAdd = findMatchingSkill(availableSkills, normalizedSkill) || normalizedSkill;
+        const skillMissingInDirectory = !findMatchingSkill(availableSkills, normalizedSkill);
+
+        if (skillMissingInDirectory) {
+            setIsAddingSkill(true);
+            try {
+                const response = await axios.post('/projects/skills/ensure', { skill_name: normalizedSkill });
+                const persistedSkill = normalizeSkillValue(response?.data?.skill_name) || normalizedSkill;
+                skillToAdd = persistedSkill;
+                setAvailableSkills((prev) => {
+                    if (skillExistsInList(prev, persistedSkill)) return prev;
+                    return [...prev, persistedSkill].sort((left, right) => left.localeCompare(right));
+                });
+            } catch (error) {
+                const message =
+                    error?.response?.data?.detail ||
+                    error?.response?.data?.message ||
+                    error?.message ||
+                    'Failed to add skill.';
+                setSkillError(message);
+                setIsAddingSkill(false);
+                return;
+            }
+            setIsAddingSkill(false);
+        }
+
+        setFormData((prev) => {
+            if (skillExistsInList(prev.skills, skillToAdd)) return prev;
+            return { ...prev, skills: [...prev.skills, skillToAdd] };
+        });
+        setSkillError('');
+    };
+
+    const handleSkillRemove = (skillToRemove) => {
+        setFormData((prev) => ({
+            ...prev,
+            skills: prev.skills.filter((skill) => normalizeSkillToken(skill) !== normalizeSkillToken(skillToRemove)),
+        }));
+        setSkillError('');
+    };
+
+    const handleCreateNewSkill = async () => {
+        const trimmed = newSkillText.trim();
+        if (!trimmed) {
+            setSkillError('Skill cannot be empty.');
+            return;
+        }
+        await addSkillToForm(trimmed);
+        setNewSkillText('');
+    };
 
     const filteredClients = useMemo(() => {
         const isPartnerClientFlow = formData.type === 'External' && formData.clientType === 'Partner Client';
@@ -219,11 +295,22 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     };
 
     useEffect(() => {
-        // Re-initialise whenever the panel opens OR the project changes.
-        // This ensures that any unsaved edits (e.g. a cancelled date change)
-        // are always discarded when the user reopens the Edit panel.
-        if (isOpen && project) {
+        if (isOpen) {
+            setSaveSuccess('');
             setSaveError('');
+            setEntityError('');
+            setIsSaving(false);
+            setShowNewSkillInput(false);
+            setNewSkillText('');
+            setSkillError('');
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        // Re-initialise whenever the panel opens OR the project changes.
+        // This ensures that any unsaved edits are discarded when reopened
+        // or successfully saved.
+        if (isOpen && project) {
             const projectType = normalizeTypeForForm(project.type || project.project_type);
             const isPartner = projectType === 'Partner';
             const data = {
@@ -269,9 +356,24 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         return diffDays / 7;
     }, [project]);
 
+    const hasChanges = useMemo(() => {
+        if (!initialFormData || !formData) return false;
+        return Object.keys(formData).some(key => {
+            if (Array.isArray(formData[key]) && Array.isArray(initialFormData[key])) {
+                if (formData[key].length !== initialFormData[key].length) return true;
+                for (let i = 0; i < formData[key].length; i++) {
+                    if (formData[key][i] !== initialFormData[key][i]) return true;
+                }
+                return false;
+            }
+            return formData[key] !== initialFormData[key];
+        });
+    }, [formData, initialFormData]);
+
     if (!isOpen) return null;
 
     const handleChange = (e) => {
+        setSaveSuccess('');
         const { name, value } = e.target;
         if (name === 'type') {
             const isClientType = value === 'External';
@@ -330,10 +432,12 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     };
 
     const handleClientSelect = (item) => {
+        setSaveSuccess('');
         setFormData(prev => ({ ...prev, clientId: String(item.id), client: item.name }));
     };
 
     const handlePartnerSelect = (item) => {
+        setSaveSuccess('');
         setFormData(prev => ({
             ...prev,
             partnerId: String(item.id),
@@ -344,24 +448,32 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
     };
 
 
+
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaveError('');
 
         if (!initialFormData) return;
 
+        if (!hasChanges) {
+            toast('No changes detected', { icon: 'ℹ️' });
+            setIsSaving(false);
+            onClose(); 
+            return;
+        }
+
         // Detect changed fields to support partial updates
         const changedFields = {};
         Object.keys(formData).forEach(key => {
-            if (formData[key] !== initialFormData[key]) {
+            if (Array.isArray(formData[key]) && Array.isArray(initialFormData[key])) {
+                if (formData[key].length !== initialFormData[key].length || !formData[key].every((v, i) => v === initialFormData[key][i])) {
+                    changedFields[key] = formData[key];
+                }
+            } else if (formData[key] !== initialFormData[key]) {
                 changedFields[key] = formData[key];
             }
         });
-
-        if (Object.keys(changedFields).length === 0) {
-            onClose(); // Nothing changed
-            return;
-        }
 
         // Validations - only validate if the relevant field is changed or critical
         if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
@@ -369,7 +481,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
             return;
         }
 
-        if (!(formData.departmentId || '').trim()) {
+        if (!formData.departmentId || String(formData.departmentId).trim() === '') {
             setSaveError('Department is required.');
             return;
         }
@@ -413,18 +525,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         }
 
         setIsSaving(true);
-        console.log('Edit Project Submission Payload:', payload);
+        console.log('Edit project Submission Payload:', payload);
         try {
             await onSave(payload);
-            showToast('Project updated successfully!', 'success');
-            // Delay closing to let user see success toast
-            setTimeout(() => {
-                onClose();
-            }, 1500);
+            setSaveSuccess('Project updated successfully');
+            setIsSaving(false);
+            // Panel remains open automatically
         } catch (error) {
             const msg = error?.response?.data?.detail || 'Failed to save project.';
             setSaveError(msg);
-            showToast(msg, 'error');
+            toast.error(msg);
             setIsSaving(false);
         }
     };
@@ -471,7 +581,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                     await loadEntities();
                     setFormData(prev => ({ ...prev, partnerId: String(created.id), partnerName: created.name }));
                 }
-                showToast && showToast(`${isClient ? 'Client' : 'Partner'} added successfully`, 'success');
+                toast.success(`${isClient ? 'Client' : 'Partner'} added successfully`);
             } else if (modal.mode === 'edit') {
                 if (isClient) {
                     const updated = await updateSimpleClient(selectedId, trimmedName);
@@ -482,7 +592,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                     await loadEntities();
                     setFormData(prev => ({ ...prev, partnerName: updated.name }));
                 }
-                showToast && showToast(`${isClient ? 'Client' : 'Partner'} updated successfully`, 'success');
+                toast.success(`${isClient ? 'Client' : 'Partner'} updated successfully`);
             } else if (modal.mode === 'delete') {
                 if (isClient) {
                     await deleteSimpleClient(selectedId);
@@ -503,26 +613,13 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
     return (
         <>
-            {/* Toast Notification */}
-            {toast.show && (
-                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className={`px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border ${toast.type === 'error'
-                            ? 'bg-red-500 border-red-400 text-white shadow-red-200'
-                            : 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-200'
-                        }`}>
-                        {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
-                        <span className="text-xs font-bold whitespace-nowrap">{toast.message}</span>
-                    </div>
-                </div>
-            )}
-
             <div className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
             <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
                 <div className="h-full flex flex-col">
                     <div className="flex justify-between items-center p-6 border-b border-gray-100">
                         <div>
-                            <h2 className="text-xl font-bold text-gray-800">Edit Project</h2>
+                            <h2 className="text-xl font-bold text-gray-800">Edit project</h2>
                             <p className="text-xs text-gray-400">ID: {project?.id || project?.project_id}</p>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
@@ -532,6 +629,12 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                     <div className="flex-1 overflow-y-auto p-6">
                         <form id="edit-project-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+                            {saveSuccess && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 flex items-center gap-2">
+                                    <Check size={16} />
+                                    {saveSuccess}
+                                </div>
+                            )}
                             {saveError && (
                                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                                     {saveError}
@@ -544,7 +647,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             )}
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Project Name</label>
+                                <label className="text-xs font-bold text-gray-500 ">Project name <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     name="name"
@@ -556,7 +659,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Project Type</label>
+                                <label className="text-xs font-bold text-gray-500 ">Project type</label>
                                 <select
                                     name="type"
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-700"
@@ -570,7 +673,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {formData.type === 'External' && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Client Type</label>
+                                    <label className="text-xs font-bold text-gray-500 ">Client type</label>
                                     <select
                                         name="clientType"
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-700"
@@ -585,7 +688,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {formData.type === 'External' && formData.clientType === 'Partner Client' && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Partner</label>
+                                    <label className="text-xs font-bold text-gray-500 ">Partner</label>
                                     <div className="flex flex-col gap-2">
                                         <div className="flex gap-2">
                                             <SearchableDropdown
@@ -603,11 +706,15 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         </div>
                                         <div className="flex gap-2 justify-end">
                                             <button type="button" disabled={!formData.partnerId} onClick={() => openModal('edit', 'partner')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold  tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                            <button 
+                                                type="button" 
+                                                disabled={!formData.partnerId || (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0)} 
+                                                onClick={() => openModal('delete', 'partner')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold  tracking-wider transition-colors flex items-center gap-1 ${!formData.partnerId || (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0) ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                                                title={formData.partnerId && (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0) ? "Cannot delete partner with linked projects" : "Delete Partner"}>
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -617,7 +724,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {(formData.type === 'External') && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Client</label>
+                                    <label className="text-xs font-bold text-gray-500 ">Client</label>
                                     <div className="flex flex-col gap-2">
                                         <div className="flex gap-2">
                                             <SearchableDropdown
@@ -635,11 +742,16 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         </div>
                                         <div className="flex gap-2 justify-end">
                                             <button type="button" disabled={!formData.clientId} onClick={() => openModal('edit')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold  tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete')}
-                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                            <button 
+                                                type="button" 
+                                                disabled={!formData.clientId || (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0)} 
+                                                onClick={() => openModal('delete')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold  tracking-wider transition-colors flex items-center gap-1 ${!formData.clientId || (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0) ? 'bg-gray-50 text-gray-400 opacity-50 cursor-not-allowed border border-gray-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                                                title={formData.clientId && (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0) ? "Cannot delete client with linked projects" : "Delete Client"}
+                                            >
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -649,7 +761,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {/* Department — for ALL project types */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
+                                <label className="text-xs font-bold text-gray-500">
                                     Department <span className="text-red-500">*</span>
                                 </label>
                                 <div className="flex gap-2">
@@ -665,7 +777,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             </div>
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
+                                <label className="text-xs font-bold text-gray-500 ">Status</label>
                                 <select
                                     name="status"
                                     className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -680,7 +792,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {formData.type === 'External' && (
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">SOW Status</label>
+                                    <label className="text-xs font-bold text-gray-500 ">SOW status</label>
                                     <select
                                         name="subStatus"
                                         className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -695,7 +807,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                             )}
 
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Billable</label>
+                                <label className="text-xs font-bold text-gray-500 ">Billable</label>
                                 <select
                                     name="billable"
                                     className={`p-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium 
@@ -711,7 +823,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1">
-                                    <label className={`text-xs font-bold uppercase ${hasProjectStarted ? 'text-blue-600' : 'text-gray-500'}`}>
+                                    <label className={`text-xs font-bold  ${hasProjectStarted ? 'text-blue-600' : 'text-gray-500'}`}>
                                         Start Date {hasProjectStarted && <span className="text-[10px] lowercase font-medium ml-1">(Started)</span>}
                                     </label>
                                     <input
@@ -722,16 +834,14 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         onChange={handleChange}
                                         title={hasProjectStarted ? "Project has already started. Be careful when updating the start date." : ""}
                                     />
-                                    {hasProjectStarted && (
-                                        <p className={`text-[10px] mt-1 font-semibold ${startedWeeksAgo > 2 ? 'text-red-500' : 'text-blue-500'}`}>
-                                            {startedWeeksAgo > 2
-                                                ? "⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)"
-                                                : "ℹ️ Project has started. Any change will affect allocations."}
+                                    {hasProjectStarted && startedWeeksAgo > 2 && (
+                                        <p className="text-[10px] mt-1 font-semibold text-red-500">
+                                            ⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)
                                         </p>
                                     )}
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">End Date</label>
+                                    <label className="text-xs font-bold text-gray-500 ">End date</label>
                                     <input
                                         type="date"
                                         name="endDate"
@@ -745,26 +855,64 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
 
                             {/* SKILLS MULTI-SELECT */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Required Skills</label>
+                                <label className="text-xs font-bold text-gray-500  tracking-wider">Required skills</label>
                                 <div className="flex flex-col gap-3">
                                     <div className="flex gap-2">
                                         <SearchableDropdown
                                             items={availableSkills.map(s => ({ id: s, name: s }))}
                                             selectedId={null}
-                                            onSelect={(item) => {
-                                                let skillName = item.name;
-                                                if (skillName.startsWith('Add "') && skillName.endsWith('"')) {
-                                                    skillName = skillName.substring(5, skillName.length - 1);
-                                                }
-                                                if (!formData.skills.includes(skillName)) {
-                                                    setFormData(prev => ({ ...prev, skills: [...prev.skills, skillName] }));
-                                                }
-                                            }}
-                                            placeholder="Search or add skills..."
+                                            onSelect={(item) => { void addSkillToForm(item.name); }}
+                                            onCreateNew={(skillText) => { void addSkillToForm(skillText); }}
+                                            placeholder={isAddingSkill ? 'Adding skill…' : 'Search or type to add a skill'}
                                             label="skills"
-                                            noResultsText="Skill not found. Press enter to add."
+                                            disabled={isAddingSkill}
                                         />
                                     </div>
+                                    <div className="flex flex-col gap-2 mt-1">
+                                        {showNewSkillInput ? (
+                                            <div className="flex gap-2 items-center animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter new skill"
+                                                    value={newSkillText}
+                                                    onChange={(e) => setNewSkillText(e.target.value)}
+                                                    className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white focus:border-blue-300 transition-all w-48"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            void handleCreateNewSkill();
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCreateNewSkill}
+                                                    disabled={isAddingSkill}
+                                                    className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50"
+                                                >
+                                                    {isAddingSkill ? 'Adding...' : 'Add'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowNewSkillInput(false); setNewSkillText(''); setSkillError(''); }}
+                                                    className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowNewSkillInput(true)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors self-start mt-1 border border-blue-100/50"
+                                            >
+                                                <Plus size={14} /> Add Skill
+                                            </button>
+                                        )}
+                                    </div>
+                                    {skillError && (
+                                        <p className="text-xs text-red-600 font-medium">{skillError}</p>
+                                    )}
                                     {formData.skills.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {formData.skills.map((skill) => (
@@ -772,7 +920,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                                     {skill}
                                                     <button
                                                         type="button"
-                                                        onClick={() => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))}
+                                                        onClick={() => handleSkillRemove(skill)}
                                                         className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
                                                     >
                                                         <X size={12} />
@@ -797,8 +945,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                         <button
                             type="submit"
                             form="edit-project-form"
-                            disabled={isSaving}
-                            className={`px-6 py-2.5 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all flex items-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={isSaving || !hasChanges}
+                            className={`px-6 py-2.5 rounded-xl text-white font-bold text-sm transition-all flex items-center gap-2 
+                                ${isSaving || !hasChanges ? 'bg-blue-400 opacity-60 cursor-not-allowed shadow-none' : 'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-200'}`}
                         >
                             {isSaving ? (
                                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Saving...</>

@@ -322,6 +322,15 @@ def delete_client(client_id: str):
         _ensure_clients_table(cur)
         schema = _detect_clients_schema(cur)
 
+        # Check for linked projects
+        if schema == "modern":
+            cur.execute("SELECT 1 FROM projects WHERE client_id = %s LIMIT 1", (client_id,))
+        else:
+            cur.execute("SELECT 1 FROM projects WHERE client_id = %s LIMIT 1", (client_id,))
+        
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Cannot delete client while projects are linked to it.")
+
         if schema == "modern":
             cur.execute("SELECT 1 FROM clients WHERE id = %s", (client_id,))
             if not cur.fetchone():
@@ -338,8 +347,7 @@ def delete_client(client_id: str):
         conn.commit()
         return {"detail": "Client deleted successfully"}
     except HTTPException:
-
-
+        conn.rollback()
         raise
     except Exception as e:
         conn.rollback()
@@ -362,18 +370,30 @@ def list_simple_clients():
         has_partner = bool(cur.fetchone())
         
         if schema == "modern":
-            if has_partner:
-                cur.execute("SELECT id::text, name, partner_id FROM clients ORDER BY name")
-            else:
-                cur.execute("SELECT id::text, name, NULL AS partner_id FROM clients ORDER BY name")
+            cur.execute("""
+                SELECT c.id::text, c.name, c.partner_id::text,
+                       (SELECT JSON_AGG(p.project_id) FROM projects p WHERE p.client_id = c.id::text) as projects
+                FROM clients c 
+                ORDER BY c.name
+            """)
         else:
-            if has_partner:
-                cur.execute("SELECT client_id, client_name, partner_id FROM clients ORDER BY client_name")
-            else:
-                cur.execute("SELECT client_id, client_name, NULL AS partner_id FROM clients ORDER BY client_name")
+            cur.execute("""
+                SELECT c.client_id, c.client_name, partner_id,
+                       (SELECT JSON_AGG(p.project_id) FROM projects p WHERE p.client_id = c.client_id) as projects
+                FROM clients c 
+                ORDER BY c.client_name
+            """)
                 
         rows = cur.fetchall()
-        return [{"id": str(r[0]), "name": r[1], "partner_id": str(r[2]) if r[2] else None} for r in rows]
+        return [
+            {
+                "id": str(r[0]), 
+                "name": r[1], 
+                "partner_id": str(r[2]) if r[2] else None,
+                "projects": r[3] if r[3] else []
+            } 
+            for r in rows
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

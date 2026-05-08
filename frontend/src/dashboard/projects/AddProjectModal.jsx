@@ -32,7 +32,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
 
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">Add New Project</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Add new project</h2>
                     <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
                         <X size={20} />
                     </button>
@@ -43,7 +43,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
 
                     {/* Project Name */}
                     <div className="flex flex-col gap-1">
-                        <label className="text-xs font-bold text-gray-500 uppercase">Project Name</label>
+                        <label className="text-xs font-bold text-gray-500">Project name</label>
                         <input
                             type="text"
                             name="name"
@@ -58,7 +58,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                     {/* Client Selection (Conditional) */}
                     {formData.type === 'Client' && (
                         <div className="flex flex-col gap-1">
-                            <label className="text-xs font-bold text-gray-500 uppercase">Client</label>
+                            <label className="text-xs font-bold text-gray-500">Client</label>
                             <div className="flex gap-2">
                                 <select
                                     name="client"
@@ -82,7 +82,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                     {/* Type & Status Row */}
                     <div className="flex gap-4">
                         <div className="flex-1 flex flex-col gap-1">
-                            <label className="text-xs font-bold text-gray-500 uppercase">Type</label>
+                            <label className="text-xs font-bold text-gray-500">Type</label>
                             <select
                                 name="type"
                                 className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -95,7 +95,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                             </select>
                         </div>
                         <div className="flex-1 flex flex-col gap-1">
-                            <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
+                            <label className="text-xs font-bold text-gray-500">Status</label>
                             <select
                                 name="status"
                                 className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -112,7 +112,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                     {/* Dates Row */}
                     <div className="flex gap-4">
                         <div className="flex-1 flex flex-col gap-1 relative">
-                            <label className="text-xs font-bold text-gray-500 uppercase">Start Date</label>
+                            <label className="text-xs font-bold text-gray-500">Start date</label>
                             <input
                                 type="date"
                                 name="startDate"
@@ -122,7 +122,7 @@ const AddProjectModal = ({ isOpen, onClose, onAdd }) => {
                             />
                         </div>
                         <div className="flex-1 flex flex-col gap-1 relative">
-                            <label className="text-xs font-bold text-gray-500 uppercase">End Date</label>
+                            <label className="text-xs font-bold text-gray-500">End date</label>
                             <input
                                 type="date"
                                 name="endDate"
