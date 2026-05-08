@@ -232,7 +232,7 @@ class ProjectCreate(BaseModel):
     partner_id: Optional[str] = None
     department_id: Optional[str] = None
     billable: Optional[str] = None
-    start_date: date
+    start_date: Optional[date] = None
     end_date: Optional[date] = None
     team_members: List[TeamMemberCreate] = []
     sub_status: Optional[str] = None
@@ -625,14 +625,14 @@ def projects_list(
             """
             params.append(f"%{resource_name}%")
 
-        # Date Range Filter — overlap semantics:
-        # A project is included if its timeline (using effective dates) intersects
-        # the filter window. project_end >= filter.start AND project_start <= filter.end.
+        # Date Range Filter:
+        # If a Start Date is selected, display all projects whose Start Date is equal to or later than the selected date.
+        # If an End Date is selected, display all projects whose End Date is equal to or earlier than the selected date.
         if final_start and final_start.strip():
             where_clause += """
                 AND COALESCE(
-                    p.end_date,
-                    (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
+                    p.start_date,
+                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
                 )::date >= %s::date
             """
             params.append(final_start.strip())
@@ -640,8 +640,8 @@ def projects_list(
         if final_end and final_end.strip():
             where_clause += """
                 AND COALESCE(
-                    p.start_date,
-                    (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)
+                    p.end_date,
+                    (SELECT MAX(allocation_end_date) FROM projects_allocation WHERE project_id = p.project_id)
                 )::date <= %s::date
             """
             params.append(final_end.strip())

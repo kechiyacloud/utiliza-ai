@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, User, Briefcase, FolderKanban, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { isValidPhoneNumber } from 'libphonenumber-js';
 
 import PhoneInputField from '../../components/PhoneInputField';
 import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
-import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation } from '../../api/employeeApi';
+import { createEmployee, updateEmployee, getEmployeeById, getEmployeeList, getDepartments, getLocations, createDepartment, createDesignation, checkDuplicateEmployee } from '../../api/employeeApi';
 import { fetchProjectsData } from '../../api/projectsApi';
 import { DEPARTMENTS, LOCATIONS, WORK_MODES, EMPLOYMENT_TYPES } from '../../data/constants';
 import { DEPARTMENT_SKILLS, ALL_SKILLS } from '../../data/skills';
@@ -121,10 +122,29 @@ const AddEmployee = () => {
     };
 
     const handleShiftTimeChange = (field, value) => {
-        const s  = field === 'start' ? value : shiftStart;
-        const en = field === 'end'   ? value : shiftEnd;
-        if (field === 'start') setShiftStart(value);
-        else setShiftEnd(value);
+        let s = shiftStart;
+        let en = shiftEnd;
+
+        if (field === 'start') {
+            s = value;
+            if (s) {
+                const [h, m] = s.split(':').map(Number);
+                const endH = (h + 9) % 24;
+                en = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                setShiftEnd(en);
+            }
+            setShiftStart(s);
+        } else {
+            en = value;
+            if (en) {
+                const [h, m] = en.split(':').map(Number);
+                const startH = (h - 9 + 24) % 24;
+                s = `${String(startH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                setShiftStart(s);
+            }
+            setShiftEnd(en);
+        }
+
         setFormData(prev => ({ ...prev, shift: buildShiftLabel(shiftPreset || 'Custom', s, en) }));
 
         if (errors.shift) {
@@ -135,7 +155,6 @@ const AddEmployee = () => {
             });
         }
         setIsDirty(true);
-
     };
 
     // Form state
@@ -145,6 +164,7 @@ const AddEmployee = () => {
         employee_name: '',
         email: '',
         phone: '',
+        dialCode: '',
         date_of_birth: '',
         address: '',
         photo_url: '',
@@ -184,6 +204,7 @@ const AddEmployee = () => {
                 phone: source.phone === null || source.phone === undefined 
                     ? (source.phone_number === null || source.phone_number === undefined ? '' : String(source.phone_number))
                     : String(source.phone),
+                dialCode: '',  // Will be set when phone input re-renders
                 date_of_birth: normalizeDate(source.date_of_birth),
                 address: source.address || '',
                 photo_url: source.photo_url || source.profilePic || '',
@@ -383,12 +404,79 @@ const AddEmployee = () => {
             });
         }
         setIsDirty(true);
-
     };
 
-    const handlePhoneChange = (value) => {
-        setFormData(prev => ({ ...prev, phone: value }));
+    const handleBlur = async (e) => {
+        const { name, value } = e.target;
+        if (!value || value.trim() === '') return;
+
+        // Email domain validation
+        if (name === 'email' && value) {
+            if (!value.toLowerCase().endsWith('@clouddestinations.com')) {
+                setErrors(prev => ({
+                    ...prev,
+                    email: 'Only @clouddestinations.com domain is allowed'
+                }));
+                return;
+            }
+        }
+
+        // Phone validation based on country
+        if (name === 'phone' && value) {
+            try {
+                // value from react-phone-input-2 includes dial code but no +
+                const formattedPhone = value.startsWith('+') ? value : `+${value}`;
+                if (!isValidPhoneNumber(formattedPhone)) {
+                    setErrors(prev => ({
+                        ...prev,
+                        phone: 'Invalid phone number for the selected country'
+                    }));
+                }
+            } catch (err) {
+                console.error('Phone validation error:', err);
+            }
+        }
+
+        // Fields to check for duplicates
+        const fieldsToCheck = {
+            'email': 'email',
+            'employee_id': 'employee_id',
+            'phone': 'phone'
+        };
+
+        if (fieldsToCheck[name]) {
+            try {
+                let checkValue = value.trim();
+                if (name === 'email') {
+                    checkValue = value.toLowerCase().trim();
+                } else if (name === 'phone' && formData.dialCode) {
+                    // Strip the dialCode prefix from phone number before sending to backend
+                    checkValue = value.startsWith(formData.dialCode) 
+                        ? value.slice(formData.dialCode.length).trim() 
+                        : value.trim();
+                }
+                const result = await checkDuplicateEmployee(fieldsToCheck[name], checkValue, isEditMode ? formData.employee_id : null);
+                
+                if (result.exists) {
+                    setErrors(prev => ({
+                        ...prev,
+                        [name]: `This ${name.replace(/_/g, ' ')} already exists in the system`
+                    }));
+                }
+            } catch (error) {
+                console.error(`Error checking duplicate ${name}:`, error);
+            }
+        }
+    };
+
+    const handlePhoneChange = (value, data) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            phone: value,
+            dialCode: data?.dialCode || ''
+        }));
         setIsDirty(true);
+        // Clear error when user modifies phone
         if (errors.phone) {
             setErrors(prev => {
                 const newErrors = { ...prev };
@@ -396,7 +484,6 @@ const AddEmployee = () => {
                 return newErrors;
             });
         }
-
     };
 
     const compressImage = (file) => {
@@ -608,8 +695,10 @@ const AddEmployee = () => {
             project_id: '',
             project_role: '',
             project_allocation: 0,
+            daily_hours: 0,
             project_start_date: '',
-            project_end_date: ''
+            project_end_date: '',
+            project_tags: 'billable'
         });
     };
 
@@ -639,15 +728,28 @@ const AddEmployee = () => {
         } else {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(formData.email)) newErrors.email = 'Invalid email format';
+            else if (!formData.email.toLowerCase().endsWith('@clouddestinations.com')) newErrors.email = 'Only @clouddestinations.com domain is allowed';
             else if (formData.email.length > 100) newErrors.email = 'Email must be under 100 chars';
         }
 
-        if (formData.phone && formData.phone.length > 20) {
-            newErrors.phone = 'Phone number too long';
+        if (formData.phone && formData.phone.length > 0) {
+            const formattedPhone = formData.phone.startsWith('+') ? formData.phone : `+${formData.phone}`;
+            if (!isValidPhoneNumber(formattedPhone)) {
+                newErrors.phone = 'Invalid phone number for the selected country';
+            } else if (formData.phone.length > 20) {
+                newErrors.phone = 'Phone number too long';
+            }
         }
 
         if (!formData.date_of_joining) {
             newErrors.date_of_joining = 'Date of Joining is required';
+        } else {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const doj = new Date(formData.date_of_joining);
+            if (doj < today && !isEditMode) {
+                newErrors.date_of_joining = 'Joining Date cannot be in the past';
+            }
         }
 
         if (formData.date_of_birth && formData.date_of_joining) {
@@ -678,6 +780,18 @@ const AddEmployee = () => {
         if (!formData.location) newErrors.location = 'Location is required';
         if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
         if (!formData.employee_status) newErrors.employee_status = 'Status is required';
+
+        // Certificate validation: If any certificate is added, it must have a name and a file
+        if (formData.certificates && formData.certificates.length > 0) {
+            const hasInvalidName = formData.certificates.some(cert => !cert.name?.trim());
+            const hasInvalidFile = formData.certificates.some(cert => !cert.file);
+            
+            if (hasInvalidName) {
+                newErrors.certificates = 'Please enter names for all certificates';
+            } else if (hasInvalidFile) {
+                newErrors.certificates = 'Please upload files for all certificates';
+            }
+        }
 
         if (showErrors) setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -754,6 +868,25 @@ const AddEmployee = () => {
         const toastId = toast.loading(isEditMode ? 'Updating employee...' : 'Creating employee...');
 
         try {
+            // 1. Sanitize Certificates (filter blanks, remove duplicates)
+            const cleanCertificates = formData.certificates
+                .filter(c => (typeof c === 'string' ? c.trim() : (c.name || '').trim()))
+                .map(c => ({ name: (typeof c === 'string' ? c.trim() : (c.name || '').trim()) }))
+                .filter((cert, index, self) => index === self.findIndex((t) => t.name === cert.name));
+
+            // 2. Sanitize Skills (remove duplicates, trim)
+            const cleanSkills = [...new Set(formData.skills.map(s => s.trim()))];
+
+            // 3. Sanitize Projects (ensure required fields and types)
+            const cleanProjects = formData.projects.map(p => ({
+                project_id: p.project_id,
+                project_role: p.project_role,
+                project_allocation: parseInt(p.project_allocation) || 0,
+                project_start_date: p.project_start_date,
+                project_end_date: p.project_end_date || null,
+                project_tags: p.project_tags || 'billable'
+            }));
+
             const payload = {
                 employee_id: formData.employee_id,
                 employee_name: formData.employee_name,
@@ -777,43 +910,60 @@ const AddEmployee = () => {
                 pip_end_date: formData.pip_end_date || null,
                 notice_start_date: formData.notice_start_date || null,
                 notice_end_date: formData.notice_end_date || null,
-                skills: formData.skills,
-                certificates: formData.certificates.map(c => ({ name: typeof c === 'string' ? c : (c.name || '') })),
-                projects: formData.projects.map(p => ({
-                    ...p,
-                    project_end_date: p.project_end_date || null
-                }))
+                skills: cleanSkills,
+                certificates: cleanCertificates,
+                projects: cleanProjects
             };
 
             let response;
-            if (isEditMode) {
-                response = await updateEmployee(editEmployeeId || formData.employee_id, payload);
-            } else {
-                response = await createEmployee(payload);
+            try {
+                if (isEditMode) {
+                    response = await updateEmployee(editEmployeeId || formData.employee_id, payload);
+                } else {
+                    response = await createEmployee(payload);
+                }
+            } catch (apiErr) {
+                // If API call fails (e.g. 422, 500), it's caught here
+                throw apiErr;
             }
 
-            if (response && response.success) {
+            // Check success: backend returns { success: true, employee_id: ... }
+            // Also accept { detail: '...successfully...' } as a fallback
+            const isSuccess = response && (
+                response.success === true ||
+                (typeof response.detail === 'string' && response.detail.toLowerCase().includes('successfully'))
+            );
+
+            if (isSuccess) {
                 toast.success(isEditMode ? 'Employee updated successfully' : 'Employee created successfully', { id: toastId });
                 setIsDirty(false); // Reset dirty flag after successful save
                 
                 if (triggerRefresh) triggerRefresh();
                 
                 // Redirect to profile
-                const targetId = isEditMode ? (editEmployeeId || formData.employee_id) : response.employee_id || formData.employee_id;
+                const targetId = response?.employee_id || (isEditMode ? (editEmployeeId || formData.employee_id) : formData.employee_id);
                 if (targetId) {
-                    navigate(`/dashboard/employee/profile/${encodeId(targetId)}`);
+                    navigate(`/info/employee/${encodeId(targetId)}`, { replace: true });
                 } else {
-                    navigate('/dashboard/employee');
+                    navigate('/info/employee', { replace: true });
                 }
             } else {
-                toast.error(response?.message || 'Operation failed', { id: toastId });
+                const errorDetail = response?.detail || response?.message || 'Unexpected server response format';
+                console.warn('Submission failed with status 200 but incorrect body:', response);
+                toast.error(`Operation failed: ${errorDetail}`, { id: toastId });
             }
         } catch (error) {
             console.error('Error saving employee:', error);
             const detail = error.response?.data?.detail;
             const errorMsg = typeof detail === 'string' 
                 ? detail 
-                : (typeof detail === 'object' ? JSON.stringify(detail) : error.message);
+                : (typeof detail === 'object' ? (detail.message || JSON.stringify(detail)) : error.message);
+            
+            // Log full error for remote debugging if needed
+            if (error.response) {
+                console.error('Server error response:', error.response.data);
+            }
+            
             toast.error('Failed to save employee: ' + errorMsg, { id: toastId });
         } finally {
             setLoading(false);
@@ -833,6 +983,7 @@ const AddEmployee = () => {
                         value={formData.employee_id}
                         onChange={handleInputChange}
                         maxLength={20}
+                        onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                         placeholder="CDIN001"
                         required
@@ -867,8 +1018,9 @@ const AddEmployee = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         maxLength={100}
+                        onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="john.doe@organization.com"
+                        placeholder="john.doe@clouddestinations.com"
                         required
                     />
                     {errors.email && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.email}</p>}
@@ -878,6 +1030,7 @@ const AddEmployee = () => {
                     <PhoneInputField
                         value={formData.phone}
                         onChange={handlePhoneChange}
+                        onBlur={() => handleBlur({ target: { name: 'phone', value: formData.phone } })}
                         error={errors.phone}
                         placeholder="+1 (234) 567-890"
                     />
@@ -905,6 +1058,7 @@ const AddEmployee = () => {
                         name="date_of_joining"
                         value={formData.date_of_joining}
                         onChange={handleInputChange}
+                        min={!isEditMode ? new Date().toISOString().split('T')[0] : undefined}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                             errors.date_of_joining ? 'border-red-500 bg-red-50' : 'border-gray-300'
                         }`}
@@ -1404,6 +1558,12 @@ const AddEmployee = () => {
                 >
                     + Add Certificate
                 </button>
+                {errors.certificates && (
+                    <p className="text-[10px] text-red-600 mt-2 font-bold flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        {errors.certificates}
+                    </p>
+                )}
             </div>
         </div>
     );
@@ -1604,7 +1764,22 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Employee ID:</span> {formData.employee_id || 'N/A'}</div>
                     <div><span className="font-semibold">Name:</span> {formData.employee_name || 'N/A'}</div>
                     <div><span className="font-semibold">Email:</span> {formData.email || 'N/A'}</div>
-                    <div><span className="font-semibold">Phone:</span> {formData.phone || 'N/A'}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <span className="font-semibold text-gray-500">Country Code:</span>
+                            <div className="mt-1">
+                                <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-200 text-xs font-bold inline-block">
+                                    {formData.dialCode ? `+${formData.dialCode}` : 'N/A'}
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <span className="font-semibold text-gray-500">Mobile Number:</span>
+                            <div className="mt-1 font-medium">
+                                {formData.phone ? (formData.phone.startsWith(formData.dialCode) ? formData.phone.slice(formData.dialCode.length) : formData.phone) : 'N/A'}
+                            </div>
+                        </div>
+                    </div>
                     <div><span className="font-semibold">Date of Birth:</span> {formData.date_of_birth || 'N/A'}</div>
                     <div><span className="font-semibold">Joining Date:</span> {formData.date_of_joining || 'N/A'}</div>
                 </div>
@@ -1648,11 +1823,11 @@ const AddEmployee = () => {
                         </div>
                     </div>
                 )}
-                {formData.certificates.length > 0 ? (
+                {formData.certificates.filter(c => c.name?.trim()).length > 0 ? (
                     <div className="mt-3">
                         <span className="font-semibold text-sm">Certificates:</span>
                         <ul className="list-disc list-inside mt-1 text-sm text-gray-600">
-                            {formData.certificates.map((cert, i) => (
+                            {formData.certificates.filter(c => c.name?.trim()).map((cert, i) => (
                                 <li key={i}>{cert.name} {cert.file && <span className="text-xs text-green-600">✓</span>}</li>
                             ))}
                         </ul>
@@ -1831,11 +2006,17 @@ const AddEmployee = () => {
                                         setShowPreview(true);
                                     }
                                     setCurrentSection(nextSectionId);
+                                    window.scrollTo(0, 0);
                                 } else {
                                     toast.error('Please fill all mandatory fields to proceed');
                                 }
                             }}
-                            className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors bg-blue-600 hover:bg-blue-700`}
+                            disabled={Object.keys(errors).length > 0}
+                            className={`px-6 py-2 rounded-md transition-all text-sm font-bold shadow-md ${
+                                Object.keys(errors).length > 0
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none border border-gray-100'
+                                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
+                            }`}
                         >
                             {sections[sections.findIndex(s => s.id === currentSection) + 1]?.id === 'preview' ? 'Review & Submit' : 'Next'}
                         </button>

@@ -60,8 +60,13 @@ const ClientDetails = ({ client, onEdit, onDeleteClient, onDeleteProject }) => {
                     </button>
                     <button
                         onClick={() => onDeleteClient(client.id)}
-                        className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100"
-                        title="Delete Client"
+                        disabled={client.projects && client.projects.length > 0}
+                        className={`p-3 rounded-2xl transition-all border border-transparent ${
+                            client.projects && client.projects.length > 0
+                                ? 'text-slate-200 cursor-not-allowed opacity-50'
+                                : 'text-slate-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
+                        }`}
+                        title={client.projects && client.projects.length > 0 ? "Cannot delete client with linked projects" : "Delete Client"}
                     >
                         <Trash2 size={20} />
                     </button>

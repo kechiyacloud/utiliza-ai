@@ -41,7 +41,7 @@ const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm, itemName, isDeleting }
                     <p className="font-bold mb-1">
                         {isPermanent ? '⚠️ WARNING: PERMANENT DELETION' : 'ℹ️ Archive Employee'}
                     </p>
-                    <p>
+                    <p className="break-words">
                         {isPermanent 
                             ? `This will physically remove ${itemName} and ALL associated data (skills, projects, history) from the database. This CANNOT be undone.`
                             : `This will mark ${itemName} as inactive. You can restore them later from the Archive view.`}

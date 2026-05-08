@@ -16,9 +16,14 @@ def list_partner_clients():
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT partner_id, partner_name FROM partners ORDER BY partner_name")
+        cur.execute("""
+            SELECT p.partner_id, p.partner_name,
+                   (SELECT JSON_AGG(pr.project_id) FROM projects pr WHERE pr.partner_id = p.partner_id) as projects
+            FROM partners p 
+            ORDER BY p.partner_name
+        """)
         rows = cur.fetchall()
-        return [{"id": r[0], "name": r[1]} for r in rows]
+        return [{"id": r[0], "name": r[1], "projects": r[2] if r[2] else []} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

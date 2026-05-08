@@ -232,7 +232,7 @@ const EntityModal = ({ isOpen, mode, entityLabel, initialName, onConfirm, onCanc
                         </p>
                     ) : (
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{entityLabel} Name</label>
+                            <label className="text-xs font-bold text-gray-500 tracking-wider">{entityLabel} name</label>
                             <input
                                 ref={inputRef}
                                 type="text"
@@ -323,7 +323,7 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                     ) : (
                         <>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Client Name *</label>
+                                <label className="text-xs font-bold text-gray-500 tracking-wider">Client name *</label>
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -336,7 +336,7 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                             {mode === 'add' && (
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Industry</label>
+                                        <label className="text-xs font-bold text-gray-500 tracking-wider">Industry</label>
                                         <input
                                             type="text"
                                             value={formData.industry}
@@ -346,7 +346,7 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status</label>
+                                        <label className="text-xs font-bold text-gray-500 tracking-wider">Status</label>
                                         <select
                                             value={formData.status}
                                             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
@@ -358,7 +358,7 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                                         </select>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Budget ($)</label>
+                                        <label className="text-xs font-bold text-gray-500 tracking-wider">Budget ($)</label>
                                         <input
                                             type="number"
                                             value={formData.budget}
@@ -368,7 +368,7 @@ const ClientModal = ({ isOpen, mode, initialName, onConfirm, onCancel, error }) 
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Website URL</label>
+                                        <label className="text-xs font-bold text-gray-500 tracking-wider">Website URL</label>
                                         <input
                                             type="text"
                                             value={formData.url}
@@ -618,6 +618,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [availableSkills, setAvailableSkills] = useState([]);
     const [skillError, setSkillError] = useState('');
     const [isAddingSkill, setIsAddingSkill] = useState(false);
+    const [showNewSkillInput, setShowNewSkillInput] = useState(false);
+    const [newSkillText, setNewSkillText] = useState('');
     const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState('');
     const [isTeamInputsActive, setIsTeamInputsActive] = useState(false);
@@ -627,6 +629,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [teamHoursError, setTeamHoursError] = useState('');
+    const [teamDatesError, setTeamDatesError] = useState('');
+    const [teamAllocationsError, setTeamAllocationsError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
 
@@ -858,6 +862,16 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             skills: prev.skills.filter((skill) => normalizeSkillToken(skill) !== normalizeSkillToken(skillToRemove)),
         }));
         setSkillError('');
+    };
+
+    const handleCreateNewSkill = async () => {
+        const trimmed = newSkillText.trim();
+        if (!trimmed) {
+            setSkillError('Skill cannot be empty.');
+            return;
+        }
+        await addSkillToForm(trimmed);
+        setNewSkillText('');
     };
 
     const hasPartnerMappedClients = useMemo(
@@ -1101,6 +1115,34 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         return '';
     };
 
+    const validateTeamMemberDates = (teamMembers = []) => {
+        for (let i = 0; i < (teamMembers || []).length; i++) {
+            const member = teamMembers[i];
+            if (member.allocation_start_date && member.allocation_end_date) {
+                const startTs = new Date(member.allocation_start_date).getTime();
+                const endTs = new Date(member.allocation_end_date).getTime();
+                if (endTs < startTs) {
+                    return 'End date cannot be earlier than Start date';
+                }
+            }
+        }
+        return '';
+    };
+
+    const validateTeamMemberAllocations = (teamMembers = []) => {
+        for (let i = 0; i < (teamMembers || []).length; i++) {
+            const member = teamMembers[i];
+            const pctVal = member.allocation_pct;
+            if (pctVal !== '' && pctVal !== null && pctVal !== undefined) {
+                const num = Number(pctVal);
+                if (num < 10 || num > 100 || isNaN(num)) {
+                    return 'Allocation percentage must be between 10 and 100.';
+                }
+            }
+        }
+        return '';
+    };
+
     const handleAddTeamMember = () => {
         setFormData(prev => ({
             ...prev,
@@ -1152,6 +1194,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         setFormData(prev => {
             const newTeam = prev.teamMembers.filter((_, i) => i !== index);
             setTeamHoursError(validateProjectWeeklyHours(newTeam));
+            setTeamDatesError(validateTeamMemberDates(newTeam));
+            setTeamAllocationsError(validateTeamMemberAllocations(newTeam));
             return {
                 ...prev,
                 teamMembers: newTeam
@@ -1205,13 +1249,25 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             const newTeam = [...prev.teamMembers];
             const updated = { ...newTeam[index], [field]: value };
 
+            if (field === 'allocation_start_date') {
+                if (updated.allocation_end_date && value && new Date(value).getTime() > new Date(updated.allocation_end_date).getTime()) {
+                    updated.allocation_end_date = '';
+                }
+            }
+            if (field === 'allocation_end_date') {
+                if (updated.allocation_start_date && value && new Date(value).getTime() < new Date(updated.allocation_start_date).getTime()) {
+                    updated.allocation_end_date = '';
+                }
+            }
+
             if (field === 'allocation_pct') {
-                const pct = value === '' ? '' : Math.min(100, Math.max(0, parseInt(value) || 0));
+                const pct = value === '' ? '' : (isNaN(parseInt(value)) ? '' : parseInt(value));
                 updated.allocation_pct = pct;
 
                 // Dynamic Proportional Allocation (100% = 40h)
                 if (pct !== '') {
-                    const hours = Math.round((pct / 100) * 40);
+                    const safePct = Math.max(0, Math.min(100, pct));
+                    const hours = Math.round((safePct / 100) * 40);
                     const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
 
                     let targetWeeks = projectWeeks;
@@ -1234,7 +1290,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             if (field === 'allocation_start_date' || field === 'allocation_end_date') {
                 const pct = parseInt(updated.allocation_pct) || 0;
                 if (pct > 0) {
-                    const hours = Math.round((pct / 100) * 40);
+                    const safePct = Math.max(0, Math.min(100, pct));
+                    const hours = Math.round((safePct / 100) * 40);
                     const projectWeeks = getProjectWeeks(prev.startDate, prev.endDate);
                     let targetWeeks = projectWeeks;
                     if (updated.allocation_start_date || updated.allocation_end_date) {
@@ -1253,6 +1310,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
             newTeam[index] = updated;
             setTeamHoursError(validateProjectWeeklyHours(newTeam));
+            setTeamDatesError(validateTeamMemberDates(newTeam));
+            setTeamAllocationsError(validateTeamMemberAllocations(newTeam));
             return { ...prev, teamMembers: newTeam };
         });
 
@@ -1289,18 +1348,33 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
         setTeamHoursError('');
 
+        const teamDatesValidationError = validateTeamMemberDates(formData.teamMembers);
+        if (teamDatesValidationError) {
+            setTeamDatesError(teamDatesValidationError);
+            setSubmitError(teamDatesValidationError);
+            return;
+        }
+        setTeamDatesError('');
+
+        const teamAllocationsValidationError = validateTeamMemberAllocations(formData.teamMembers);
+        if (teamAllocationsValidationError) {
+            setTeamAllocationsError(teamAllocationsValidationError);
+            setSubmitError(teamAllocationsValidationError);
+            return;
+        }
+        setTeamAllocationsError('');
+
         if (!(formData.name || '').trim()) {
             setSubmitError('Project name is required.');
             return;
         }
-        if (!formData.startDate) {
-            setSubmitError('Start date is required.');
-            return;
-        }
-        const normalizedStart = normalizeDateString(formData.startDate);
-        if (!normalizedStart) {
-            setSubmitError('Start date format is invalid.');
-            return;
+        let normalizedStart = null;
+        if (formData.startDate) {
+            normalizedStart = normalizeDateString(formData.startDate);
+            if (!normalizedStart) {
+                setSubmitError('Start date format is invalid.');
+                return;
+            }
         }
         const normalizedEnd = normalizeDateString(formData.endDate);
         if (normalizedEnd && normalizedStart) {
@@ -1327,6 +1401,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setSubmitError('Department is required.');
             return;
         }
+
         // SOW Status validation removed - it is now optional
         const projectId = `PRJ-${Math.floor(1000 + Math.random() * 9000)}`;
         const effectiveType = formData.type;
@@ -1386,9 +1461,28 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
         } catch (error) {
             console.error('[API Response] POST /projects - Error:', error);
-            const errorMsg = error.response?.data?.detail || toMessage(error) || 'Failed to create project';
+            let errorMsg = 'Failed to create project';
+            if (error.response?.data?.detail) {
+                if (Array.isArray(error.response.data.detail)) {
+                    errorMsg = error.response.data.detail.map(err => `${err.loc?.[err.loc.length - 1] || 'Field'}: ${err.msg}`).join(' | ');
+                } else if (typeof error.response.data.detail === 'string') {
+                    errorMsg = error.response.data.detail;
+                } else {
+                    errorMsg = JSON.stringify(error.response.data.detail);
+                }
+            } else if (error.response?.data?.message) {
+                errorMsg = error.response.data.message;
+            } else {
+                errorMsg = toMessage(error) || 'Failed to create project';
+            }
             setSubmitError(errorMsg);
-            showToast(errorMsg, 'error');
+            if (typeof showToast === 'function') {
+                try {
+                    showToast(errorMsg, 'error');
+                } catch (e) {
+                    // ignore if showToast expects different format
+                }
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -1440,7 +1534,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                             </button>
                         )}
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Add New Project</h1>
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Add new project</h1>
                             <p className="text-sm font-medium text-gray-500">Configure project details and allocate team members</p>
                         </div>
                     </div>
@@ -1467,12 +1561,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                         <div className="flex flex-col gap-5">
                             <div className="flex items-center gap-2 mb-2">
                                 <Building size={18} className="text-blue-500" />
-                                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Project Details</h3>
+                                <h3 className="text-sm font-bold text-slate-800 tracking-wider">Project details</h3>
                             </div>
 
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="flex flex-col gap-1.5 col-span-2">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Project Name</label>
+                                    <label className="text-xs font-bold text-gray-600">Project name <span className="text-red-500">*</span></label>
                                     <input type="text" name="name" placeholder="e.g. Enterprise Migration"
                                         maxLength={100}
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
@@ -1481,7 +1575,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 {/* TYPE DROPDOWN */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Project Type</label>
+                                    <label className="text-xs font-bold text-gray-600">Project type</label>
                                     <select name="type" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.type} onChange={handleChange}>
                                         <option value="External">External</option>
@@ -1492,7 +1586,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {/* CLIENT TYPE DROPDOWN */}
                                 {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Client Type</label>
+                                        <label className="text-xs font-bold text-gray-600">Client type</label>
                                         <select name="clientType" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                             value={formData.clientType} onChange={handleChange}>
                                             <option value={DIRECT_CLIENT_TYPE}>{DIRECT_CLIENT_TYPE}</option>
@@ -1504,7 +1598,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {/* DIRECT CLIENT PARTNER FIELD */}
                                 {isDirectClient && (
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Partner</label>
+                                        <label className="text-xs font-bold text-gray-600">Partner</label>
                                         <input
                                             type="text"
                                             value={CLOUD_DESTINATION_PARTNER}
@@ -1517,7 +1611,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {/* PARTNER DROPDOWN + CRUD */}
                                 {isPartnerClient && (
                                     <div className="flex flex-col gap-1.5 col-span-2">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Partner</label>
+                                        <label className="text-xs font-bold text-gray-600">Partner <span className="text-red-500">*</span></label>
                                         <div className="flex gap-2">
                                             <SearchableDropdown
                                                 items={partnerClients}
@@ -1535,8 +1629,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.partnerId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Partner">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled={!formData.partnerId} onClick={() => openModal('delete', 'partner')}
-                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.partnerId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Partner">
+                                            <button 
+                                                type="button" 
+                                                disabled={!formData.partnerId || (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0)} 
+                                                onClick={() => openModal('delete', 'partner')}
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.partnerId || (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0) ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} 
+                                                title={formData.partnerId && (partnerClients.find(p => String(p.id) === String(formData.partnerId))?.projects?.length > 0) ? "Cannot delete partner with linked projects" : "Delete Partner"}>
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1546,7 +1644,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {/* CLIENT DROPDOWN + CRUD */}
                                 {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-gray-600 uppercase">Client</label>
+                                        <label className="text-xs font-bold text-gray-600">Client <span className="text-red-500">*</span></label>
                                         <div className="flex gap-2">
                                             <SearchableDropdown
                                                 items={filteredClients}
@@ -1565,8 +1663,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 className={`px-2.5 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-bold ${!formData.clientId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-blue-100 transition-colors'} flex items-center gap-1`} title="Edit Client">
                                                 <Pencil size={12} /> Edit
                                             </button>
-                                            <button type="button" disabled={!formData.clientId} onClick={() => openModal('delete', 'client')}
-                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.clientId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} title="Delete Client">
+                                            <button 
+                                                type="button" 
+                                                disabled={!formData.clientId || (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0)} 
+                                                onClick={() => openModal('delete', 'client')}
+                                                className={`px-2.5 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 text-xs font-bold ${!formData.clientId || (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0) ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-red-100 transition-colors'} flex items-center gap-1`} 
+                                                title={formData.clientId && (clients.find(c => String(c.id) === String(formData.clientId))?.projects?.length > 0) ? "Cannot delete client with linked projects" : "Delete Client"}>
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
@@ -1575,7 +1677,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 {/* DEPARTMENT DROPDOWN — for all project types */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Department <span className="text-red-500">*</span></label>
+                                    <label className="text-xs font-bold text-gray-600">Department <span className="text-red-500">*</span></label>
                                     <select
                                         name="department_id"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
@@ -1590,7 +1692,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Status</label>
+                                    <label className="text-xs font-bold text-gray-600">Status</label>
                                     <select name="status" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
                                         value={formData.status} onChange={handleChange}>
                                         {PROJECT_STATUS_OPTIONS.map((status) => (
@@ -1615,7 +1717,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 )}
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Billable</label>
+                                    <label className="text-xs font-bold text-gray-600">Billable</label>
                                     <select name="billable"
                                         className={`p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all font-medium 
                                             ${formData.type === 'Internal' ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700 cursor-pointer focus:bg-white'}`}
@@ -1628,14 +1730,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">Start Date</label>
+                                    <label className="text-xs font-bold text-gray-600">Start date</label>
                                     <input type="date" name="startDate"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         value={formData.startDate} onChange={handleChange} />
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600 uppercase">End Date</label>
+                                    <label className="text-xs font-bold text-gray-600">End date</label>
                                     <input type="date" name="endDate"
                                         className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
                                         min={formData.startDate || undefined}
@@ -1644,7 +1746,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                                 {/* SKILLS MULTI-SELECT */}
                                 <div className="flex flex-col gap-1.5 col-span-2">
-                                    <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Required Skills</label>
+                                    <label className="text-xs font-bold text-gray-600 tracking-wider">Required skills</label>
                                     <div className="flex flex-col gap-2">
                                         <SearchableDropdown
                                             items={availableSkills.map(s => ({ id: s, name: s }))}
@@ -1655,6 +1757,48 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             label="skills"
                                             disabled={isAddingSkill}
                                         />
+                                        <div className="flex flex-col gap-2 mt-1">
+                                            {showNewSkillInput ? (
+                                                <div className="flex gap-2 items-center animate-in fade-in slide-in-from-top-1 duration-200">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Enter new skill"
+                                                        value={newSkillText}
+                                                        onChange={(e) => setNewSkillText(e.target.value)}
+                                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white focus:border-blue-300 transition-all w-48"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                void handleCreateNewSkill();
+                                                            }
+                                                        }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCreateNewSkill}
+                                                        disabled={isAddingSkill}
+                                                        className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50"
+                                                    >
+                                                        {isAddingSkill ? 'Adding...' : 'Add'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setShowNewSkillInput(false); setNewSkillText(''); setSkillError(''); }}
+                                                        className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowNewSkillInput(true)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors self-start mt-1 border border-blue-100/50"
+                                                >
+                                                    <Plus size={14} /> Add Skill
+                                                </button>
+                                            )}
+                                        </div>
                                         {skillError && (
                                             <p className="text-xs text-red-600 font-medium">{skillError}</p>
                                         )}
@@ -1700,6 +1844,16 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     {teamHoursError}
                                 </div>
                             )}
+                            {teamDatesError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-[11px] text-red-700 font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
+                                    {teamDatesError}
+                                </div>
+                            )}
+                            {teamAllocationsError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-[11px] text-red-700 font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
+                                    {teamAllocationsError}
+                                </div>
+                            )}
 
                             {formData.teamMembers.length === 0 ? (
                                 <div className="text-center py-8 text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
@@ -1715,19 +1869,19 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <table className="w-full text-sm min-w-[1200px]">
                                         <thead>
                                             <tr className="bg-blue-50/70 border-b border-slate-200">
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide w-8">S.No</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[220px]">Name</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[140px]">Role</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[90px]">Location</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">Start Date</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[130px]">End Date</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 uppercase tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
-                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wide min-w-[110px]">Resource Type</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide w-8">S.No</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[220px]">Name</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[140px]">Role</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[110px]">Location</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[130px]">Start date</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[130px]">End date</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-blue-800 tracking-wide min-w-[110px] bg-blue-50/80">Allocation %</th>
+                                                <th className="px-3 py-3 text-left text-[11px] font-semibold text-slate-700 tracking-wide min-w-[110px]">Resource type</th>
                                                 {visibleWeeks.map((wk, wIdx) => {
                                                     const weekLabel = wIdx === 0 ? 'This Week' : `Week ${wIdx + 1}`;
                                                     return (
                                                         <th key={`${wk.year}-${wk.weekNum}`} className="px-2 py-3 text-center min-w-[64px] bg-blue-50 border-l border-slate-200">
-                                                            <div className="text-[11px] font-semibold text-blue-800 uppercase tracking-tight">{weekLabel}</div>
+                                                            <div className="text-[11px] font-semibold text-blue-800 tracking-tight">{weekLabel}</div>
                                                             <div className="text-[9px] font-medium text-slate-500 whitespace-nowrap">{wk.dateRange}</div>
                                                         </th>
                                                     );
@@ -1743,12 +1897,14 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                         </button>
                                                     </th>
                                                 )}
-                                                <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 uppercase tracking-wider w-8"></th>
+                                                <th className="px-3 py-3 text-center text-[10px] font-extrabold text-blue-600 tracking-wider w-8"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {formData.teamMembers.map((member, idx) => {
                                                 const isLastMember = idx === formData.teamMembers.length - 1;
+                                                 const isAllocationPctInvalid = member.allocation_pct !== '' && member.allocation_pct !== null && member.allocation_pct !== undefined && (Number(member.allocation_pct) < 10 || Number(member.allocation_pct) > 100);
+                                                 const isDateRangeInvalid = member.allocation_start_date && member.allocation_end_date && (new Date(member.allocation_end_date).getTime() < new Date(member.allocation_start_date).getTime());
                                                 return (
                                                     <React.Fragment key={idx}>
                                                         <tr className="border-b border-gray-100 bg-white hover:bg-gray-100 transition-colors">
@@ -1777,16 +1933,21 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                     onOpenChange={(open) => setActiveDropdown(open ? `role-${idx}` : '')}
                                                                 />
                                                             </td>
-                                                            <td className="px-2 py-2 min-w-[90px]">
-                                                                <select
-                                                                    value={member.location}
-                                                                    onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
-                                                                    className="w-full h-10 px-2 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer"
-                                                                >
-                                                                    <option value="Remote">Remote</option>
-                                                                    <option value="On-Site">On-Site</option>
-                                                                    <option value="Hybrid">Hybrid</option>
-                                                                </select>
+                                                            <td className="px-2 py-2 min-w-[110px]">
+                                                                <div className="relative group">
+                                                                    <select
+                                                                        value={member.location}
+                                                                        onChange={(e) => handleTeamMemberChange(idx, 'location', e.target.value)}
+                                                                        className="w-full h-10 pl-2 pr-8 text-xs border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white cursor-pointer appearance-none transition-all font-semibold"
+                                                                    >
+                                                                        <option value="Remote">Remote</option>
+                                                                        <option value="On-Site">On-Site</option>
+                                                                        <option value="Hybrid">Hybrid</option>
+                                                                    </select>
+                                                                    <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                                        <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
+                                                                    </div>
+                                                                </div>
                                                             </td>
                                                             {/* Start Date */}
                                                             <td className="px-2 py-2 min-w-[130px]">
@@ -1794,7 +1955,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                     type="date"
                                                                     value={member.allocation_start_date || ''}
                                                                     onChange={(e) => handleTeamMemberChange(idx, 'allocation_start_date', e.target.value)}
-                                                                    className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                    className={`w-[120px] h-10 px-2 text-xs border rounded outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400 ${isDateRangeInvalid ? 'border-red-300 focus:border-red-400 focus:ring-1 focus:ring-red-100' : 'border-gray-200'}`}
                                                                 />
                                                             </td>
                                                             {/* End Date */}
@@ -1802,8 +1963,9 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                 <input
                                                                     type="date"
                                                                     value={member.allocation_end_date || ''}
+                                                                    min={member.allocation_start_date || ''}
                                                                     onChange={(e) => handleTeamMemberChange(idx, 'allocation_end_date', e.target.value)}
-                                                                    className="w-[120px] h-10 px-2 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                                                    className={`w-[120px] h-10 px-2 text-xs border rounded outline-none focus:border-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400 ${isDateRangeInvalid ? 'border-red-300 focus:border-red-400 focus:ring-1 focus:ring-red-100' : 'border-gray-200'}`}
                                                                 />
                                                             </td>
                                                             {/* Allocation % */}
@@ -1813,7 +1975,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                     placeholder="0"
                                                                     value={member.allocation_pct}
                                                                     onChange={(e) => handleTeamMemberChange(idx, 'allocation_pct', e.target.value)}
-                                                                    className="w-16 h-10 px-2 text-xs text-center border rounded-md border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                    className={`w-16 h-10 px-2 text-xs text-center border rounded-md outline-none focus:ring-1 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isAllocationPctInvalid ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'}`}
                                                                 />
                                                             </td>
                                                             {/* Resource Type column */}

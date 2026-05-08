@@ -25,3 +25,7 @@ dist-ssr
 .env
 .RBAC_v1.md
 .RBAC.md
+
+# Vite error logs
+*error.html
+vite_error.html

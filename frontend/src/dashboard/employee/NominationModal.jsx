@@ -32,7 +32,7 @@ export default function NominationModal({ onClose, onSuccess }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!selection.employee_id || !selection.feedback_text) return;
-        
+
         setSubmitting(true);
         try {
             await nominateEmployee(selection);
@@ -70,10 +70,10 @@ export default function NominationModal({ onClose, onSuccess }) {
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <User size={14} className="text-amber-500" /> Select Employee
                         </label>
-                        <select 
+                        <select
                             required
                             value={selection.employee_id}
-                            onChange={e => setSelection({...selection, employee_id: e.target.value})}
+                            onChange={e => setSelection({ ...selection, employee_id: e.target.value })}
                             className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition-all appearance-none cursor-pointer"
                         >
                             <option value="">Choose an employee...</option>
@@ -95,12 +95,11 @@ export default function NominationModal({ onClose, onSuccess }) {
                                 <button
                                     key={role}
                                     type="button"
-                                    onClick={() => setSelection({...selection, nominator_role: role})}
-                                    className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-all ${
-                                        selection.nominator_role === role 
-                                        ? 'border-amber-500 bg-amber-50 text-amber-700 font-bold' 
-                                        : 'border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200'
-                                    }`}
+                                    onClick={() => setSelection({ ...selection, nominator_role: role })}
+                                    className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-all ${selection.nominator_role === role
+                                            ? 'border-amber-500 bg-amber-50 text-amber-700 font-bold'
+                                            : 'border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200'
+                                        }`}
                                 >
                                     <span className="text-xs">{role}</span>
                                 </button>
@@ -116,7 +115,7 @@ export default function NominationModal({ onClose, onSuccess }) {
                         <textarea
                             required
                             value={selection.feedback_text}
-                            onChange={e => setSelection({...selection, feedback_text: e.target.value})}
+                            onChange={e => setSelection({ ...selection, feedback_text: e.target.value })}
                             placeholder="Why does this employee deserve to be Employee of the Month?"
                             rows={4}
                             className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm focus:border-amber-500 focus:outline-none transition-all resize-none"
