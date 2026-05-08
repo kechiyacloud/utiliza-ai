@@ -8,23 +8,50 @@ import 'react-phone-input-2/lib/style.css';
  */
 const PhoneInputField = ({ value, onChange, onBlur, error, placeholder = "Enter phone number" }) => {
     // Extract dial code and number from the value
-    // value is usually "919551416338" or "+919551416338"
     const [localNumber, setLocalNumber] = React.useState('');
-    const [dialCode, setDialCode] = React.useState('91'); // Default to India
-    const [country, setCountry] = React.useState('in');
+    const [dialCode, setDialCode] = React.useState(''); 
+    const [country, setCountry] = React.useState('');
 
-    // Sync local state with incoming value
+    // One-time initialization to detect country from value
+    React.useEffect(() => {
+        if (value) {
+            // Attempt to detect dial code (greedy match)
+            // Common codes: 91, 1, 44, etc.
+            // For a production app, we could use a library, but here we can check standard prefixes
+            const possibleCodes = ['91', '1', '44', '971', '65', '61']; 
+            let detected = '91'; // Default fallback
+            let countryCode = 'in';
+
+            for (const code of possibleCodes) {
+                if (value.startsWith(code) || value.startsWith('+' + code)) {
+                    detected = code;
+                    if (code === '1') countryCode = 'us';
+                    if (code === '44') countryCode = 'gb';
+                    if (code === '971') countryCode = 'ae';
+                    // etc...
+                    break;
+                }
+            }
+            setDialCode(detected);
+            setCountry(countryCode);
+        } else {
+            setDialCode('91');
+            setCountry('in');
+        }
+    }, []); // Only run on mount
+
+    // Sync local number with incoming value using current dialCode
     React.useEffect(() => {
         if (!value) {
             setLocalNumber('');
             return;
         }
         
-        // If value starts with dialCode, strip it for the local input
-        if (value.startsWith(dialCode)) {
-            setLocalNumber(value.slice(dialCode.length));
-        } else if (value.startsWith('+' + dialCode)) {
-            setLocalNumber(value.slice(dialCode.length + 1));
+        const currentCode = dialCode || '91';
+        if (value.startsWith(currentCode)) {
+            setLocalNumber(value.slice(currentCode.length));
+        } else if (value.startsWith('+' + currentCode)) {
+            setLocalNumber(value.slice(currentCode.length + 1));
         } else {
             setLocalNumber(value);
         }
@@ -34,7 +61,7 @@ const PhoneInputField = ({ value, onChange, onBlur, error, placeholder = "Enter 
         const cleaned = newNumber.replace(/\D/g, '');
         setLocalNumber(cleaned);
         // Always send full number back: dialCode + cleaned
-        onChange(dialCode + cleaned, { dialCode, country });
+        onChange(dialCode + cleaned, { dialCode, countryCode: country });
     };
 
     const handleCountryChange = (fullValue, data) => {
