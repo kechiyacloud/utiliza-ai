@@ -1064,6 +1064,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isImportFileModalOpen, setIsImportFileModalOpen] = useState(false);
     const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
+    const [isConfirmDeleteAllAllocationsOpen, setIsConfirmDeleteAllAllocationsOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -1638,23 +1639,51 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
 
     const validResourcesCount = localRows.filter(r => (r.name && r.name.trim() !== '') || r.employee_id).length;
 
-    if (localRows.length === 0 && !isEditing) {
-        return (
-            <div className="p-8 text-center text-gray-400 italic bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
-                No resources added yet.
-                <div className="mt-4">
-                    <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-shadow shadow-md">
-                        Start Allocating
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center px-1">
-                <div></div>
+            {/* Header section with Title, Tabs, and Action buttons */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-100 mb-2">
+                {/* Heading & Tabs */}
+                <div className="flex flex-wrap items-center gap-4">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Users size={18} className="text-blue-500" />
+                        Resource Allocation &amp; Planning
+                    </h3>
+                    <div className="bg-slate-100/80 p-1 rounded-xl flex items-center shadow-inner w-fit border border-slate-200/60">
+                        <button
+                            onClick={() => setViewMode('previous')}
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
+                                viewMode === 'previous'
+                                    ? 'bg-rose-600 text-white shadow-md scale-105'
+                                    : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
+                            }`}
+                        >
+                            ← Previous
+                        </button>
+                        <button
+                            onClick={() => setViewMode('current')}
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${
+                                viewMode === 'current'
+                                    ? 'bg-blue-600 text-white shadow-md scale-105'
+                                    : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
+                            }`}
+                        >
+                            ● Current
+                        </button>
+                        <button
+                            onClick={() => setViewMode('upcoming')}
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
+                                viewMode === 'upcoming'
+                                    ? 'bg-emerald-600 text-white shadow-md scale-105'
+                                    : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
+                            }`}
+                        >
+                            Upcoming →
+                        </button>
+                    </div>
+                </div>
+
+                {/* Actions Row */}
                 <div className="flex items-center gap-2.5">
                     {isEditing ? (
                         <div className="flex items-center gap-2">
@@ -1678,43 +1707,93 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Changes
                             </button>
+                            <button onClick={() => { setIsEditing(false); setLocalRows((rows || []).map(normalizeAllocationRow)); setSaveError(''); }} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
+                                Cancel
+                            </button>
+                            
+                            <div className="relative group inline-block">
+                                <button
+                                    onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                    disabled={validResourcesCount === 0}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                        validResourcesCount === 0 
+                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <Download size={14} />
+                                    Export
+                                    <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {isExportMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                        <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                            <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                                <FileSpreadsheet size={14} className="text-emerald-500" /> Excel (.xlsx)
+                                            </button>
+                                            <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                                <TableIcon size={14} className="text-blue-500" /> CSV (.csv)
+                                            </button>
+                                            <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors border-t border-slate-50">
+                                                <FileText size={14} className="text-red-500" /> PDF Document
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     ) : (
-                        <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors">
-                            <Pencil size={14} /> Edit Allocation
-                        </button>
+                        <>
+                            <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors">
+                                <Pencil size={14} /> Edit Allocation
+                            </button>
+                            
+                            <div className="relative group inline-block">
+                                <button
+                                    onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                    disabled={validResourcesCount === 0}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                        validResourcesCount === 0 
+                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <Download size={14} />
+                                    Export
+                                    <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {isExportMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                        <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                            <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                                <FileSpreadsheet size={14} className="text-emerald-500" /> Excel (.xlsx)
+                                            </button>
+                                            <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
+                                                <TableIcon size={14} className="text-blue-500" /> CSV (.csv)
+                                            </button>
+                                            <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors border-t border-slate-50">
+                                                <FileText size={14} className="text-red-500" /> PDF Document
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={() => setIsConfirmDeleteAllAllocationsOpen(true)}
+                                disabled={validResourcesCount === 0}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                                    validResourcesCount === 0 
+                                    ? 'bg-rose-50/25 text-rose-300 cursor-not-allowed border border-rose-100/50' 
+                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100/80 border border-rose-100'
+                                }`}
+                            >
+                                <Trash2 size={14} /> Delete
+                            </button>
+                        </>
                     )}
-                    <div className="relative group inline-block">
-                        <button
-                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                            disabled={validResourcesCount === 0}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                                validResourcesCount === 0 
-                                ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
-                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                        >
-                            <Download size={14} />
-                            Export
-                            <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isExportMenuOpen && (
-                            <>
-                                <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
-                                <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                    <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
-                                        <FileSpreadsheet size={14} className="text-emerald-500" /> Excel (.xlsx)
-                                    </button>
-                                    <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors">
-                                        <TableIcon size={14} className="text-blue-500" /> CSV (.csv)
-                                    </button>
-                                    <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2 transition-colors border-t border-slate-50">
-                                        <FileText size={14} className="text-red-500" /> PDF Document
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
                 </div>
             </div>
 
@@ -1736,9 +1815,17 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 </div>
             )}
 
-            {/* The previous ViewMode toggle was here, now moved up */}
-
-            <div className="overflow-x-auto w-full rounded-xl border border-gray-100 shadow-sm bg-white">
+            {localRows.length === 0 && !isEditing ? (
+                <div className="p-8 text-center text-gray-400 italic bg-gray-50/30 rounded-lg border border-dashed border-gray-200">
+                    No resources added yet.
+                    <div className="mt-4">
+                        <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-shadow shadow-md">
+                            Start Allocating
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="overflow-x-auto w-full rounded-xl border border-gray-100 shadow-sm bg-white">
                 <table className="min-w-[1200px] text-sm">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
@@ -2073,6 +2160,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     </tfoot>
                 </table>
             </div>
+            )}
 
             <BulkAllocationModal
                 isOpen={isBulkModalOpen}
@@ -2112,6 +2200,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 isOpen={isDeleteAllModalOpen}
                 onCancel={() => setIsDeleteAllModalOpen(false)}
                 onConfirm={handleDeleteAllResources}
+                isDeleting={isDeletingAll}
+            />
+            <ConfirmDeleteAllocationsModal
+                isOpen={isConfirmDeleteAllAllocationsOpen}
+                onCancel={() => setIsConfirmDeleteAllAllocationsOpen(false)}
+                onConfirm={async () => {
+                    await handleDeleteAllResources();
+                    setIsConfirmDeleteAllAllocationsOpen(false);
+                }}
                 isDeleting={isDeletingAll}
             />
         </div>
@@ -2506,6 +2603,45 @@ const ConfirmDeleteAllModal = ({ isOpen, onCancel, onConfirm, isDeleting }) => {
                     >
                         {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                         Delete All
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ConfirmDeleteAllocationsModal = ({ isOpen, onCancel, onConfirm, isDeleting }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onCancel} />
+            <div className="relative z-[131] w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-rose-50/70">
+                    <h3 className="text-lg font-bold text-slate-800">Delete All Allocations</h3>
+                    <p className="text-xs text-slate-500 mt-1">This action will permanently remove all allocation entries and resources for the current project.</p>
+                </div>
+                <div className="px-6 py-5">
+                    <p className="text-sm text-slate-600 leading-6">
+                        Are you sure you want to delete all allocations and resources for this project? This action cannot be undone.
+                    </p>
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/60">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={isDeleting}
+                        className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        Delete
                     </button>
                 </div>
             </div>
@@ -3140,47 +3276,6 @@ const ProjectDetailsPage = () => {
 
                 {/* Full-width Resource Allocation & Planning */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                    {/* Section header */}
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                <Users size={18} className="text-blue-500" />
-                                Resource Allocation &amp; Planning
-                            </h3>
-                        </div>
-                        <div className="flex items-center">
-                            <div className="bg-slate-100/80 p-1 rounded-xl flex items-center shadow-inner w-fit border border-slate-200/60">
-                                <button
-                                    onClick={() => setViewMode('previous')}
-                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'previous'
-                                            ? 'bg-rose-600 text-white shadow-md scale-105'
-                                            : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
-                                        }`}
-                                >
-                                    ← Previous
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('current')}
-                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${viewMode === 'current'
-                                            ? 'bg-blue-600 text-white shadow-md scale-105'
-                                            : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
-                                        }`}
-                                >
-                                    ● Current
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('upcoming')}
-                                    className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'upcoming'
-                                            ? 'bg-emerald-600 text-white shadow-md scale-105'
-                                            : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
-                                        }`}
-                                >
-                                    Upcoming →
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
                     <AllocationTable
                         projectId={id}
                         projectStart={project.start_date}
