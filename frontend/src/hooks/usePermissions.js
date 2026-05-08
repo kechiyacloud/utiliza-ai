@@ -70,8 +70,8 @@ export function usePermissions() {
     }
 
     function canAccessPage(page) {
-        // page_access is a BLACKLIST — pages listed here are RESTRICTED.
-        // If the array is empty, no pages are restricted → allow all.
+        // page_access is a BLACKLIST - pages listed here are RESTRICTED.
+        // If the array is empty, no pages are restricted - allow all.
         const restricted = subRoleConfig?.page_access ?? [];
         if (restricted.length === 0) return true;
         return !restricted.includes(page);  // blocked if found in the restricted list
@@ -84,5 +84,13 @@ export function usePermissions() {
         return sub.includes(field);
     }
 
-    return { role: effectiveRole, can, isAtLeast, canAccessPage, isFieldHidden };
+    const result = { 
+        role: effectiveRole, 
+        can: can || (() => false), 
+        isAtLeast: isAtLeast || (() => false), 
+        canAccessPage: canAccessPage || (() => true), 
+        isFieldHidden: isFieldHidden || (() => false) 
+    };
+    console.log('[DEBUG] usePermissions returning:', result);
+    return result;
 }
