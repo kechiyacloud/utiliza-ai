@@ -860,7 +860,13 @@ const AccessControlSection = () => {
         setUpdating(prev => ({ ...prev, [userId]: 'role' }));
         try {
             await api.put(`/users/${userId}/role`, { role_name: roleName });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: roleName } : u));
+            setUsers(prev => prev.map(u => u.id === userId ? {
+                ...u,
+                role_name: roleName,
+                sub_role_id: null,
+                sub_role_name: null,
+                sub_role_label: null
+            } : u));
         } catch (err) {
             alert(err.response?.data?.detail || 'Failed to update role');
         } finally {

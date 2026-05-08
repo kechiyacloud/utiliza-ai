@@ -160,9 +160,6 @@ def send_registration_otp(data: SendRegistrationOtpRequest, bg: BackgroundTasks)
             intro="Use the OTP below to complete your Utiliza AI registration. It expires in <strong>10 minutes</strong>.",
             otp=otp,
         )
-        # DEBUG: Log the OTP to console so development can proceed even if email delivery fails.
-        print(f"\n[MAILER DEBUG] Registration OTP for {email}: {otp}\n")
-
         bg.add_task(send_email, email, "Your Utiliza AI Registration OTP", html)
 
         return {"message": "OTP sent to your email."}
@@ -389,9 +386,6 @@ def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
             intro="Use the OTP below to reset your Utiliza AI password. It expires in <strong>10 minutes</strong>.",
             otp=otp,
         )
-        # DEBUG: Log the OTP to console so development can proceed even if email delivery fails.
-        print(f"\n[MAILER DEBUG] Password Reset OTP for {email}: {otp}\n")
-
         bg.add_task(send_email, email, "Your Utiliza AI Password Reset OTP", html)
 
         return {"message": "If that email exists, an OTP has been sent."}
@@ -425,7 +419,7 @@ def reset_password(data: ResetPasswordRequest):
 
     try:
         cur.execute(
-            "SELECT reset_otp, reset_otp_expiry FROM users WHERE email = %s AND is_active = true",
+            "SELECT reset_otp, reset_otp_expiry FROM users WHERE LOWER(email) = LOWER(%s) AND is_active = true",
             (email,)
         )
         row = cur.fetchone()
@@ -446,7 +440,7 @@ def reset_password(data: ResetPasswordRequest):
             """UPDATE users
                SET password_hash = %s, reset_otp = NULL, reset_otp_expiry = NULL,
                    password_changed_at = NOW()
-               WHERE email = %s""",
+               WHERE LOWER(email) = LOWER(%s)""",
             (new_hash, email)
         )
         conn.commit()
