@@ -2,6 +2,7 @@ import smtplib, os
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from dotenv import load_dotenv
 
 env_file = os.path.join(os.path.dirname(__file__), ".env.local")
@@ -23,17 +24,24 @@ def send_email(to_email, subject, html_body):
         print(f"[MAILER] ERROR: Missing SMTP config — host={smtp_host}, user={smtp_user}, pass={'SET' if smtp_password else 'MISSING'}")
         return
 
+    from_domain = smtp_from.split('@', 1)[1] if '@' in smtp_from else None
+
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From']    = smtp_from
-    msg['To']      = to_email
+    msg['Subject']    = subject
+    msg['From']       = smtp_from
+    msg['To']         = to_email
+    msg['Date']       = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(domain=from_domain) if from_domain else make_msgid()
+    reply_to = os.getenv('SMTP_REPLY_TO')
+    if reply_to:
+        msg['Reply-To'] = reply_to
     msg.attach(MIMEText(html_body, 'html'))
 
     try:
         import time
         from socket import gaierror
 
-        for attempt in range(3):  # Try up to 3 times
+        for attempt in range(3):  
             try:
                 with smtplib.SMTP(smtp_host, 587, timeout=20) as server:
                     server.set_debuglevel(1)
@@ -54,7 +62,7 @@ def send_email(to_email, subject, html_body):
             except smtplib.SMTPRecipientsRefused as e:
                 print(f'[MAILER] ERROR: Recipient refused at SMTP level — {dict(e.recipients)}')
                 print(f'[MAILER] NOTE: SES Sandbox silent-drops show as 250 Ok (empty result above), NOT as SMTPRecipientsRefused. This error means SMTP-level rejection (suppression list or invalid address).')
-                break # No retry for refused recipients
+                break 
             except Exception as e:
                 print(f'[MAILER] UNEXPECTED ERROR: {type(e).__name__}: {e}')
                 break
@@ -63,6 +71,6 @@ def send_email(to_email, subject, html_body):
 
 if __name__ == "__main__":
     try:
-        send_email('sprasanth@clouddestinations.com', 'Hello!', '<p>Welcome!</p>')
+        send_email('vishnupriyae@clouddestinations.com', 'Hello!', '<p>Welcome!</p>')
     except Exception as e:
         print(f"Failed to send email: {e}")
