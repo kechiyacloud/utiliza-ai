@@ -360,7 +360,7 @@ const ReportsSection = () => {
                             <p className="text-sm text-gray-500 line-clamp-1">{report.description}</p>
                         </div>
                     </div>
-                    
+
                     <div className="mt-auto pt-4 border-t border-gray-50 flex items-center gap-2">
                         {['csv', 'excel', 'pdf'].map((format) => (
                             <button
@@ -368,8 +368,8 @@ const ReportsSection = () => {
                                 disabled={downloading !== null}
                                 onClick={() => handleDownload(report, format)}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all
-                                    ${downloading === `${report.id}-${format}` 
-                                        ? 'bg-slate-100 text-slate-400' 
+                                    ${downloading === `${report.id}-${format}`
+                                        ? 'bg-slate-100 text-slate-400'
                                         : 'bg-slate-50 text-gray-600 hover:bg-mainTheme hover:text-white'
                                     }`}
                             >
@@ -544,9 +544,9 @@ const IntegrationSection = () => {
 // ─────────────────────────────────────────────
 
 const ROLE_COLORS = {
-    master_admin:      'bg-purple-100 text-purple-800',
-    editor:            'bg-blue-100 text-blue-800',
-    viewer:            'bg-green-100 text-green-800',
+    master_admin: 'bg-purple-100 text-purple-800',
+    editor: 'bg-blue-100 text-blue-800',
+    viewer: 'bg-green-100 text-green-800',
     restricted_viewer: 'bg-gray-100 text-gray-600',
 };
 
@@ -580,7 +580,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
     const [showForm, setShowForm] = useState(false);
     const [editTarget, setEditTarget] = useState(null);
     const [submitting, setSubmitting] = useState(false);
-    
+
     const [form, setForm] = useState({
         name: '', label: '', description: '', base_role: 'viewer',
         page_access: [],
@@ -800,7 +800,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
                                 </span>
                             </div>
                             <p className="text-sm text-gray-500 mb-4 line-clamp-2 min-h-[40px]">{sr.description || 'No description provided.'}</p>
-                            
+
                             <div className="flex gap-4 mb-4 text-xs font-semibold text-gray-500">
                                 <div className="bg-slate-50 px-2 py-1 rounded border border-slate-100">
                                     {sr.page_access?.length || 0} Pages Restricted
@@ -860,7 +860,13 @@ const AccessControlSection = () => {
         setUpdating(prev => ({ ...prev, [userId]: 'role' }));
         try {
             await api.put(`/users/${userId}/role`, { role_name: roleName });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: roleName } : u));
+            setUsers(prev => prev.map(u => u.id === userId ? {
+                ...u,
+                role_name: roleName,
+                sub_role_id: null,
+                sub_role_name: null,
+                sub_role_label: null
+            } : u));
         } catch (err) {
             alert(err.response?.data?.detail || 'Failed to update role');
         } finally {
@@ -908,7 +914,7 @@ const AccessControlSection = () => {
         <div className="space-y-6 max-w-5xl">
             <div className="flex items-center justify-between">
                 <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-                    {[{id:'users',label:'Users'},{id:'sub-roles',label:'Sub-Roles'}].map(t => (
+                    {[{ id: 'users', label: 'Users' }, { id: 'sub-roles', label: 'Sub-Roles' }].map(t => (
                         <button key={t.id} onClick={() => setAcTab(t.id)}
                             className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all
                                 ${acTab === t.id ? 'bg-white shadow-sm text-mainTheme' : 'text-gray-500 hover:text-mainTheme'}`}>
@@ -1022,13 +1028,13 @@ const Settings = () => {
     }, [searchParams, activeTab]);
 
     const TABS = useMemo(() => [
-        { id: 'profile',        label: 'Profile',         icon: User },
-        { id: 'reports',        label: 'Report',          icon: BarChart2 },
-        { id: 'data',           label: 'Data',            icon: Database },
-        { id: 'feedback',       label: 'Feedback',        icon: MessageSquare },
-        { id: 'mcp',            label: 'MCP and Other Integration', icon: SettingsIcon },
-        // ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
-        { id: 'appearance',     label: 'Appearance',      icon: Laptop },
+        { id: 'profile', label: 'Profile', icon: User },
+        { id: 'reports', label: 'Report', icon: BarChart2 },
+        { id: 'data', label: 'Data', icon: Database },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+        { id: 'mcp', label: 'MCP and Other Integration', icon: SettingsIcon },
+        ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
+        { id: 'appearance', label: 'Appearance', icon: Laptop },
     ], [isAdmin]);
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
@@ -1067,7 +1073,7 @@ const Settings = () => {
         setIsExporting(true);
         try {
             console.log("Settings: Fetching employees for export...");
-            const data = await getEmployeeList(true, false, false); 
+            const data = await getEmployeeList(true, false, false);
             console.log("Settings: Received export data, count:", data?.length);
             setExportData(data);
             setShowExportModal(true);
@@ -1081,13 +1087,13 @@ const Settings = () => {
 
     const handleSyncAll = async () => {
         if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
-        
+
         setIsSyncing(true);
         try {
             await api.post('/employees/sync-all');
             clearDashboardCache();
             alert("Global data synchronization completed successfully.");
-            window.location.reload(); 
+            window.location.reload();
         } catch (err) {
             console.error("Sync all failed", err);
             alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
@@ -1113,18 +1119,17 @@ const Settings = () => {
                         Settings
                     </button>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     <p className="px-3 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-2">Preferences</p>
                     {TABS.map(({ id, label, icon: Icon }) => (
                         <button
                             key={id}
                             onClick={() => setActiveTab(id)}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                activeTab === id
-                                    ? 'bg-white text-mainTheme shadow-sm border border-gray-100'
-                                    : 'text-gray-500 hover:bg-gray-200/50 hover:text-mainTheme border border-transparent'
-                            }`}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === id
+                                ? 'bg-white text-mainTheme shadow-sm border border-gray-100'
+                                : 'text-gray-500 hover:bg-gray-200/50 hover:text-mainTheme border border-transparent'
+                                }`}
                         >
                             <Icon size={16} className={activeTab === id ? 'text-CD_Blue' : 'text-gray-400'} />
                             {label}
@@ -1139,7 +1144,7 @@ const Settings = () => {
                     <h1 className="text-2xl font-bold text-gray-800 tracking-tight mb-8">
                         {TABS.find(t => t.id === activeTab)?.label || 'Settings'}
                     </h1>
-                    
+
                     {/* Tab content */}
                     {activeTab === 'profile' && (
                         <ProfileSection
@@ -1162,16 +1167,16 @@ const Settings = () => {
                     )}
                     {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
                     {activeTab === 'mcp' && <IntegrationSection />}
-                    {/* {activeTab === 'access-control' && <AccessControlSection />} */}
+                    {activeTab === 'access-control' && <AccessControlSection />}
                     {activeTab === 'appearance' && <PlaceholderSection title="Appearance" />}
                 </div>
             </div>
 
             {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
             {showExportModal && (
-                <ExportPreviewModal 
-                    employees={exportData} 
-                    onClose={() => setShowExportModal(false)} 
+                <ExportPreviewModal
+                    employees={exportData}
+                    onClose={() => setShowExportModal(false)}
                 />
             )}
         </div>

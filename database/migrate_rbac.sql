@@ -117,10 +117,12 @@ WHERE r.role_name = 'restricted_viewer'
   AND p.action = 'read'
   AND p.resource_name NOT IN ('settings_admin', 'users', 'employee_pii', 'project_commercials');
 
--- 8. Default all existing users without a role to master_admin (safe rollout)
+-- 8. Normalize all existing emails and default users without a role to master_admin
 UPDATE public.users
-SET role_id = (SELECT role_id FROM public.roles WHERE role_name = 'master_admin')
-WHERE role_id IS NULL;
+SET 
+    email = LOWER(TRIM(email)),
+    role_id = COALESCE(role_id, (SELECT role_id FROM public.roles WHERE role_name = 'master_admin'))
+WHERE role_id IS NULL OR email != LOWER(TRIM(email));
 
 -- 9. Make role_id NOT NULL after backfilling
 ALTER TABLE public.users ALTER COLUMN role_id SET NOT NULL;
