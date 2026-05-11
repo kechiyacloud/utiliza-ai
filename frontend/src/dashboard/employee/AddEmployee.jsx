@@ -160,7 +160,7 @@ const AddEmployee = () => {
     // Form state
     const [formData, setFormData] = useState({
         // Personal
-        employee_id: '',
+        employee_id: 'CD-',
         employee_name: '',
         email: '',
         phone: '',
@@ -394,7 +394,16 @@ const AddEmployee = () => {
             }
         } else {
             setFormData(prev => {
-                const newState = { ...prev, [name]: value };
+                let finalValue = value;
+                if (name === 'employee_id') {
+                    finalValue = value.toUpperCase();
+                    // Prevent deleting 'CD-' if it was already there
+                    if (!finalValue.startsWith('CD-')) {
+                        if (finalValue.length < 3) finalValue = 'CD-';
+                        else finalValue = 'CD-' + finalValue.replace(/^CD-?/i, '');
+                    }
+                }
+                const newState = { ...prev, [name]: finalValue };
                 // If user explicitly forces status to Bench, automatically wipe any existing projects/allocations
                 if (name === 'employee_status' && value === 'Bench') {
                     newState.projects = [];
@@ -437,12 +446,26 @@ const AddEmployee = () => {
             }
         }
 
-        // Fields to check for duplicates
         const fieldsToCheck = {
             'email': 'email',
             'employee_id': 'employee_id',
             'phone': 'phone'
         };
+
+        if (name === 'employee_id' && value) {
+            const prefix = 'CD-';
+            if (value.startsWith(prefix)) {
+                const numericPart = value.slice(prefix.length).trim();
+                // If it's purely numeric, pad it to 4 digits
+                if (/^\d+$/.test(numericPart)) {
+                    const padded = numericPart.padStart(4, '0');
+                    const newVal = prefix + padded;
+                    setFormData(prev => ({ ...prev, employee_id: newVal }));
+                    // Use the padded value for the duplicate check
+                    e.target.value = newVal; 
+                }
+            }
+        }
 
         if (fieldsToCheck[name]) {
             try {
@@ -723,8 +746,9 @@ const AddEmployee = () => {
     const validatePersonalSection = (showErrors = true) => {
         const newErrors = {};
         
-        if (!formData.employee_id?.trim()) newErrors.employee_id = 'Employee ID is required';
+        if (!formData.employee_id?.trim() || formData.employee_id === 'CD-') newErrors.employee_id = 'Employee ID is required';
         else if (formData.employee_id.length > 20) newErrors.employee_id = 'Employee ID must be under 20 chars';
+        else if (!formData.employee_id.startsWith('CD-')) newErrors.employee_id = 'Employee ID must start with CD-';
 
         if (!formData.employee_name?.trim()) newErrors.employee_name = 'Employee Name is required';
         else if (formData.employee_name.length > 100) newErrors.employee_name = 'Name must be under 100 chars';
@@ -991,7 +1015,7 @@ const AddEmployee = () => {
                         maxLength={20}
                         onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="CDIN001"
+                        placeholder="CD-0001"
                         required
                         disabled={isEditMode}
                     />

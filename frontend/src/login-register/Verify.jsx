@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { CD_Blue } from '../Assets.jsx'
 import api from "../api/axios"
+import { toast } from 'react-hot-toast'
 
 function Verify() {
   const navigate = useNavigate()
@@ -11,7 +12,7 @@ function Verify() {
 
   useEffect(() => {
     if (!email) {
-      navigate("/register")
+      navigate("/register", { replace: true })
     }
   }, [email, navigate])
 
@@ -35,10 +36,10 @@ function Verify() {
         code: formData.verifyCode
       })
 
-      navigate("/login")
+      navigate("/login", { replace: true })
 
     } catch (err) {
-      alert(err.response?.data?.detail || "Verification failed")
+      toast.error(err.response?.data?.detail || "Verification failed")
     }
   }
 

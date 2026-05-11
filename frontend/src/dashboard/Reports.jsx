@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { 
     User, Briefcase, Building2, Download, Loader2, ArrowLeft, BarChart2
@@ -74,7 +75,7 @@ const Reports = () => {
             }
         } catch (err) {
             console.error(`Export failed for ${report.title}`, err);
-            alert(`Failed to download ${report.title}. Please try again.`);
+            toast.error(`Failed to download ${report.title}. Please try again.`);
         } finally {
             setDownloading(null);
         }
