@@ -917,7 +917,6 @@ const Settings = () => {
 
         { id: 'data', label: 'Data', icon: Database },
         { id: 'feedback', label: 'Feedback', icon: MessageSquare },
-        { id: 'mcp', label: 'MCP Integration', icon: SettingsIcon },
         ...(isAdmin ? [{ id: 'access-control', label: 'Access Control', icon: ShieldCheck }] : []),
         { id: 'appearance', label: 'Appearance', icon: Laptop },
     ], [isAdmin]);
@@ -1051,7 +1050,6 @@ const Settings = () => {
                         />
                     )}
                     {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
-                    {activeTab === 'mcp' && <IntegrationSection />}
                     {activeTab === 'access-control' && <AccessControlSection />}
                     {activeTab === 'appearance' && <PlaceholderSection title="Appearance" />}
                 </div>

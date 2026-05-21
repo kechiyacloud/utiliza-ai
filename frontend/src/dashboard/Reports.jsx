@@ -20,11 +20,12 @@ const Reports = () => {
             endpoint: '/employees/list',
             fileName: 'Employee_Directory_Report',
             columns: [
-                { header: 'Name', dataKey: 'name' },
-                { header: 'Email', dataKey: 'email' },
+                { header: 'Name', dataKey: 'employee_name' },
+                { header: 'Email', dataKey: 'email_id' },
                 { header: 'Department', dataKey: 'department' },
-                { header: 'Designation', dataKey: 'designation' },
-                { header: 'Status', dataKey: 'employee_status' }
+                { header: 'Designation', dataKey: 'role_designation' },
+                { header: 'Status', dataKey: 'employee_status' },
+                { header: 'Joining Date', dataKey: 'date_of_joining' }
             ]
         },
         {
@@ -50,10 +51,12 @@ const Reports = () => {
             endpoint: '/clients',
             fileName: 'Client_Roster_Report',
             columns: [
-                { header: 'Client Name', dataKey: 'client_name' },
-                { header: 'Partner', dataKey: 'partner_name' },
-                { header: 'Location', dataKey: 'location' },
-                { header: 'Contact', dataKey: 'primary_contact' }
+                { header: 'Client Name', dataKey: 'name' },
+                { header: 'Industry', dataKey: 'industry' },
+                { header: 'Status', dataKey: 'status' },
+                { header: 'Budget', dataKey: 'budget' },
+                { header: 'Project Count', dataKey: 'project_count' },
+                { header: 'Onboarded Date', dataKey: 'onboarded_date' }
             ]
         }
     ];
@@ -66,12 +69,24 @@ const Reports = () => {
             // Handle different API response structures
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
 
+            let exportData = data;
+            if (report.id === 'clients') {
+                exportData = data.map(c => ({
+                    name: c.name,
+                    industry: c.industry ?? '',
+                    status: c.status ?? '',
+                    budget: c.budget ?? 0,
+                    project_count: Array.isArray(c.projects) ? c.projects.length : 0,
+                    onboarded_date: c.onboarded_date ?? ''
+                }));
+            }
+
             if (format === 'csv') {
-                exportToCSV(data, report.fileName);
+                exportToCSV(exportData, report.fileName);
             } else if (format === 'excel') {
-                exportToExcel(data, report.fileName);
+                exportToExcel(exportData, report.fileName);
             } else if (format === 'pdf') {
-                await exportToPDF(data, report.columns, report.title, report.fileName);
+                await exportToPDF(exportData, report.columns, report.title, report.fileName);
             }
         } catch (err) {
             console.error(`Export failed for ${report.title}`, err);
