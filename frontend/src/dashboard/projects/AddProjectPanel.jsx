@@ -96,8 +96,8 @@ const normalizeTeamMember = (tm = {}) => ({
     role: (tm.role || '').trim(),
     location: tm.location || 'Remote',
     allocation_pct: tm.allocation_pct === '' ? null : Number(tm.allocation_pct || 0),
-    allocation_start_date: tm.allocation_start_date || null,
-    allocation_end_date: tm.allocation_end_date || null,
+    allocation_start_date: normalizeDateString(tm.allocation_start_date) || null,
+    allocation_end_date: normalizeDateString(tm.allocation_end_date) || null,
     billable_shadow: tm.billable_shadow === 'Shadow' ? 'Non-billable' : (tm.billable_shadow || 'Billable'),
     weekly_hours: sanitizeWeeklyHours(tm.weekly_hours),
     w1: Number(tm.w1 || 0),
@@ -424,6 +424,7 @@ const SearchableDropdown = ({
     onBeforeOpen,
     onOpenChange,
     onCreateNew,
+    hasError = false,
 }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
@@ -493,10 +494,11 @@ const SearchableDropdown = ({
                     setIsOpen(false);
                 }}
                 disabled={disabled}
-                className={`w-full h-10 px-3 bg-gray-50 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
+                className={`w-full h-10 px-3 border rounded-lg text-sm outline-none text-left font-medium transition-all flex items-center justify-between gap-2 min-w-0
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200' : ''}
-                    ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}
-                    ${!disabled && !isOpen ? 'border-gray-200 hover:border-gray-300' : ''}`}
+                    ${!disabled && !isOpen && !hasError ? 'bg-gray-50 border-gray-200 hover:border-gray-300 text-gray-800' : ''}
+                    ${!disabled && !isOpen && hasError ? 'bg-red-50 border-red-300 text-red-900 placeholder-red-300' : ''}
+                    ${!disabled && isOpen ? 'ring-2 ring-blue-100 bg-white border-blue-300' : ''}`}
             >
                 <span className={`${selectedItem ? 'text-gray-800' : 'text-gray-400'} truncate min-w-0 flex-1`}>
                     {selectedItem ? selectedItem.name : placeholder || `Select ${label}`}
@@ -633,6 +635,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const [teamAllocationsError, setTeamAllocationsError] = useState('');
     const [entityError, setEntityError] = useState('');
     const [showAllWeeks, setShowAllWeeks] = useState(false);
+    const [errors, setErrors] = useState({});
 
     // ——— Modal State ———
     const [modal, setModal] = useState({ isOpen: false, mode: 'add', entityType: 'client', name: '', error: '' });
@@ -696,6 +699,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             setTeamHoursError('');
             setEntityError('');
             setSkillError('');
+            setErrors({});
             setIsAddingSkill(false);
             setFormData({
                 name: '',
@@ -729,8 +733,22 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     // ——— Handlers ———
     const handleChange = (e) => {
         const { name, value } = e.target;
+
+        // Clear field-level error upon valid value/change
+        if (errors[name]) {
+            setErrors(prev => {
+                const next = { ...prev };
+                delete next[name];
+                return next;
+            });
+        }
+
         if (name === 'type') {
             const isClientType = value === 'External';
+            setErrors(prev => {
+                const { clientType, clientId, partnerId, ...rest } = prev;
+                return rest;
+            });
             setFormData(prev => ({
                 ...prev,
                 type: value,
@@ -753,6 +771,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             return;
         }
         if (name === 'clientType') {
+            setErrors(prev => {
+                const { clientType, clientId, partnerId, ...rest } = prev;
+                return rest;
+            });
             setFormData(prev => ({
                 ...prev,
                 clientType: value,
@@ -764,6 +786,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             return;
         }
         if (name === 'startDate') {
+            setErrors(prev => {
+                const { startDate, endDate, ...rest } = prev;
+                return rest;
+            });
             setFormData(prev => {
                 let updatedEndDate = prev.endDate;
                 if (value && updatedEndDate && new Date(value) > new Date(updatedEndDate)) {
@@ -774,6 +800,10 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             return;
         }
         if (name === 'endDate') {
+            setErrors(prev => {
+                const { endDate, ...rest } = prev;
+                return rest;
+            });
             setFormData(prev => {
                 let newEndDate = value;
                 if (prev.startDate && newEndDate && new Date(prev.startDate) > new Date(newEndDate)) {
@@ -788,10 +818,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     };
 
     const handleClientSelect = (item) => {
+        setErrors(prev => {
+            const { clientId, ...rest } = prev;
+            return rest;
+        });
         setFormData(prev => ({ ...prev, clientId: String(item.id), clientName: item.name }));
     };
 
     const handlePartnerSelect = (item) => {
+        setErrors(prev => {
+            const { partnerId, clientId, ...rest } = prev;
+            return rest;
+        });
         setFormData(prev => ({
             ...prev,
             partnerId: String(item.id),
@@ -1338,42 +1376,49 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
+        setErrors({});
+        
         const isClientProject = formData.type === 'External';
         const isPartnerClientProject = formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE;
+
+        let hasValidationFail = false;
+        const fieldErrors = {};
+
+        // Team Validations -> Set visual errors above team area
         const projectHoursValidationError = validateProjectWeeklyHours(formData.teamMembers);
         if (projectHoursValidationError) {
             setTeamHoursError(projectHoursValidationError);
-            setSubmitError(projectHoursValidationError);
-            return;
+            hasValidationFail = true;
+        } else {
+            setTeamHoursError('');
         }
-        setTeamHoursError('');
 
         const teamDatesValidationError = validateTeamMemberDates(formData.teamMembers);
         if (teamDatesValidationError) {
             setTeamDatesError(teamDatesValidationError);
-            setSubmitError(teamDatesValidationError);
-            return;
+            hasValidationFail = true;
+        } else {
+            setTeamDatesError('');
         }
-        setTeamDatesError('');
 
         const teamAllocationsValidationError = validateTeamMemberAllocations(formData.teamMembers);
         if (teamAllocationsValidationError) {
             setTeamAllocationsError(teamAllocationsValidationError);
-            setSubmitError(teamAllocationsValidationError);
-            return;
+            hasValidationFail = true;
+        } else {
+            setTeamAllocationsError('');
         }
-        setTeamAllocationsError('');
 
+        // Field Validations
         if (!(formData.name || '').trim()) {
-            setSubmitError('Project name is required.');
-            return;
+            fieldErrors.name = 'Project name is required.';
         }
+        
         let normalizedStart = null;
         if (formData.startDate) {
             normalizedStart = normalizeDateString(formData.startDate);
             if (!normalizedStart) {
-                setSubmitError('Start date format is invalid.');
-                return;
+                fieldErrors.startDate = 'Start date format is invalid.';
             }
         }
         const normalizedEnd = normalizeDateString(formData.endDate);
@@ -1381,24 +1426,31 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             const startTs = new Date(normalizedStart).getTime();
             const endTs = new Date(normalizedEnd).getTime();
             if (endTs < startTs) {
-                setSubmitError('End date cannot be earlier than start date.');
-                return;
+                fieldErrors.endDate = 'End date cannot be earlier than start date.';
             }
         }
-        if (formData.type === 'External' && !formData.clientType) {
-            setSubmitError('Please select a client type.');
-            return;
-        }
-        if (formData.type === 'External' && formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
-            setSubmitError('Please select a client.');
-            return;
-        }
-        if (formData.type === 'External' && formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
-            setSubmitError('Please select a partner.');
-            return;
+        if (isClientProject) {
+            if (!formData.clientType) {
+                fieldErrors.clientType = 'Please select a client type.';
+            }
+            if (formData.clientType === DIRECT_CLIENT_TYPE && !formData.clientId) {
+                fieldErrors.clientId = 'Please select a client.';
+            }
+            if (formData.clientType === PARTNER_CLIENT_TYPE && !formData.partnerId) {
+                fieldErrors.partnerId = 'Please select a partner.';
+            }
         }
         if (!(formData.department_id || '').trim()) {
-            setSubmitError('Department is required.');
+            fieldErrors.department_id = 'Department is required.';
+        }
+
+        if (Object.keys(fieldErrors).length > 0) {
+            setErrors(fieldErrors);
+            hasValidationFail = true;
+        }
+
+        if (hasValidationFail) {
+            // Stop if error found
             return;
         }
 
@@ -1409,11 +1461,11 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         const normalizedPartnerId = isPartnerClientProject ? toIdOrNull(formData.partnerId) : null;
 
         if (isClientProject && !normalizedClientId) {
-            setSubmitError('Selected client is invalid. Please re-select the client.');
+            setErrors(prev => ({ ...prev, clientId: 'Selected client is invalid. Please re-select the client.' }));
             return;
         }
         if (isPartnerClientProject && !normalizedPartnerId) {
-            setSubmitError('Selected partner is invalid. Please re-select the partner.');
+            setErrors(prev => ({ ...prev, partnerId: 'Selected partner is invalid. Please re-select the partner.' }));
             return;
         }
 
@@ -1546,11 +1598,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                 {/* Form Content */}
                 <div className="flex-1 overflow-y-auto w-full">
                     <form id="add-project-form" onSubmit={handleSubmit} noValidate className="p-6 flex flex-col gap-8">
-                        {submitError && (
-                            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 flex items-center gap-2">
-                                <AlertCircle size={16} className="shrink-0" /> {toMessage(submitError)}
-                            </div>
-                        )}
+
                         {entityError && (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 flex items-center gap-2">
                                 <AlertCircle size={16} className="shrink-0" /> {toMessage(entityError)}
@@ -1569,8 +1617,9 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <label className="text-xs font-bold text-gray-600">Project name <span className="text-red-500">*</span></label>
                                     <input type="text" name="name" placeholder="e.g. Enterprise Migration"
                                         maxLength={100}
-                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800"
+                                        className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-800 ${errors.name ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         value={formData.name} onChange={handleChange} />
+                                    {errors.name && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.name}</p>}
                                 </div>
 
                                 {/* TYPE DROPDOWN */}
@@ -1587,11 +1636,12 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 {isClientProject && (
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-bold text-gray-600">Client type</label>
-                                        <select name="clientType" className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                        <select name="clientType" className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700 ${errors.clientType ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                             value={formData.clientType} onChange={handleChange}>
                                             <option value={DIRECT_CLIENT_TYPE}>{DIRECT_CLIENT_TYPE}</option>
                                             <option value={PARTNER_CLIENT_TYPE}>{PARTNER_CLIENT_TYPE}</option>
                                         </select>
+                                        {errors.clientType && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.clientType}</p>}
                                     </div>
                                 )}
 
@@ -1620,6 +1670,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 placeholder="Select Partner"
                                                 label="partners"
                                                 isLoading={isDirectoryLoading}
+                                                hasError={!!errors.partnerId}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'partner')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Partner">
@@ -1638,6 +1689,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
+                                        {errors.partnerId && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.partnerId}</p>}
                                     </div>
                                 )}
 
@@ -1654,6 +1706,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 label="clients"
                                                 noResultsText={isPartnerClient ? 'No clients available for the selected partner' : 'No results found'}
                                                 isLoading={isDirectoryLoading}
+                                                hasError={!!errors.clientId}
                                             />
                                             <button type="button" onClick={() => openModal('add', 'client')}
                                                 className="px-2.5 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1" title="Add Client">
@@ -1672,6 +1725,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                 <Trash2 size={12} /> Delete
                                             </button>
                                         </div>
+                                        {errors.clientId && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.clientId}</p>}
                                     </div>
                                 )}
 
@@ -1680,7 +1734,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                     <label className="text-xs font-bold text-gray-600">Department <span className="text-red-500">*</span></label>
                                     <select
                                         name="department_id"
-                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700"
+                                        className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all cursor-pointer font-medium text-gray-700 ${errors.department_id ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         value={formData.department_id}
                                         onChange={handleChange}
                                     >
@@ -1689,6 +1743,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                                         ))}
                                     </select>
+                                    {errors.department_id && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.department_id}</p>}
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
@@ -1732,16 +1787,18 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600">Start date</label>
                                     <input type="date" name="startDate"
-                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
+                                        className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700 ${errors.startDate ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         value={formData.startDate} onChange={handleChange} />
+                                    {errors.startDate && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.startDate}</p>}
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-bold text-gray-600">End date</label>
                                     <input type="date" name="endDate"
-                                        className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700"
+                                        className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700 ${errors.endDate ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         min={formData.startDate || undefined}
                                         value={formData.endDate} onChange={handleChange} />
+                                    {errors.endDate && <p className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1"><AlertCircle size={12}/>{errors.endDate}</p>}
                                 </div>
 
                                 {/* SKILLS MULTI-SELECT */}

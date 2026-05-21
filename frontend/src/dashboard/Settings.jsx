@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { usePermissions } from '../hooks/usePermissions';
 import api from '../api/axios';
@@ -497,7 +498,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
             await api.delete(`/sub-roles/${id}`);
             onRefresh();
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to delete sub-role');
+            toast.error(err.response?.data?.detail || 'Failed to delete sub-role');
         }
     };
 
@@ -519,7 +520,7 @@ const SubRolesPanel = ({ subRoles, roles, onRefresh }) => {
             onRefresh();
             resetForm();
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to save sub-role');
+            toast.error(err.response?.data?.detail || 'Failed to save sub-role');
         } finally {
             setSubmitting(false);
         }
@@ -752,7 +753,7 @@ const AccessControlSection = () => {
                 sub_role_label: null
             } : u));
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to update role');
+            toast.error(err.response?.data?.detail || 'Failed to update role');
         } finally {
             setUpdating(prev => ({ ...prev, [userId]: null }));
         }
@@ -765,7 +766,7 @@ const AccessControlSection = () => {
             const sr = subRoles.find(s => s.sub_role_id === subRoleId);
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, sub_role_id: subRoleId, sub_role_name: sr?.name, sub_role_label: sr?.label } : u));
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to update sub-role');
+            toast.error(err.response?.data?.detail || 'Failed to update sub-role');
         } finally {
             setUpdating(prev => ({ ...prev, [userId]: null }));
         }
@@ -778,7 +779,7 @@ const AccessControlSection = () => {
             await api.delete(`/users/${userId}`);
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: false } : u));
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to deactivate user');
+            toast.error(err.response?.data?.detail || 'Failed to deactivate user');
         } finally {
             setUpdating(prev => ({ ...prev, [userId]: null }));
         }
@@ -963,7 +964,7 @@ const Settings = () => {
             setShowExportModal(true);
         } catch (err) {
             console.error("Export fetch failed", err);
-            alert("Failed to prepare export data. Please try again.");
+            toast.error("Failed to prepare export data. Please try again.");
         } finally {
             setIsExporting(false);
         }
@@ -976,11 +977,11 @@ const Settings = () => {
         try {
             await api.post('/employees/sync-all');
             clearDashboardCache();
-            alert("Global data synchronization completed successfully.");
+            toast.success("Global data synchronization completed successfully.");
             window.location.reload();
         } catch (err) {
             console.error("Sync all failed", err);
-            alert("Failed to sync data: " + (err.response?.data?.detail || err.message));
+            toast.error("Failed to sync data: " + (err.response?.data?.detail || err.message));
         } finally {
             setIsSyncing(false);
         }

@@ -14,7 +14,8 @@ import {
     Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import { clearDashboardCache } from '../../api/dashboardApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
@@ -401,7 +402,7 @@ const EmployeeDetails = () => {
                         navigate('/info/employees/list');
                     } catch (err) {
                         console.error('Delete failed', err);
-                        alert('Delete failed');
+                        toast.error('Delete failed: ' + (err.response?.data?.detail || err.message));
                     } finally {
                         setIsDeleting(false);
                         setIsDeleteModalOpen(false);
@@ -456,7 +457,14 @@ const EmployeeDetails = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                         <h1 className="text-2xl font-bold text-gray-800 tracking-tight break-words min-w-0">{userData.name}</h1>
                         <div className="flex items-center justify-center md:justify-end gap-2 shrink-0">
-                            <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || userData.id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors shadow-sm">Edit</button>
+                            <button onClick={() => navigate('/info/employee/add', { 
+                                replace: true,
+                                state: { 
+                                    editData: userData, 
+                                    editEmployeeId: userData.employee_id || userData.id || id, 
+                                    isEditMode: true 
+                                } 
+                            })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors shadow-sm">Edit</button>
                             <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors shadow-sm">Delete</button>
                         </div>
                     </div>

@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 
 import PhoneInputField from '../../components/PhoneInputField';
+import ConfirmCancelModal from '../../components/ConfirmCancelModal';
 import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
@@ -78,6 +79,7 @@ const AddEmployee = () => {
     const [newDesigName, setNewDesigName] = useState('');
     const [isDirty, setIsDirty] = useState(false);
     const [showNavigationBlocker, setShowNavigationBlocker] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
     const [pendingNavigate, setPendingNavigate] = useState(null);
 
 
@@ -160,7 +162,7 @@ const AddEmployee = () => {
     // Form state
     const [formData, setFormData] = useState({
         // Personal
-        employee_id: '',
+        employee_id: 'CD-',
         employee_name: '',
         email: '',
         phone: '',
@@ -394,7 +396,16 @@ const AddEmployee = () => {
             }
         } else {
             setFormData(prev => {
-                const newState = { ...prev, [name]: value };
+                let finalValue = value;
+                if (name === 'employee_id') {
+                    finalValue = value.toUpperCase();
+                    // Prevent deleting 'CD-' if it was already there
+                    if (!finalValue.startsWith('CD-')) {
+                        if (finalValue.length < 3) finalValue = 'CD-';
+                        else finalValue = 'CD-' + finalValue.replace(/^CD-?/i, '');
+                    }
+                }
+                const newState = { ...prev, [name]: finalValue };
                 // If user explicitly forces status to Bench, automatically wipe any existing projects/allocations
                 if (name === 'employee_status' && value === 'Bench') {
                     newState.projects = [];
@@ -437,12 +448,26 @@ const AddEmployee = () => {
             }
         }
 
-        // Fields to check for duplicates
         const fieldsToCheck = {
             'email': 'email',
             'employee_id': 'employee_id',
             'phone': 'phone'
         };
+
+        if (name === 'employee_id' && value) {
+            const prefix = 'CD-';
+            if (value.startsWith(prefix)) {
+                const numericPart = value.slice(prefix.length).trim();
+                // If it's purely numeric, pad it to 4 digits
+                if (/^\d+$/.test(numericPart)) {
+                    const padded = numericPart.padStart(4, '0');
+                    const newVal = prefix + padded;
+                    setFormData(prev => ({ ...prev, employee_id: newVal }));
+                    // Use the padded value for the duplicate check
+                    e.target.value = newVal; 
+                }
+            }
+        }
 
         if (fieldsToCheck[name]) {
             try {
@@ -564,8 +589,14 @@ const AddEmployee = () => {
                     fileData: reader.result
                 };
                 setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+                
+                // Clear error when user uploads file
                 if (errors.certificates) {
-                    setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+                    setErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.certificates;
+                        return newErrors;
+                    });
                 }
             };
             reader.readAsDataURL(file);
@@ -576,8 +607,14 @@ const AddEmployee = () => {
         const updatedCerts = [...formData.certificates];
         updatedCerts[index] = { ...updatedCerts[index], name };
         setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+        
+        // Clear error when user modifies name
         if (errors.certificates) {
-            setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.certificates;
+                return newErrors;
+            });
         }
     };
 
@@ -593,6 +630,15 @@ const AddEmployee = () => {
             ...prev,
             certificates: prev.certificates.filter((_, i) => i !== index)
         }));
+
+        // Clear certificates error when a certificate is removed
+        if (errors.certificates) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.certificates;
+                return newErrors;
+            });
+        }
     };
 
     const stripLeadingZeros = (val) => {
@@ -723,8 +769,9 @@ const AddEmployee = () => {
     const validatePersonalSection = (showErrors = true) => {
         const newErrors = {};
         
-        if (!formData.employee_id?.trim()) newErrors.employee_id = 'Employee ID is required';
+        if (!formData.employee_id?.trim() || formData.employee_id === 'CD-') newErrors.employee_id = 'Employee ID is required';
         else if (formData.employee_id.length > 20) newErrors.employee_id = 'Employee ID must be under 20 chars';
+        else if (!formData.employee_id.startsWith('CD-')) newErrors.employee_id = 'Employee ID must start with CD-';
 
         if (!formData.employee_name?.trim()) newErrors.employee_name = 'Employee Name is required';
         else if (formData.employee_name.length > 100) newErrors.employee_name = 'Name must be under 100 chars';
@@ -991,7 +1038,7 @@ const AddEmployee = () => {
                         maxLength={20}
                         onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="CDIN001"
+                        placeholder="CD-0001"
                         required
                         disabled={isEditMode}
                     />
@@ -1244,13 +1291,12 @@ const AddEmployee = () => {
                         name="employment_type"
                         value={formData.employment_type}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employment_type ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                         {EMPLOYMENT_TYPES.map((type) => (
                             <option key={type} value={type}>{type}</option>
                         ))}
                     </select>
-                    {errors.employment_type && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employment_type}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Location <span className="text-black ml-1">*</span></label>
@@ -1334,7 +1380,7 @@ const AddEmployee = () => {
                         name="employee_status"
                         value={formData.employee_status}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_status ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                         <optgroup label="Auto-calculated (based on projects)">
                             <option value="Bench">Bench</option>
@@ -1965,10 +2011,7 @@ const AddEmployee = () => {
                 <button
                     onClick={() => {
                         if (isDirty) {
-                            if (window.confirm('You have unsaved changes. Are you sure you want to cancel?')) {
-                                toast.error('Changes discarded');
-                                navigate(-1);
-                            }
+                            setShowCancelModal(true);
                         } else {
                             navigate(-1);
                         }
@@ -1983,7 +2026,6 @@ const AddEmployee = () => {
                         <button
                             onClick={() => {
                                 const idx = sections.findIndex(s => s.id === currentSection);
-                                setErrors({});
                                 setCurrentSection(sections[idx - 1].id);
                             }}
                             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
@@ -2040,6 +2082,17 @@ const AddEmployee = () => {
                     )}
                 </div>
             </div>
+
+            {/* Modals */}
+            <ConfirmCancelModal 
+                isOpen={showCancelModal}
+                onClose={() => setShowCancelModal(false)}
+                onConfirm={() => {
+                    setShowCancelModal(false);
+                    toast.error('Changes discarded');
+                    navigate(-1);
+                }}
+            />
         </div>
     );
 };

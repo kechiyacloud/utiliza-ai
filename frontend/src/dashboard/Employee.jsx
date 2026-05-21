@@ -350,7 +350,7 @@ function Employee() {
               }
             })
           }
-          onEmployeeEdit={(emp) => navigate('/info/employee/add', { state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
+          onEmployeeEdit={(emp) => navigate('/info/employee/add', { replace: true, state: { editData: emp, editEmployeeId: emp.employee_id, isEditMode: true } })}
           onEmployeeDelete={(deletedId) => {
             setAllEmployees(prev => prev.filter(emp => emp.employee_id !== deletedId));
           }}
