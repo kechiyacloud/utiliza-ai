@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { UserSearch, Users } from 'lucide-react';
+import { isValidPhoto } from '../../utils/imageHelper';
 
 const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
     const [joiners, setJoiners] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [failedImages, setFailedImages] = useState({});
 
     useEffect(() => {
         const now = new Date();
@@ -59,15 +61,21 @@ const NewJoinerCard = ({ onClick, isActive, employees = [] }) => {
                 </p>
 
                 <div key={currentIndex} className="flex items-center gap-2 animate-fade-in">
-                    {joiner.photo_url ? (
+                    {isValidPhoto(joiner.photo_url) && !failedImages[joiner.employee_id] ? (
                         <img
                             src={joiner.photo_url}
                             alt={joiner.employee_name}
                             className="w-8 h-8 rounded-full border-2 border-green-100 object-cover flex-shrink-0"
+                            onLoad={(e) => {
+                                if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                    setFailedImages(prev => ({ ...prev, [joiner.employee_id]: true }));
+                                }
+                            }}
+                            onError={() => setFailedImages(prev => ({ ...prev, [joiner.employee_id]: true }))}
                         />
                     ) : (
                         <div className="w-8 h-8 rounded-full border-2 border-green-100 bg-green-50 flex items-center justify-center text-green-600 text-xs font-bold flex-shrink-0">
-                            {joiner.employee_name?.split(' ').map(n => n[0]).slice(0, 2).join('') || 'N/A'}
+                            {joiner.employee_name?.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'N/A'}
                         </div>
                     )}
                     <div className="min-w-0 flex-1">

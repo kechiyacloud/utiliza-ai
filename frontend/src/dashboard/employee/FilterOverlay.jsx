@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { X, Filter, ChevronDown, Check, Users, Briefcase, Hourglass, TrendingUp, AlertCircle, DollarSign } from 'lucide-react';
 import { getEmployeeTag } from '../../components/EmployeeStatusTag';
 import { normalizeSkillName } from '../../utils/skillTopics';
+import { getEmployeeStatus } from '../../utils/employeeStatus';
 
 const Checkbox = ({ checked, onChange, label, count }) => (
     <label className={`flex items-center gap-3 cursor-pointer group border-b border-slate-50 last:border-0 transition-colors ${checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
@@ -98,14 +99,17 @@ const FilterStats = ({ employees, localFilters, getTagLabel, designations }) => 
         const matchesType = !localFilters.types?.length || localFilters.types.includes(emp.employee_type);
         const matchesLocation = !localFilters.locations?.length || localFilters.locations.includes(emp.location);
         const matchesSkills = employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
-        const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
+        const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(getEmployeeStatus(emp)));
         const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
         return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
     }), [employees, localFilters]);
 
-    const bench = group.filter(e => (e.employee_status || '').toLowerCase() === 'bench').length;
-    const notice = group.filter(e => (e.employee_status || '').toLowerCase().includes('notice')).length;
-    const allocated = group.filter(e => (e.employee_status || '').toLowerCase().includes('allocated')).length;
+    const bench = group.filter(e => getEmployeeStatus(e).toLowerCase() === 'bench').length;
+    const notice = group.filter(e => {
+        const s = getEmployeeStatus(e).toLowerCase();
+        return s.includes('notice') || s.includes('pip');
+    }).length;
+    const allocated = group.filter(e => getEmployeeStatus(e).toLowerCase().includes('allocated')).length;
     const billable = group.filter(e => e.billable === 'billable').length;
     const avgAlloc = group.length ? Math.round(group.reduce((s, e) => s + (e.employee_allocations || 0), 0) / group.length) : 0;
 
@@ -158,7 +162,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
         locations: [...new Set(employees.map(emp => emp.location).filter(Boolean))].sort(),
         skills: [...new Set(employees.flatMap(emp => Array.isArray(emp.skills) ? emp.skills.map(normalizeSkillName) : []).filter(Boolean))].sort(),
         employee_types: [...new Set(employees.map(emp => emp.employee_type).filter(Boolean))].sort(),
-        status_tags: [...new Set(employees.map(emp => getTagLabel(emp.employee_status)).filter(Boolean))].sort()
+        status_tags: [...new Set(employees.map(emp => getTagLabel(getEmployeeStatus(emp))).filter(Boolean))].sort()
     }), [employees]);
 
     // Derive unique designations from employees
@@ -189,7 +193,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
             const matchesType = !localFilters.types.length || localFilters.types.includes(emp.employee_type);
             const matchesLocation = !localFilters.locations.length || localFilters.locations.includes(emp.location);
             const matchesSkills = employeeHasMatchingSkill(emp.skills, localFilters.skills || []);
-            const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(emp.employee_status));
+            const matchesStatusTag = !localFilters.statusTags?.length || localFilters.statusTags.includes(getTagLabel(getEmployeeStatus(emp)));
             const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
             return matchesDept && matchesType && matchesLocation && matchesSkills && matchesStatusTag && matchesDesig;
         }).length;
@@ -228,7 +232,7 @@ const FilterOverlay = ({ isOpen, onClose, filters, onFilterChange, employees }) 
                 const matchesDesig = !localFilters.designations?.length || localFilters.designations.includes(emp.role_designation);
                 return matchesDept && matchesType && matchesLocation && matchesSkills && matchesDesig;
             }).reduce((acc, emp) => {
-                const label = getTagLabel(emp.employee_status);
+                const label = getTagLabel(getEmployeeStatus(emp));
                 acc[label] = (acc[label] || 0) + 1;
                 return acc;
             }, {})

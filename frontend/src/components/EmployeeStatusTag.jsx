@@ -60,6 +60,27 @@ export const getEmployeeTag = (status) => {
             dot: 'bg-emerald-500',
         };
     }
+    if (s === 'leadership') {
+        return {
+            label: 'Leadership',
+            color: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+            dot: 'bg-indigo-500',
+        };
+    }
+    if (s === 'internal operations' || s === 'internal_operations') {
+        return {
+            label: 'Internal Operations',
+            color: 'bg-teal-50 text-teal-700 border-teal-200',
+            dot: 'bg-teal-500',
+        };
+    }
+    if (s === 'training') {
+        return {
+            label: 'Training',
+            color: 'bg-amber-50 text-amber-700 border-amber-200',
+            dot: 'bg-amber-500',
+        };
+    }
     if (s === 'completed') {
         return {
             label: 'Completed',

@@ -12,6 +12,7 @@ import { useDataRefresh } from '../../context'
 import { normalizeSkillName } from '../../utils/skillTopics'
 import MultiSelectDropdown from '../../components/MultiSelectDropdown'
 import { encodeId } from '../../utils/idEncoder'
+import { getEmployeeStatus } from '../../utils/employeeStatus'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -177,24 +178,23 @@ function EmployeeMasterList() {
     const thirtyDaysAgo = new Date(new Date().getTime() - (30 * 24 * 60 * 60 * 1000));
 
     return baseGroup.filter(emp => {
-      const s = (emp.employee_status || '').toLowerCase();
-      const isSpecialStatus = s.includes('notice') || s.includes('pip');
+      const s = getEmployeeStatus(emp).toLowerCase();
       const billable = (emp.billable || '').toLowerCase();
 
       switch (cardFilter) {
         case 'billable':
-          return billable === 'billable' && !isSpecialStatus;
+          return s === 'allocated' && billable === 'billable';
         case 'non-billable':
-          return billable.includes('non') && !isSpecialStatus;
+          return s === 'allocated' && billable.includes('non');
         case 'bench':
-          return (emp.employee_allocations || 0) <= 0 && !isSpecialStatus;
+          return s === 'bench';
         case 'overallocated':
           return (emp.employee_allocations || 0) > 100;
         case 'notice':
-          return isSpecialStatus;
+          return s.includes('notice') || s.includes('pip');
         case 'new-joiner': {
           const joinDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-          const isLeaving = isSpecialStatus || emp.date_of_resign;
+          const isLeaving = s.includes('notice') || s.includes('pip') || s.includes('resign') || emp.date_of_resign;
           return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
         }
         default:
@@ -208,25 +208,22 @@ function EmployeeMasterList() {
   const totalEmployeesCount = baseGroup.length;
 
   const billableCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'allocated' && (e.billable || '').toLowerCase() === 'billable';
   }).length;
 
   const nonBillableCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'allocated' && (e.billable || '').toLowerCase().includes('non');
   }).length;
 
   const benchEmployeesCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.employee_allocations || 0) <= 0 && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'bench';
   }).length;
 
   const noticeEmployeesCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
+    const s = getEmployeeStatus(e).toLowerCase();
     return s.includes('notice') || s.includes('pip');
   }).length;
 
@@ -236,8 +233,8 @@ function EmployeeMasterList() {
     const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
     return baseGroup.filter(e => {
       const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
-      const s = (e.employee_status || '').toLowerCase();
-      const isLeaving = s.includes('notice') || e.date_of_resign;
+      const s = getEmployeeStatus(e).toLowerCase();
+      const isLeaving = s.includes('notice') || s.includes('pip') || s.includes('resign') || e.date_of_resign;
       return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
     }).length;
   }, [baseGroup]);
