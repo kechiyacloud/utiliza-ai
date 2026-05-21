@@ -6,8 +6,31 @@ import axios from '../../api/axios';
 const W_KEYS = ['w1', 'w2', 'w3', 'w4'];
 const WEEK_DEFAULT_HOURS = 40;
 
+function formatToYYYYMMDD(dateStr) {
+    if (!dateStr) return '';
+    const trimmed = String(dateStr).trim();
+    if (!trimmed) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const altMatch = trimmed.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (altMatch) {
+        return `${altMatch[3]}-${altMatch[2]}-${altMatch[1]}`;
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    return trimmed;
+}
+
 function normalizeAllocationRow(row = {}) {
-    const normalized = { ...row };
+    const normalized = { 
+        ...row,
+        allocation_start_date: formatToYYYYMMDD(row.allocation_start_date),
+        allocation_end_date: formatToYYYYMMDD(row.allocation_end_date)
+    };
     W_KEYS.forEach((key) => {
         const rawValue = normalized[key];
         if (rawValue === '' || rawValue === null || rawValue === undefined) {
@@ -485,7 +508,7 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
                             <p className="text-sm text-gray-600 leading-relaxed bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
                                 This project is currently in the {project.status?.toLowerCase() || 'planning'} phase.
                                 It is a {project.type?.toLowerCase() || 'standard'} engagement for {project.client || project.client_name}.
-                                Currently utilizing {project.resources || project.resource_count || 0} team members to meet the projected milestone dates.
+                                Currently utilizing {project.resources || project.resource_count || 'N/A'} team members to meet the projected milestone dates.
                             </p>
                         </div>
 

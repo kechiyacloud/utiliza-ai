@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 
 import PhoneInputField from '../../components/PhoneInputField';
+import ConfirmCancelModal from '../../components/ConfirmCancelModal';
 import { encodeId } from '../../utils/idEncoder';
 import { useDataRefresh } from '../../context';
 import { clearDashboardCache } from '../../api/dashboardApi';
@@ -78,6 +79,7 @@ const AddEmployee = () => {
     const [newDesigName, setNewDesigName] = useState('');
     const [isDirty, setIsDirty] = useState(false);
     const [showNavigationBlocker, setShowNavigationBlocker] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
     const [pendingNavigate, setPendingNavigate] = useState(null);
 
 
@@ -587,8 +589,14 @@ const AddEmployee = () => {
                     fileData: reader.result
                 };
                 setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+                
+                // Clear error when user uploads file
                 if (errors.certificates) {
-                    setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+                    setErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.certificates;
+                        return newErrors;
+                    });
                 }
             };
             reader.readAsDataURL(file);
@@ -599,8 +607,14 @@ const AddEmployee = () => {
         const updatedCerts = [...formData.certificates];
         updatedCerts[index] = { ...updatedCerts[index], name };
         setFormData(prev => ({ ...prev, certificates: updatedCerts }));
+        
+        // Clear error when user modifies name
         if (errors.certificates) {
-            setErrors(prev => { const e = { ...prev }; delete e.certificates; return e; });
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.certificates;
+                return newErrors;
+            });
         }
     };
 
@@ -616,6 +630,15 @@ const AddEmployee = () => {
             ...prev,
             certificates: prev.certificates.filter((_, i) => i !== index)
         }));
+
+        // Clear certificates error when a certificate is removed
+        if (errors.certificates) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors.certificates;
+                return newErrors;
+            });
+        }
     };
 
     const stripLeadingZeros = (val) => {
@@ -1268,13 +1291,12 @@ const AddEmployee = () => {
                         name="employment_type"
                         value={formData.employment_type}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employment_type ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                         {EMPLOYMENT_TYPES.map((type) => (
                             <option key={type} value={type}>{type}</option>
                         ))}
                     </select>
-                    {errors.employment_type && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employment_type}</p>}
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Location <span className="text-black ml-1">*</span></label>
@@ -1358,7 +1380,7 @@ const AddEmployee = () => {
                         name="employee_status"
                         value={formData.employee_status}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_status ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                         <optgroup label="Auto-calculated (based on projects)">
                             <option value="Bench">Bench</option>
@@ -1989,10 +2011,7 @@ const AddEmployee = () => {
                 <button
                     onClick={() => {
                         if (isDirty) {
-                            if (window.confirm('You have unsaved changes. Are you sure you want to cancel?')) {
-                                toast.error('Changes discarded');
-                                navigate(-1);
-                            }
+                            setShowCancelModal(true);
                         } else {
                             navigate(-1);
                         }
@@ -2007,7 +2026,6 @@ const AddEmployee = () => {
                         <button
                             onClick={() => {
                                 const idx = sections.findIndex(s => s.id === currentSection);
-                                setErrors({});
                                 setCurrentSection(sections[idx - 1].id);
                             }}
                             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
@@ -2064,6 +2082,17 @@ const AddEmployee = () => {
                     )}
                 </div>
             </div>
+
+            {/* Modals */}
+            <ConfirmCancelModal 
+                isOpen={showCancelModal}
+                onClose={() => setShowCancelModal(false)}
+                onConfirm={() => {
+                    setShowCancelModal(false);
+                    toast.error('Changes discarded');
+                    navigate(-1);
+                }}
+            />
         </div>
     );
 };

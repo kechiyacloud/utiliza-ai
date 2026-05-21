@@ -112,13 +112,14 @@ const toTitleCase = (str) => {
 const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelected, onClick }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const progress = calculateProjectProgress(project);
+    const resCount = project.resource_count || (project.team_members || project.resources || []).length || 0;
     return (
-        <div 
+        <div
             onClick={onClick}
-            className={`bg-white border rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all duration-300 ease-out group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full cursor-pointer
-                ${isSelected 
-                    ? 'border-blue-600 shadow-[0_10px_30px_rgba(37,99,235,0.12)] -translate-y-1 ring-4 ring-blue-50 bg-gradient-to-b from-white to-blue-50/20' 
-                    : 'border-slate-100/80 hover:border-blue-500/80 hover:shadow-[0_10px_30px_rgba(37,99,235,0.08)] hover:-translate-y-1 hover:bg-gradient-to-b hover:from-white hover:to-blue-50/10'
+            className={`bg-white border-[3px] rounded-2xl p-6 shadow-[0_6px_14px_rgba(0,0,0,0.06)] transition-all duration-300 ease-out group relative animate-in fade-in zoom-in duration-300 flex flex-col h-full cursor-pointer
+                ${isSelected
+                    ? 'border-blue-500 shadow-xl shadow-blue-900/10 -translate-y-1.5 ring-4 ring-blue-50/50 bg-gradient-to-b from-white to-blue-50/30'
+                    : 'border-[#94A3B8] hover:border-blue-500 hover:shadow-xl hover:shadow-blue-900/5 hover:-translate-y-1.5 hover:bg-gradient-to-b hover:from-white hover:to-slate-50/50'
                 }`}
         >
             {/* Action Buttons - Absolute positioned to avoid title overlap */}
@@ -156,8 +157,8 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelect
 
             <div className="flex items-center gap-3 mb-5 pr-12">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-sm transition-all duration-300 flex-shrink-0
-                    ${isSelected 
-                        ? 'bg-blue-600 text-white' 
+                    ${isSelected
+                        ? 'bg-blue-600 text-white'
                         : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
                     }`}
                 >
@@ -187,7 +188,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelect
                 </div>
 
                 {/* Progress Bar with Avatars */}
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                     <div className="flex justify-between items-center px-0.5">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress</span>
                         <div className="flex items-center gap-2">
@@ -200,7 +201,7 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelect
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="flex-1 bg-slate-100 rounded-full h-[2px] overflow-hidden">
                             <div
                                 className={`h-full rounded-full transition-all duration-500 ${getProgressColorClasses(calculateProjectProgress(project).pct)}`}
                                 style={{ width: `${calculateProjectProgress(project).pct}%` }}
@@ -211,21 +212,21 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelect
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all duration-300
-                        ${isSelected 
-                            ? 'bg-blue-50/40 border-blue-100/80' 
-                            : 'bg-slate-50/80 border-slate-100/50 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
+                        ${isSelected
+                            ? 'bg-blue-50/40 border-blue-100/80'
+                            : 'bg-slate-50/80 border-slate-300 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
                         }`}
                     >
                         <div className="flex items-center gap-1.5 text-slate-500">
                             <Users size={12} />
                             <span className="text-sm font-normal uppercase">Team</span>
                         </div>
-                        <p className="text-sm font-normal text-gray-700">{project.resource_count || project.resources || 0} Members</p>
+                        <p className="text-sm font-normal text-gray-700">{resCount > 0 ? `${resCount} Members` : 'N/A'}</p>
                     </div>
                     <div className={`p-2.5 rounded-xl border flex flex-col gap-1 transition-all duration-300
-                        ${isSelected 
-                            ? 'bg-blue-50/40 border-blue-100/80' 
-                            : 'bg-slate-50/80 border-slate-100/50 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
+                        ${isSelected
+                            ? 'bg-blue-50/40 border-blue-100/80'
+                            : 'bg-slate-50/80 border-slate-300 group-hover:bg-blue-50/30 group-hover:border-blue-100/50'
                         }`}
                     >
                         <div className="flex items-center gap-1.5 text-slate-500">
@@ -264,8 +265,8 @@ const ProjectCard = ({ project, onEdit, onDelete, onView, formatStatus, isSelect
                 <button
                     onClick={(e) => { e.stopPropagation(); onView(project); }}
                     className={`w-full py-2.5 mt-auto text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 border shadow-sm active:scale-[0.98]
-                        ${isSelected 
-                            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 hover:shadow-md' 
+                        ${isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700 hover:shadow-md'
                             : 'bg-slate-50 text-gray-600 border-slate-100 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-md'
                         }`}
                 >
@@ -346,9 +347,9 @@ const ProjectList = ({
 
             const matchesSearchTerm = (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
-            
+
             if (!matchesSearchTerm) {
-                 console.log(`[ProjectList Filter Fail] Search term mismatch for project ${project.name}`);
+                console.log(`[ProjectList Filter Fail] Search term mismatch for project ${project.name}`);
             }
 
             // 1. Sidebar Status Filter
@@ -616,7 +617,7 @@ const ProjectList = ({
 
         const exportData = filteredProjects.map(p => ({
             'Project Name': p.name,
-            'Type': p.type,
+            'Type': p.type === 'Client' ? 'External' : p.type,
             'Status': formatStatus(p),
             'Billable': p.billable,
             'Resources': p.resource_count || p.resources || 0,
@@ -650,92 +651,42 @@ const ProjectList = ({
             <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 w-full relative min-h-[600px]">
 
                 {/* Header */}
-                <div className="flex flex-wrap md:flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4">
+                <div className="flex flex-nowrap items-center justify-between border-b border-slate-50 pb-6 mb-6 gap-4 w-full">
                     {/* Left Side: View Toggles */}
-                    <div className="flex items-center gap-5 shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
                         <button
                             onClick={() => onViewChange('table')}
-                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'table' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-semibold transition-all shadow-sm flex-shrink-0 whitespace-nowrap ${activeView === 'table' ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'bg-white border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
                         >
-                            {tableTitle} ({filteredProjects.length})
+                            <TableIcon size={16} className={activeView === 'table' ? 'text-blue-500' : 'text-slate-400'} />
+                            <span>{tableTitle}</span>
                         </button>
-
-                        <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
                             onClick={() => onViewChange('chart')}
-                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'chart' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-semibold transition-all shadow-sm flex-shrink-0 whitespace-nowrap ${activeView === 'chart' ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'bg-white border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
                         >
-                            Project Status Bar
+                            <PieChart size={16} className={activeView === 'chart' ? 'text-blue-500' : 'text-slate-400'} />
+                            <span>Project Status Bar</span>
                         </button>
-
-                        <div className="w-[1px] h-6 bg-slate-200" />
 
                         <button
                             onClick={() => onViewChange('grid')}
-                            className={`text-sm font-semibold tracking-tight transition-colors ${activeView === 'grid' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-semibold transition-all shadow-sm flex-shrink-0 whitespace-nowrap ${activeView === 'grid' ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'bg-white border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
                         >
-                            Grid
+                            <LayoutGrid size={16} className={activeView === 'grid' ? 'text-blue-500' : 'text-slate-400'} />
+                            <span>Grid</span>
                         </button>
                     </div>
 
                     {/* Right Side: Search, Export, Filter, Sort */}
-                    <div className="flex items-center gap-3 shrink-0">
-                        {/* Export */}
-                        <div className="relative group">
-                            <button
-                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm"
-                            >
-                                <Download size={14} />
-                                Export
-                                <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
-                            </button>
-                            {isExportMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                        <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
-                                            <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
-                                        </button>
-                                        <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
-                                            <TableIcon size={16} className="text-blue-500" /> CSV (.csv)
-                                        </button>
-                                        <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-3 transition-colors border-t border-slate-50">
-                                            <FileText size={16} className="text-rose-500" /> PDF Document
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Search */}
-                        <div className="relative w-64 md:w-56 lg:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
-                            <input
-                                type="text"
-                                placeholder="Search Project"
-                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-semibold placeholder:text-sm placeholder:font-semibold outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all text-slate-800 placeholder:text-slate-400"
-                                value={searchTerm}
-                                onChange={(e) => onSearchChange(e.target.value)}
-                            />
-                        </div>
-
-                        {/* Filter */}
-                        <button
-                            onClick={() => setIsFilterPanelOpen(true)}
-                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isFilterPanelOpen || hasActiveFilters ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
-                        >
-                            <Filter size={18} />
-                            {hasActiveFilters && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
-                        </button>
-
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 justify-end">
                         {/* Sort */}
                         <div className="relative group">
                             {(() => {
                                 const sortOptions = [
                                     { id: 'newest', label: 'Newest First' },
-                                    { id: 'alphabetical', label: 'Alphabetical (A → Z)' },
+                                    { id: 'alphabetical', label: 'Alphabetical' },
                                     { id: 'billable', label: 'Billable' },
                                     { id: 'non-billable', label: 'Non-Billable' },
                                     { id: 'internal', label: 'Internal' },
@@ -747,12 +698,13 @@ const ProjectList = ({
                                     <>
                                         <button
                                             onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                                            className={`flex items-center gap-1.5 px-4 py-2.5 bg-white border rounded-xl text-sm font-semibold transition-all shadow-sm ${sortBy ? 'border-blue-300 text-blue-600 bg-blue-50/50' : 'border-slate-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'}`}
+                                            className="flex items-center gap-1.5 px-3 md:px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm min-w-0 max-w-[220px] flex-shrink"
+                                            title={sortBy ? `Sort: ${activeSortLabel}` : 'Sort'}
                                         >
-                                            <span className="flex items-center gap-2">
-                                                {sortBy ? <span>Sort: <span className="font-semibold">{activeSortLabel}</span></span> : 'Sort'}
+                                            <span className="flex items-center gap-2 min-w-0 truncate">
+                                                {sortBy ? <span className="truncate">Sort: <span className="font-semibold">{activeSortLabel}</span></span> : <span className="whitespace-nowrap">Sort</span>}
                                             </span>
-                                            <ChevronDown size={12} className={`transition-transform duration-200 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown size={12} className={`transition-transform duration-200 flex-shrink-0 ${isSortMenuOpen ? 'rotate-180' : ''}`} />
                                         </button>
                                         {isSortMenuOpen && (
                                             <>
@@ -777,21 +729,70 @@ const ProjectList = ({
                             })()}
                         </div>
 
+                        {/* Search */}
+                        <div className="relative flex-1 min-w-[120px] max-w-[256px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search Project"
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-semibold placeholder:text-sm placeholder:font-semibold outline-none focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50 transition-all text-slate-800 placeholder:text-slate-400"
+                                value={searchTerm}
+                                onChange={(e) => onSearchChange(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Filter */}
+                        <button
+                            onClick={() => setIsFilterPanelOpen(true)}
+                            className={`p-2.5 rounded-xl border transition-all shadow-sm flex-shrink-0 flex items-center justify-center ${isFilterPanelOpen || hasActiveFilters ? 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                        >
+                            <Filter size={18} />
+                            {hasActiveFilters && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
+                        </button>
+
                         {/* Reset */}
                         {hasActiveFilters && (
                             <button
                                 onClick={handleClearFilters}
-                                className="px-4 py-2.5 text-sm font-semibold bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all shadow-sm"
+                                className="px-4 py-2.5 text-sm font-semibold bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-100 transition-all shadow-sm flex-shrink-0 whitespace-nowrap"
                             >
                                 Reset
                             </button>
                         )}
+
+                        {/* Export */}
+                        <div className="relative group">
+                            <button
+                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm flex-shrink-0 whitespace-nowrap"
+                            >
+                                <Download size={14} />
+                                Export
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isExportMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setIsExportMenuOpen(false)}></div>
+                                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        <button onClick={() => { handleExport('excel'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
+                                            <FileSpreadsheet size={16} className="text-emerald-500" /> Excel (.xlsx)
+                                        </button>
+                                        <button onClick={() => { handleExport('csv'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-3 transition-colors">
+                                            <TableIcon size={16} className="text-blue-500" /> CSV (.csv)
+                                        </button>
+                                        <button onClick={() => { handleExport('pdf'); setIsExportMenuOpen(false); }} className="w-full px-5 py-3 text-left text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-3 transition-colors border-t border-slate-50">
+                                            <FileText size={16} className="text-rose-500" /> PDF Document
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* Table View */}
                 {activeView === 'table' && (
-                    <div className="overflow-x-auto rounded-2xl border border-slate-50">
+                    <div className="overflow-x-auto rounded-2xl border border-slate-50 min-h-[280px]">
                         <table className="w-full font-sans">
                             <thead>
                                 <tr className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-slate-50">
@@ -805,7 +806,9 @@ const ProjectList = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredProjects.map((project) => (
+                                {filteredProjects.map((project, index) => {
+                                    const isBottomRow = index >= filteredProjects.length - 2 && index > 0;
+                                    return (
                                     <tr key={project.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
                                         <td className="py-5 pl-6">
                                             <div
@@ -845,7 +848,7 @@ const ProjectList = ({
                                         <td className="py-5 text-center align-middle">
                                             <div className="flex flex-col items-center justify-center">
                                                 <div className="text-slate-600 font-semibold text-xs">
-                                                    {project.resource_count || project.resources || 0}
+                                                    {(project.resource_count || (project.team_members || project.resources || []).length || 0) || 'N/A'}
                                                 </div>
                                             </div>
                                         </td>
@@ -867,7 +870,7 @@ const ProjectList = ({
                                                 {activeActionMenuId === project.id && (
                                                     <>
                                                         <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(null); }}></div>
-                                                        <div className="absolute right-6 top-10 mt-1 w-36 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100 text-left">
+                                                        <div className={`absolute right-6 ${isBottomRow ? 'bottom-full mb-2' : 'top-10 mt-1'} w-36 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100 text-left`}>
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); setActiveActionMenuId(null); handleEditClick(project); }}
                                                                 className="w-full px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
@@ -886,7 +889,8 @@ const ProjectList = ({
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -894,7 +898,7 @@ const ProjectList = ({
 
                 {/* Grid View */}
                 {activeView === 'grid' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                         {filteredProjects.map((project) => (
                             <ProjectCard
                                 key={project.id}
