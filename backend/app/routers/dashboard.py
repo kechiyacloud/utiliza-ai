@@ -120,8 +120,8 @@ def get_dashboard_all(
         }
         
         # Base filters: only show active, non-deleted employees
-        m_base = " AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) "
-        e_base = " AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE) AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL) "
+        m_base = " AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%') "
+        e_base = " AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE) AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = e.employee_id AND p_sub.employee_status ILIKE '%%resign%%') "
 
         m_filter = m_base
         e_filter = e_base
@@ -192,6 +192,7 @@ def get_dashboard_all(
                     (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
                      LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                      WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
+                       AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
                        AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
                        AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
                        {m_filter}
@@ -228,11 +229,13 @@ def get_dashboard_all(
                     (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
                      LEFT JOIN projects pj ON pa.project_id = pj.project_id
                      JOIN employee_master m ON pa.employee_id=m.employee_id
+                     LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                      WHERE pa.allocation_start_date <= CURRENT_DATE
                        AND pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE+INTERVAL '30 days')
                        AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
                        AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
                        AND m.date_of_resign IS NULL
+                       AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
                        AND NOT EXISTS (
                            SELECT 1 FROM projects_allocation pa2
                            LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
@@ -549,6 +552,7 @@ def get_dashboard_all(
                     LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
+                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
                       AND e.date_of_resign IS NULL AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
                       AND COALESCE((
                           SELECT SUM(pa2.allocation_percentage) 
@@ -575,6 +579,7 @@ def get_dashboard_all(
                 JOIN employee_master m ON es.employee_id = m.employee_id
                 LEFT JOIN employee_master_pro emp ON emp.employee_id = m.employee_id
                 WHERE (emp.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR emp.employee_status IS NULL)
+                  AND (emp.employee_status IS NULL OR emp.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
                   AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
                   AND COALESCE((
                       SELECT SUM(pa_b.allocation_percentage) 

@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component {
               Try Recovering
             </button>
           </div>
-          {process.env.NODE_ENV === 'development' && this.state.error && (
+          {import.meta.env.DEV && this.state.error && (
             <div className="mt-12 w-full max-w-4xl rounded-2xl bg-slate-900 p-6 text-left shadow-2xl overflow-auto select-text">
               <p className="mb-4 font-mono text-xs font-bold text-rose-400">DEBUG CONSOLE:</p>
               <pre className="font-mono text-[10px] text-slate-300 leading-relaxed whitespace-pre-wrap">

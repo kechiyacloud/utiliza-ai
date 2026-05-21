@@ -117,16 +117,17 @@ def _sync_employee_allocations(cur, employee_ids):
         WITH LiveAllocations AS (
             SELECT 
                 p.employee_id,
-                COALESCE(SUM(pa.allocation_percentage), 0) as total_pct
+                COALESCE(SUM(CASE 
+                    WHEN pa.allocation_start_date <= CURRENT_DATE
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                      AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                    THEN pa.allocation_percentage 
+                    ELSE 0 
+                END), 0) as total_pct
             FROM employee_master_pro p
             LEFT JOIN projects_allocation pa ON p.employee_id = pa.employee_id
             LEFT JOIN projects pj ON pa.project_id = pj.project_id
             WHERE p.employee_id = ANY(%s)
-              AND (pa.allocation_id IS NULL OR (
-                  pa.allocation_start_date <= CURRENT_DATE
-                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                  AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-              ))
             GROUP BY p.employee_id
         )
         UPDATE employee_master_pro p
@@ -136,12 +137,31 @@ def _sync_employee_allocations(cur, employee_ids):
                 WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
-                WHEN la.total_pct <= 0 THEN 'Bench'
-                WHEN la.total_pct BETWEEN 1 AND 40 THEN 'Partially bench'
-                WHEN la.total_pct BETWEEN 41 AND 80 THEN 'Partially allocated'
-                ELSE 'Allocated'
+                WHEN (
+                    LOWER(m.role_designation) LIKE '%%director%%'
+                    OR LOWER(m.role_designation) LIKE '%%vp%%'
+                    OR LOWER(m.role_designation) LIKE '%%head%%'
+                ) THEN 'Leadership'
+                WHEN (
+                    LOWER(m.employee_type) LIKE '%%trainee%%'
+                    OR LOWER(m.employee_type) LIKE '%%intern%%'
+                    OR LOWER(m.role_designation) LIKE '%%trainee%%'
+                    OR LOWER(m.role_designation) LIKE '%%intern%%'
+                ) THEN 'Training'
+                WHEN (
+                    LOWER(m.department) LIKE '%%hr%%'
+                    OR LOWER(m.department) LIKE '%%finance%%'
+                    OR LOWER(m.department) LIKE '%%it operations%%'
+                    OR LOWER(m.department) LIKE '%%system operations%%'
+                    OR LOWER(m.department) LIKE '%%exo%%'
+                    OR LOWER(m.department) LIKE '%%management%%'
+                    OR LOWER(m.department) LIKE '%%training & development%%'
+                ) THEN 'Internal Operations'
+                WHEN la.total_pct > 0 THEN 'Allocated'
+                ELSE 'Bench'
             END
         FROM LiveAllocations la
+        JOIN employee_master m ON la.employee_id = m.employee_id
         WHERE p.employee_id = la.employee_id
     """, (list(employee_ids),))
 
@@ -232,7 +252,7 @@ def check_duplicate_employee(
 @router.get("/employees/count")
 def get_total_employee_count():
     with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM employee_master WHERE (date_of_resign IS NULL OR date_of_resign > CURRENT_DATE) AND (is_deleted IS FALSE OR is_deleted IS NULL)")
+        cur.execute("SELECT COUNT(*) FROM employee_master m WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%')")
         result = cur.fetchone()
         return {"total_employees": result[0]}
 
@@ -244,8 +264,10 @@ def get_bench_employee_count():
             FROM employee_master m
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-            AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) 
-            AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+              AND (p.employee_status NOT ILIKE CHR(37) || 'resign' || CHR(37) OR p.employee_status IS NULL)
+              AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
+              AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) 
+              AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE((
                 SELECT SUM(pa.allocation_percentage) 
                 FROM projects_allocation pa 
@@ -265,7 +287,7 @@ def get_notice_employee_count():
         cur.execute("""
             SELECT COUNT(*) FROM employee_master m
             JOIN employee_master_pro p ON m.employee_id = p.employee_id
-            WHERE m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+            WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%')
         """)
         result = cur.fetchone()
@@ -280,6 +302,8 @@ def get_employee_roles():
         # Unify CSE / Cloud Solution Engineer
         unified = set()
         for r in roles:
+            if not r:
+                continue
             norm = r.strip()
             if norm.upper() == 'CSE':
                 unified.add('Cloud Solution Engineer')
@@ -293,7 +317,14 @@ def sync_all_employees():
     """Forces a global synchronization of all active employee allocations and statuses."""
     with db_cursor() as cur:
         _ensure_employee_columns(cur)
-        cur.execute("SELECT employee_id FROM employee_master WHERE date_of_resign IS NULL AND (is_deleted IS FALSE OR is_deleted IS NULL)")
+        cur.execute("""
+            SELECT em.employee_id 
+            FROM employee_master em
+            LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
+            WHERE (em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE) 
+              AND (em.is_deleted IS FALSE OR em.is_deleted IS NULL)
+              AND (p.employee_status IS NULL OR p.employee_status NOT ILIKE '%%resign%%')
+        """)
         ids = [row[0] for row in cur.fetchall()]
         if ids:
             _sync_employee_allocations(cur, ids)
@@ -370,10 +401,28 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "        WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status "
             "        WHEN p.employee_status ILIKE '%%pip%%' THEN p.employee_status "
             "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
-            "        WHEN COALESCE(al.total_alloc, 0) <= 0 THEN 'Bench' "
-            "        WHEN COALESCE(al.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' "
-            "        WHEN COALESCE(al.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' "
-            "        ELSE 'Allocated' "
+            "        WHEN ( "
+            "            LOWER(m.role_designation) LIKE '%%director%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%vp%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%head%%' "
+            "        ) THEN 'Leadership' "
+            "        WHEN ( "
+            "            LOWER(m.employee_type) LIKE '%%trainee%%' "
+            "            OR LOWER(m.employee_type) LIKE '%%intern%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%trainee%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%intern%%' "
+            "        ) THEN 'Training' "
+            "        WHEN ( "
+            "            LOWER(m.department) LIKE '%%hr%%' "
+            "            OR LOWER(m.department) LIKE '%%finance%%' "
+            "            OR LOWER(m.department) LIKE '%%it operations%%' "
+            "            OR LOWER(m.department) LIKE '%%system operations%%' "
+            "            OR LOWER(m.department) LIKE '%%exo%%' "
+            "            OR LOWER(m.department) LIKE '%%management%%' "
+            "            OR LOWER(m.department) LIKE '%%training & development%%' "
+            "        ) THEN 'Internal Operations' "
+            "        WHEN COALESCE(al.total_alloc, 0) > 0 THEN 'Allocated' "
+            "        ELSE 'Bench' "
             "    END as employee_status, "
             "    CASE "
             "        WHEN al.priority_rank = 3 THEN 'billable' "
@@ -395,7 +444,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
             "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
             "LEFT JOIN CertsAgg ca ON m.employee_id = ca.employee_id "
-            "WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE OR %s = TRUE) "
+            "WHERE (((m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (p.employee_status IS NULL OR p.employee_status NOT ILIKE '%%resign%%')) OR %s = TRUE) "
             "  AND " + is_deleted_expr + " "
             "ORDER BY m.employee_name ASC"
         )
@@ -406,7 +455,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
         results = []
         for row in cur.fetchall():
             d = dict(zip(columns, row))
-            if d.get('role_designation', '').strip().upper() == 'CSE':
+            if (d.get('role_designation') or '').strip().upper() == 'CSE':
                 d['role_designation'] = 'Cloud Solution Engineer'
             results.append(strip_fields(d, role, "employee"))
         return results
@@ -428,7 +477,10 @@ def get_upcoming_bench():
             LEFT JOIN employee_skills es ON m.employee_id = es.employee_id
             LEFT JOIN skills s ON es.skill_id = s.skill_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
-            AND m.date_of_resign IS NULL AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+            AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
+            AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%')
+            AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status IN ('Leadership', 'Training', 'Internal Operations'))
+            AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             AND NOT EXISTS (
                 SELECT 1 FROM projects_allocation pa2
@@ -759,11 +811,28 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     {notice_status_expr} 
                     WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status 
                     WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status 
-                    WHEN COALESCE(da.total_alloc, 0) <= 0 THEN 'Bench' 
-                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 1 AND 40 THEN 'Partially bench' 
-                    WHEN COALESCE(da.total_alloc, 0) BETWEEN 41 AND 80 THEN 'Partially allocated' 
-                    WHEN COALESCE(da.total_alloc, 0) >= 81 THEN 'Allocated' 
-                    ELSE p.employee_status 
+                    WHEN (
+                        LOWER(m.role_designation) LIKE '%%director%%'
+                        OR LOWER(m.role_designation) LIKE '%%vp%%'
+                        OR LOWER(m.role_designation) LIKE '%%head%%'
+                    ) THEN 'Leadership'
+                    WHEN (
+                        LOWER(m.employee_type) LIKE '%%trainee%%'
+                        OR LOWER(m.employee_type) LIKE '%%intern%%'
+                        OR LOWER(m.role_designation) LIKE '%%trainee%%'
+                        OR LOWER(m.role_designation) LIKE '%%intern%%'
+                    ) THEN 'Training'
+                    WHEN (
+                        LOWER(m.department) LIKE '%%hr%%'
+                        OR LOWER(m.department) LIKE '%%finance%%'
+                        OR LOWER(m.department) LIKE '%%it operations%%'
+                        OR LOWER(m.department) LIKE '%%system operations%%'
+                        OR LOWER(m.department) LIKE '%%exo%%'
+                        OR LOWER(m.department) LIKE '%%management%%'
+                        OR LOWER(m.department) LIKE '%%training & development%%'
+                    ) THEN 'Internal Operations'
+                    WHEN COALESCE(da.total_alloc, 0) > 0 THEN 'Allocated'
+                    ELSE 'Bench'
                 END as employee_status, 
                 CASE 
                     WHEN ap.priority_rank = 3 THEN 'billable' 
@@ -799,7 +868,7 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
         columns = [desc[0] for desc in cur.description]
         employee = dict(zip(columns, employee_row))
 
-        if employee.get('role_designation', '').strip().upper() == 'CSE':
+        if (employee.get('role_designation') or '').strip().upper() == 'CSE':
             employee['role_designation'] = 'Cloud Solution Engineer'
 
         # Real employee_id for downstream queries (even if we fetched by email)

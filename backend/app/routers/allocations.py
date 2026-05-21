@@ -39,7 +39,11 @@ def allocation_metrics(
 
     try:
         # --- Build shared filter fragments ---
-        emp_filters = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)", "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)"]
+        emp_filters = [
+            "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)", 
+            "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+        ]
         params = []
 
         if department and department != 'All Departments':
@@ -189,7 +193,11 @@ def allocation_projects(
             JOIN projects p ON pa.project_id = p.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
         """
-        where_clauses = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
+        where_clauses = [
+            "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
+            "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+        ]
         params = []
         
         if department and department != 'All Departments':
@@ -309,7 +317,11 @@ def organization_utilization(
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
               AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         """
-        where_clauses = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
+        where_clauses = [
+            "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
+            "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+        ]
         params = []
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
@@ -339,7 +351,11 @@ def organization_utilization(
             FROM employee_master_pro p
             JOIN employee_master em ON p.employee_id = em.employee_id
         """
-        where_clauses_b = ["(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
+        where_clauses_b = [
+            "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
+            "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+        ]
         params_b = []
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
@@ -406,7 +422,11 @@ def department_allocation_breakdown(
     cur = conn.cursor()
 
     try:
-        where_clauses = ["em.date_of_resign IS NULL", "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)"]
+        where_clauses = [
+            "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)", 
+            "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+        ]
         params = []
         
         if location and location != 'All Locations':
@@ -493,9 +513,12 @@ def get_forecast_bench(
             FROM projects_allocation pa
             JOIN employee_master m ON pa.employee_id = m.employee_id
             JOIN projects p ON pa.project_id = p.project_id
+            LEFT JOIN employee_master_pro ppro ON m.employee_id = ppro.employee_id
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
               AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-              AND m.date_of_resign IS NULL
+              AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
+              AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%')
+              AND (ppro.employee_status IS NULL OR ppro.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
               AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         """
         

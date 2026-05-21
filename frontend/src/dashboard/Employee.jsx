@@ -9,9 +9,11 @@ import SkillsOverview from './employee/insights/SkillsOverview'
 import { getEmployeeList } from '../api/employeeApi'
 import { normalizeSkillName } from '../utils/skillTopics'
 import { useEmployees } from '../context/EmployeeContext'
+import { getEmployeeStatus } from '../utils/employeeStatus'
 import MultiSelectDropdown from '../components/MultiSelectDropdown'
 import { useDataRefresh } from '../context'
 import ModuleLoader from '../components/ModuleLoader'
+import { encodeId } from '../utils/idEncoder'
 
 const StatCard = ({ label, value, icon: Icon, colorClass, loading, error, onClick, isActive }) => (
   <div
@@ -172,25 +174,22 @@ function Employee() {
   // Derived stats from the filtered group
   const totalEmployeesCount = baseGroup.length;
   const billableCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.billable || '').toLowerCase() === 'billable' && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'allocated' && (e.billable || '').toLowerCase() === 'billable';
   }).length;
 
   const nonBillableCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.billable || '').toLowerCase().includes('non') && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'allocated' && (e.billable || '').toLowerCase().includes('non');
   }).length;
 
   const benchEmployeesCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
-    const isSpecialStatus = s.includes('notice') || s.includes('pip');
-    return (e.employee_allocations || 0) <= 0 && !isSpecialStatus;
+    const s = getEmployeeStatus(e).toLowerCase();
+    return s === 'bench';
   }).length;
 
   const noticeEmployeesCount = baseGroup.filter(e => {
-    const s = (e.employee_status || '').toLowerCase();
+    const s = getEmployeeStatus(e).toLowerCase();
     return s.includes('notice') || s.includes('pip');
   }).length;
 
@@ -242,19 +241,19 @@ function Employee() {
           >
             <UserSearch size={18} strokeWidth={2.5} />
             <span className="text-sm font-bold whitespace-nowrap">
-              New Joiners {baseGroup.filter(e => {
+            New Joiners {baseGroup.filter(e => {
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
-                const s = (e.employee_status || '').toLowerCase();
-                const isLeaving = s.includes('notice') || e.date_of_resign;
+                const s = getEmployeeStatus(e).toLowerCase();
+                const isLeaving = s.includes('notice') || s.includes('resign') || e.date_of_resign;
                 return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
               }).length > 0 ? `(${baseGroup.filter(e => {
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 const joinDate = e.date_of_joining ? new Date(e.date_of_joining) : null;
-                const s = (e.employee_status || '').toLowerCase();
-                const isLeaving = s.includes('notice') || e.date_of_resign;
+                const s = getEmployeeStatus(e).toLowerCase();
+                const isLeaving = s.includes('notice') || s.includes('resign') || e.date_of_resign;
                 return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
               }).length})` : ''}
             </span>
