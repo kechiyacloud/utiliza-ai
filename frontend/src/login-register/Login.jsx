@@ -19,14 +19,6 @@ function Login() {
   const [successMessage] = useState(location.state?.message || null)
 
   useEffect(() => {
-    // 1. If user is already logged in, redirect them to dashboard immediately
-    const token = localStorage.getItem('token');
-    if (token && token !== 'undefined' && token !== 'null') {
-      navigate("/info", { replace: true });
-      return;
-    }
-
-    // 2. Clear success message state
     if (location.state?.message) {
       navigate(location.pathname, { replace: true, state: null })
     }
