@@ -86,7 +86,7 @@ function ForgotPassword() {
     setError('')
     try {
       await api.post('/reset-password', { email, otp: otp.trim(), new_password: password })
-      navigate('/', { state: { message: 'Password reset successfully. Please sign in.' } })
+      navigate('/', { replace: true, state: { message: 'Password reset successfully. Please sign in.' } })
     } catch (err) {
       const detail = err.response?.data?.detail || 'Reset failed. Check your OTP and try again.'
       setError(detail)

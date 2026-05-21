@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trophy, MessageSquare, Send, User, ShieldCheck, UserCheck, Star, Loader2 } from 'lucide-react';
 import { getEmployeeList, nominateEmployee } from '../../api/employeeApi';
+import { toast } from 'react-hot-toast';
 import { useDataRefresh } from '../../context';
 
 export default function NominationModal({ onClose, onSuccess }) {
@@ -39,7 +40,7 @@ export default function NominationModal({ onClose, onSuccess }) {
             if (onSuccess) onSuccess();
             onClose();
         } catch (err) {
-            alert("Failed to submit nomination: " + (err.response?.data?.detail || err.message));
+            toast.error("Failed to submit nomination: " + (err.response?.data?.detail || err.message));
         } finally {
             setSubmitting(false);
         }

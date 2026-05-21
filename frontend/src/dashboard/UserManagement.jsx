@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
 import { Navigate } from 'react-router-dom';
 import api from '../api/axios';
 import { usePermissions } from '../hooks/usePermissions';
@@ -53,7 +54,7 @@ export default function UserManagement() {
             await api.put(`/users/${userId}/role`, { role_name: roleName });
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: roleName } : u));
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to update role');
+            toast.error(err.response?.data?.detail || 'Failed to update role');
         } finally {
             setUpdating(prev => ({ ...prev, [userId]: null }));
         }
@@ -66,7 +67,7 @@ export default function UserManagement() {
             await api.delete(`/users/${userId}`);
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: false } : u));
         } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to deactivate user');
+            toast.error(err.response?.data?.detail || 'Failed to deactivate user');
         } finally {
             setUpdating(prev => ({ ...prev, [userId]: null }));
         }
