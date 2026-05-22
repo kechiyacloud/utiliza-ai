@@ -504,13 +504,6 @@ function Dashboard() {
         {/* Header with Actions */}
         <div className="flex justify-between items-end mb-8">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-200 bg-white shadow-sm rounded-full transition-colors flex-shrink-0"
-              title="Go Back"
-            >
-              <ArrowLeft size={20} className="text-gray-600" />
-            </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
                 Dashboard
