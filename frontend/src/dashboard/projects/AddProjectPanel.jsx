@@ -1215,7 +1215,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
             ...newTeam[index],
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            role: newTeam[index].role || emp.role_designation || '',
+            role: emp.role_designation || emp.role || '',
             location: newTeam[index].location !== 'Remote' ? newTeam[index].location : (emp.location || emp.mode_of_work || 'Remote'),
         };
         setFormData({ ...formData, teamMembers: newTeam });
@@ -1415,14 +1415,20 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
         
         let normalizedStart = null;
-        if (formData.startDate) {
+        if (!formData.startDate) {
+            fieldErrors.startDate = 'Start date is required.';
+        } else {
             normalizedStart = normalizeDateString(formData.startDate);
             if (!normalizedStart) {
                 fieldErrors.startDate = 'Start date format is invalid.';
             }
         }
         const normalizedEnd = normalizeDateString(formData.endDate);
-        if (normalizedEnd && normalizedStart) {
+        if (!formData.endDate) {
+            fieldErrors.endDate = 'End date is required.';
+        } else if (!normalizedEnd) {
+            fieldErrors.endDate = 'End date format is invalid.';
+        } else if (normalizedEnd && normalizedStart) {
             const startTs = new Date(normalizedStart).getTime();
             const endTs = new Date(normalizedEnd).getTime();
             if (endTs < startTs) {
@@ -1785,7 +1791,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600">Start date</label>
+                                    <label className="text-xs font-bold text-gray-600">Start date <span className="text-red-500">*</span></label>
                                     <input type="date" name="startDate"
                                         className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700 ${errors.startDate ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         value={formData.startDate} onChange={handleChange} />
@@ -1793,7 +1799,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-gray-600">End date</label>
+                                    <label className="text-xs font-bold text-gray-600">End date <span className="text-red-500">*</span></label>
                                     <input type="date" name="endDate"
                                         className={`p-2.5 bg-gray-50 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all font-medium text-gray-700 ${errors.endDate ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-gray-200'}`}
                                         min={formData.startDate || undefined}

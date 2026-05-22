@@ -297,11 +297,17 @@ const AllocationTable = ({ projectId }) => {
                                                 </select>
                                             ) : (
                                                 row.employee_id ? (
-                                                    <Link to={`/info/employee/${row.employee_id}`} state={{ from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state || null } }} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors decoration-blue-300 underline-offset-2">
-                                                        {row.name}
+                                                    <Link to={`/info/employee/${row.employee_id}`} state={{ from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state || null } }} className="flex flex-col justify-center text-blue-600 no-underline group cursor-pointer">
+                                                        <span className="font-bold text-sm truncate max-w-[150px] group-hover:underline underline-offset-2 decoration-blue-300 transition-colors">
+                                                            {row.name || '-'}
+                                                        </span>
+                                                        <span className="text-[11px] text-gray-500 font-mono mt-0.5 group-hover:no-underline">{row.employee_id}</span>
                                                     </Link>
                                                 ) : (
-                                                    <span>{row.name}</span>
+                                                    <div className="flex flex-col justify-center">
+                                                        <span className="font-bold text-sm text-slate-800 truncate max-w-[150px]">{row.name || '-'}</span>
+                                                        {row.employee_id && <span className="text-[11px] text-gray-500 font-mono mt-0.5">{row.employee_id}</span>}
+                                                    </div>
                                                 )
                                             )}
                                         </td>

@@ -476,6 +476,10 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         });
 
         // Validations - only validate if the relevant field is changed or critical
+        if (!formData.endDate) {
+            setSaveError('End date is required.');
+            return;
+        }
         if (formData.endDate && formData.startDate && new Date(formData.endDate) < new Date(formData.startDate)) {
             setSaveError('End date cannot be earlier than start date.');
             return;
@@ -841,7 +845,7 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                     )}
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-bold text-gray-500 ">End date</label>
+                                    <label className="text-xs font-bold text-gray-500 ">End date <span className="text-red-500">*</span></label>
                                     <input
                                         type="date"
                                         name="endDate"
