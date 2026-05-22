@@ -103,7 +103,7 @@ function Register() {
     setError('')
     try {
       await api.post('/register', { email: formData.email, otp: otp.trim() })
-      navigate('/', { state: { message: 'Registration successful! You can now sign in.' } })
+      navigate('/', { replace: true, state: { message: 'Registration successful! You can now sign in.' } })
     } catch (err) {
       const detail = err.response?.data?.detail || 'Verification failed. Try again.'
       setError(detail)

@@ -530,22 +530,18 @@ const Availability = () => {
 
                     <div className="flex flex-wrap items-center gap-2 justify-end flex-shrink-0">
                         {/* Preview stats badge */}
-                        <div className="inline-flex items-center divide-x divide-blue-200 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-100 via-indigo-50 to-violet-100 px-1 py-1 shadow-md">
-                            <div className="flex flex-col items-center px-5 py-1.5">
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Total</span>
-                                <span className="text-xl font-black text-blue-600">{previewStats.total}</span>
+                        <div className="inline-flex items-center divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white py-2 shadow-sm">
+                            <div className="flex items-center gap-1.5 px-3">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total</span>
+                                <span className="text-sm font-bold text-[#3BA9FB]">{previewStats.total}</span>
                             </div>
-                            <div className="flex flex-col items-center px-5 py-1.5">
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Alloc</span>
-                                <span className="text-xl font-black text-emerald-500">{previewStats.allocated}</span>
+                            <div className="flex items-center gap-1.5 px-3">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Alloc</span>
+                                <span className="text-sm font-bold text-emerald-500">{previewStats.allocated}</span>
                             </div>
-                            <div className="flex flex-col items-center px-5 py-1.5">
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bench</span>
-                                <span className="text-xl font-black text-amber-500">{previewStats.bench}</span>
-                            </div>
-                            <div className="flex flex-col items-center px-5 py-1.5">
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Dept</span>
-                                <span className="text-xl font-black text-violet-600">{previewStats.departments}</span>
+                            <div className="flex items-center gap-1.5 px-3">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Bench</span>
+                                <span className="text-sm font-bold text-amber-500">{previewStats.bench}</span>
                             </div>
                         </div>
 
@@ -887,8 +883,8 @@ const Availability = () => {
 
             <div
                 ref={timelineRef}
-                className="custom-scrollbar relative overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-[0_4px_24px_rgba(148,163,184,0.20)]"
-                style={{ cursor: isDragging.current ? 'grabbing' : 'grab' }}
+                className="custom-scrollbar relative overflow-auto rounded-2xl border border-slate-100 bg-white shadow-[0_4px_24px_rgba(148,163,184,0.20)] max-h-[calc(100vh-220px)]"
+                style={{ cursor: 'grab' }}
                 onMouseDown={(e) => {
                     if (e.button !== 0) return;
                     isDragging.current = true;

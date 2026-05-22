@@ -1,0 +1,21 @@
+version: '3.9'
+
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: zoho_postgres_db
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localpass
+      POSTGRES_DB: migration_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      # Mount schema file
+      - ./database/application_schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+    restart: unless-stopped

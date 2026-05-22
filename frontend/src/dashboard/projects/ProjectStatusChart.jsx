@@ -177,10 +177,10 @@ const ProjectStatusChart = ({ projects }) => {
                                 </div>
                             </div>
 
-                            <div className="w-full bg-gray-200 rounded-full h-3 mt-2 relative group transition-all">
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 relative group transition-all">
                                 {/* Arrow marker */}
                                 <div
-                                    className="absolute -left-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-[6px] border-t-transparent border-b-transparent border-r-gray-400 opacity-80"
+                                    className="absolute -left-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[3px] border-b-[3px] border-r-[4px] border-t-transparent border-b-transparent border-r-gray-400 opacity-80"
                                 ></div>
 
                                 {/* Tooltip */}
@@ -191,7 +191,7 @@ const ProjectStatusChart = ({ projects }) => {
                                 )}
 
                                 <div
-                                    className={`${colors.bar} h-3 rounded-full transition-all duration-300 ease-out group-hover:brightness-110`}
+                                    className={`${colors.bar} h-1.5 rounded-full transition-all duration-300 ease-out group-hover:brightness-110`}
                                     style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
                                     onMouseEnter={() => setHoveredId(p.id || p.name)}
                                     onMouseLeave={() => setHoveredId(null)}

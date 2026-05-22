@@ -84,7 +84,7 @@ def submit_feedback(data: FeedbackRequest):
     # Send email notification — non-blocking, failure is logged only
     try:
         smtp_user = os.getenv("SMTP_USER")
-        smtp_password = os.getenv("SMTP_PASSWORD")
+        smtp_password = os.getenv("SMTP_PASS")
         team_emails_raw = os.getenv("TEAM_EMAILS", "")
         recipients = [e.strip() for e in team_emails_raw.split(",") if e.strip()]
 

@@ -57,7 +57,7 @@ const Navbar = () => {
         localStorage.removeItem('token');
         localStorage.clear();
         window.dispatchEvent(new Event('auth-token-changed'));
-        navigate('/login');
+        navigate('/login', { replace: true });
     };
 
     const handleSafeNavigate = (path) => {

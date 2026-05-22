@@ -32,7 +32,10 @@ export const STATUS_OPTIONS = [
     'Notice Period',
     'Allocated',
     'PIP',
-    'Resigned'
+    'Resigned',
+    'Leadership',
+    'Internal Operations',
+    'Training'
 ];
 
 // Statuses that must be manually set by admin (not auto-calculated from allocation)

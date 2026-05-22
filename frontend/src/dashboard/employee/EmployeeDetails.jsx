@@ -14,13 +14,16 @@ import {
     Camera
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { getEmployeeById, deleteEmployee } from '../../api/employeeApi'
 import { clearDashboardCache } from '../../api/dashboardApi'
 import EmployeeStatusTag from '../../components/EmployeeStatusTag'
+import { getEmployeeStatus } from '../../utils/employeeStatus'
 import { usePermissions } from '../../hooks/usePermissions'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 import { decodeId } from '../../utils/idEncoder'
+import { isValidPhoto } from '../../utils/imageHelper'
 
 const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -75,6 +78,29 @@ const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
 };
 
 
+const CustomPieTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+            <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-100 flex flex-col gap-2 z-50 min-w-[150px]">
+                <p className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-1">{data.name}</p>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Allocation</span>
+                        <span className="text-sm font-bold text-blue-600">{data.value}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
+                        <EmployeeStatusTag status={data.status} size="sm" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    return null;
+};
+
+
 const EmployeeDetails = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -89,6 +115,7 @@ const EmployeeDetails = () => {
     const [showAllSkills, setShowAllSkills] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [imgError, setImgError] = useState(false);
     const SKILLS_PREVIEW_COUNT = 7;
     const returnTarget = location.state?.from;
     const backLabel = returnTarget?.pathname?.includes('availability')
@@ -111,6 +138,7 @@ const EmployeeDetails = () => {
     };
 
     useEffect(() => {
+        setImgError(false);
         const fetchEmployeeDetails = async () => {
             if (!id) return;
             const decodedId = decodeId(id);
@@ -159,23 +187,16 @@ const EmployeeDetails = () => {
                     value: p.allocation_percentage || p.project_allocation || p.value || 0
                 }));
 
-                // Calculate dynamic status based on actual allocation, respecting manual overrides
-                const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
-                const currentStatus = sourceData.employee_status || (sourceData.status && sourceData.status.allocated) || 'Bench';
-                const isManual = MANUAL_STATUSES.some(s => currentStatus.toLowerCase().includes(s));
                 const totalAllocation = enhancedProjects.reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0);
-
-                let displayStatus = currentStatus;
-                if (!isManual) {
-                    if (totalAllocation >= 81) displayStatus = 'Allocated';
-                    else if (totalAllocation >= 41) displayStatus = 'Partially allocated';
-                    else if (totalAllocation >= 1) displayStatus = 'Partially bench';
-                    else displayStatus = 'Bench';
-                }
+                const displayStatus = getEmployeeStatus({
+                    ...sourceData,
+                    employee_allocations: totalAllocation,
+                });
 
                 // Map backend keys to what the JSX components previously expected
                 setUserData({
                     ...sourceData,
+                    profilePic: sourceData.photo_url || sourceData.profilePic || sourceData.profile_pic,
                     name: sourceData.employee_name || sourceData.name || sourceData.employee_id,
                     designation: sourceData.role_designation || sourceData.designation,
                     id: sourceData.employee_id || sourceData.id,
@@ -366,27 +387,6 @@ const EmployeeDetails = () => {
         };
     });
 
-    const CustomPieTooltip = ({ active, payload }) => {
-        if (active && payload && payload.length) {
-            const data = payload[0].payload;
-            return (
-                <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-100 flex flex-col gap-2 z-50 min-w-[150px]">
-                    <p className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-1">{data.name}</p>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between gap-4">
-                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Allocation</span>
-                            <span className="text-sm font-bold text-blue-600">{data.value}%</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Status</span>
-                            <EmployeeStatusTag status={data.status} size="sm" />
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        return null;
-    };
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
@@ -402,7 +402,7 @@ const EmployeeDetails = () => {
                         navigate('/info/employees/list');
                     } catch (err) {
                         console.error('Delete failed', err);
-                        alert('Delete failed');
+                        toast.error('Delete failed: ' + (err.response?.data?.detail || err.message));
                     } finally {
                         setIsDeleting(false);
                         setIsDeleteModalOpen(false);
@@ -428,8 +428,18 @@ const EmployeeDetails = () => {
                 {/* Profile Image */}
                 <div className="flex-shrink-0">
                     <div className="w-24 h-24 rounded-full border-4 border-slate-50 overflow-hidden shadow-sm relative bg-white group">
-                        {userData.profilePic ? (
-                            <img src={userData.profilePic} alt={userData.name} className="w-full h-full object-cover" />
+                        {isValidPhoto(userData.profilePic) && !imgError ? (
+                            <img 
+                                src={userData.profilePic} 
+                                alt={userData.name} 
+                                className="w-full h-full object-cover" 
+                                onLoad={(e) => {
+                                    if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                        setImgError(true);
+                                    }
+                                }}
+                                onError={() => setImgError(true)}
+                            />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-blue-50 text-blue-600 text-3xl font-bold uppercase select-none">
                                 {(userData?.name || 'User').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('')}
@@ -447,7 +457,14 @@ const EmployeeDetails = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                         <h1 className="text-2xl font-bold text-gray-800 tracking-tight break-words min-w-0">{userData.name}</h1>
                         <div className="flex items-center justify-center md:justify-end gap-2 shrink-0">
-                            <button onClick={() => navigate('/info/employee/add', { state: { editData: userData, editEmployeeId: userData.employee_id || userData.id || id, isEditMode: true } })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors shadow-sm">Edit</button>
+                            <button onClick={() => navigate('/info/employee/add', { 
+                                replace: true,
+                                state: { 
+                                    editData: userData, 
+                                    editEmployeeId: userData.employee_id || userData.id || id, 
+                                    isEditMode: true 
+                                } 
+                            })} className="px-4 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors shadow-sm">Edit</button>
                             <button onClick={() => setIsDeleteModalOpen(true)} className="px-4 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 rounded-lg transition-colors shadow-sm">Delete</button>
                         </div>
                     </div>
@@ -459,7 +476,7 @@ const EmployeeDetails = () => {
                         <EmployeeStatusTag
                             status={userData.status?.allocated}
                         />
-                        {userData.billable && (
+                        {userData.billable && !['leadership', 'internal operations', 'training', 'resigned'].includes((userData.status?.allocated || '').toLowerCase()) && (
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${userData.billable === 'billable'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                                 : 'bg-slate-100 text-slate-400 border-slate-200'

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trophy } from 'lucide-react';
+import { isValidPhoto } from '../../utils/imageHelper';
 
 const EmployeeMonthCard = ({ employee, onClick, selectedDepartments = [] }) => {
+    const [imgError, setImgError] = useState(false);
     if (!employee) {
         return (
             <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-start relative min-w-[140px] h-full flex-1 group">
@@ -41,11 +43,22 @@ const EmployeeMonthCard = ({ employee, onClick, selectedDepartments = [] }) => {
                     >
                         NOMINATE
                     </button>
-                    {employee.photo_url ? (
-                        <img onClick={() => onClick && onClick(employee)} src={employee.photo_url} alt="Profile" className="w-7 h-7 rounded-full border border-white shadow-sm object-cover cursor-pointer" />
+                    {isValidPhoto(employee.photo_url) && !imgError ? (
+                        <img 
+                            onClick={() => onClick && onClick(employee)} 
+                            src={employee.photo_url} 
+                            alt="Profile" 
+                            className="w-7 h-7 rounded-full border border-white shadow-sm object-cover cursor-pointer" 
+                            onLoad={(e) => {
+                                if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                    setImgError(true);
+                                }
+                            }}
+                            onError={() => setImgError(true)}
+                        />
                     ) : (
                         <div onClick={() => onClick && onClick(employee)} className="w-7 h-7 rounded-full border border-white shadow-sm bg-purple-100 flex items-center justify-center text-purple-700 text-[8px] font-black cursor-pointer">
-                            {employee.employee_name?.split(' ').map(n => n[0]).slice(0, 2).join('') || 'IA'}
+                            {employee.employee_name?.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('') || 'IA'}
                         </div>
                     )}
                 </div>

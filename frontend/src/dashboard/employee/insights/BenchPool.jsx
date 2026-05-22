@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getEmployeeById, getUpcomingBench } from '../../../api/employeeApi';
 import { ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
+import { isValidPhoto } from '../../../utils/imageHelper';
 
 const BenchPool = ({ employees, onCountLoaded }) => {
     const [expandedRow, setExpandedRow] = useState(null);
@@ -9,6 +10,7 @@ const BenchPool = ({ employees, onCountLoaded }) => {
 
     const [benchEmployees, setBenchEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [failedImages, setFailedImages] = useState({});
 
     useEffect(() => {
         let mounted = true;
@@ -96,11 +98,21 @@ const BenchPool = ({ employees, onCountLoaded }) => {
                                 </td>
                                 <td className="py-3 px-2">
                                     <div className="flex items-center gap-3">
-                                        {emp.photo_url ? (
-                                            <img src={emp.photo_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                        {isValidPhoto(emp.photo_url) && !failedImages[emp.employee_id] ? (
+                                            <img
+                                                src={emp.photo_url}
+                                                alt=""
+                                                className="w-8 h-8 rounded-full object-cover"
+                                                onLoad={(e) => {
+                                                    if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                                        setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }));
+                                                    }
+                                                }}
+                                                onError={() => setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }))}
+                                            />
                                         ) : (
                                             <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs">
-                                                {(emp.employee_name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                                {(emp.employee_name || 'U').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('')}
                                             </div>
                                         )}
                                         <span className={`font-semibold ${expandedRow === emp.employee_id ? 'text-blue-700' : 'text-gray-800'}`}>

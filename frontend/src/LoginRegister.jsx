@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { CD_Blue } from './Assets.jsx'
 import WaveBackground from './login-register/WaveBackground.jsx'
@@ -6,6 +7,13 @@ function LoginRegister() {
   const navigate = useNavigate()
   const location = useLocation()
   const isLoginPage = location.pathname === '/' || location.pathname === '/login'
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/info', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="relative w-screen h-screen bg-mainTheme flex justify-center items-center">

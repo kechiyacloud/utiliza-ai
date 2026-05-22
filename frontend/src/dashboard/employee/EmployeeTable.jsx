@@ -7,6 +7,8 @@ import { normalizeSkillName } from '../../utils/skillTopics';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { deleteEmployee, restoreEmployee } from '../../api/employeeApi';
 import ExportPreviewModal from './ExportPreviewModal';
+import { isValidPhoto } from '../../utils/imageHelper';
+import { getEmployeeStatus } from '../../utils/employeeStatus';
 
 // AllocationBar — color matches EmployeeStatusTag palette
 const AllocationBar = ({ percentage, status }) => {
@@ -65,6 +67,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
         return saved ? parseInt(saved, 10) : 15;
     });
     const [showExportModal, setShowExportModal] = useState(false);
+    const [failedImages, setFailedImages] = useState({});
 
     // Count active filters for badge
     const activeFilterCount = [
@@ -121,8 +124,9 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             );
 
             // Status tag filtering (matches FilterOverlay logic)
+            const computedStatus = getEmployeeStatus(emp);
             const matchesStatus = !filters?.statusTags?.length || (
-                emp.employee_status && filters.statusTags.includes(getEmployeeTag(emp.employee_status).label)
+                filters.statusTags.includes(getEmployeeTag(computedStatus).label)
             );
 
             if (!(matchesDept && matchesType && matchesLocation && matchesDesig && matchesStatus && matchesSkills)) {
@@ -132,12 +136,12 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
             // C. Special Card Filters (from Dashboard redirects)
             const cf = filters?.cardFilter;
             if (cf) {
-                const s = (emp.employee_status || '').toLowerCase();
+                const s = computedStatus.toLowerCase();
                 const isNoticeOrPip = s.includes('notice') || s.includes('pip');
 
-                if (cf === 'bench') return !isNoticeOrPip && (emp.employee_allocations || 0) <= 0;
-                if (cf === 'billable') return !isNoticeOrPip && emp.billable === 'billable' && (emp.employee_allocations || 0) > 0;
-                if (cf === 'non-billable') return !isNoticeOrPip && emp.billable === 'non-billable' && (emp.employee_allocations || 0) > 0;
+                if (cf === 'bench') return s === 'bench';
+                if (cf === 'billable') return s === 'allocated' && emp.billable === 'billable';
+                if (cf === 'non-billable') return s === 'allocated' && emp.billable === 'non-billable';
                 if (cf === 'notice') return isNoticeOrPip;
                 if (cf === 'overallocated') return (emp.employee_allocations || 0) > 100;
                 if (cf === 'certifications') return (emp.cert_count || 0) > 0;
@@ -145,7 +149,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                     const now = new Date();
                     const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                     const joinDate = emp.date_of_joining ? new Date(emp.date_of_joining) : null;
-                    const isLeaving = isNoticeOrPip || emp.date_of_resign;
+                    const isLeaving = isNoticeOrPip || emp.date_of_resign || s.includes('resign');
                     return joinDate && joinDate >= thirtyDaysAgo && !isLeaving;
                 }
             }
@@ -345,11 +349,17 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                     >
                                         <td className="px-6 py-2">
                                             <div className="flex items-center gap-2">
-                                                {emp.photo_url ? (
+                                                {isValidPhoto(emp.photo_url) && !failedImages[emp.employee_id] ? (
                                                     <img
                                                         src={emp.photo_url}
                                                         alt={emp.employee_name}
                                                         className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                        onLoad={(e) => {
+                                                            if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                                                setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }));
+                                                            }
+                                                        }}
+                                                        onError={() => setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }))}
                                                     />
                                                 ) : (
                                                     <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 text-blue-600 text-xs font-semibold border border-blue-100 uppercase">
@@ -373,21 +383,27 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     {(() => {
-                                                        const tag = getEmployeeTag(emp.employee_status);
+                                                        const computedStatus = getEmployeeStatus(emp);
+                                                        const tag = getEmployeeTag(computedStatus);
                                                         const isBillable = emp.billable === 'billable';
+                                                        const hideBilling = ['leadership', 'internal operations', 'training', 'resigned'].includes(computedStatus.toLowerCase());
                                                         return (
                                                             <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${tag.color} whitespace-nowrap shadow-sm`}>
                                                                 {tag.label}
-                                                                <span className="mx-1"></span>
-                                                                <span className={isBillable ? '' : 'opacity-70'}>
-                                                                    {isBillable ? 'Billable' : 'Non-Billable'}
-                                                                </span>
+                                                                {!hideBilling && (
+                                                                    <>
+                                                                        <span className="mx-1"></span>
+                                                                        <span className={isBillable ? '' : 'opacity-70'}>
+                                                                            {isBillable ? 'Billable' : 'Non-Billable'}
+                                                                        </span>
+                                                                    </>
+                                                                )}
                                                             </span>
                                                         );
                                                     })()}
                                                 </td>
                                                 <td className="px-6 py-2">
-                                                    <AllocationBar percentage={emp.employee_allocations || 0} status={emp.employee_status} />
+                                                    <AllocationBar percentage={emp.employee_allocations || 0} status={getEmployeeStatus(emp)} />
                                                 </td>
                                                 <td className="px-6 py-2 text-sm text-gray-500 font-medium">{emp.location}</td>
                                             </>

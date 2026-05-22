@@ -128,6 +128,7 @@ def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None)
                     "budget": 0.0,
                     "projects": [],
                     "stakeholders": [],
+                    "onboarded_date": None,
                 }
                 for r in rows
             ]
@@ -138,7 +139,16 @@ def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None)
             clauses.append("partner_id = %s")
             params.append(partner_id)
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        cur.execute(f"SELECT client_id, client_name, website_url, industry, status, budget FROM clients {where_sql} ORDER BY client_name", tuple(params))
+
+        # created_at may not exist in legacy schemas — detect before selecting
+        cur.execute("""
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'clients' AND column_name = 'created_at'
+        """)
+        has_created_at = bool(cur.fetchone())
+        created_at_col = "created_at" if has_created_at else "NULL::timestamp AS created_at"
+
+        cur.execute(f"SELECT client_id, client_name, website_url, industry, status, budget, {created_at_col} FROM clients {where_sql} ORDER BY client_name", tuple(params))
         rows = cur.fetchall()
 
         client_list = []
@@ -214,7 +224,8 @@ def list_clients(search: Optional[str] = None, partner_id: Optional[str] = None)
                 "status": r[4],
                 "budget": float(r[5]) if r[5] else 0.0,
                 "projects": projects_by_client.get(c_id, []),
-                "stakeholders": stakeholders_by_client.get(c_id, [])
+                "stakeholders": stakeholders_by_client.get(c_id, []),
+                "onboarded_date": r[6].isoformat() if r[6] else None,
             })
 
         return client_list

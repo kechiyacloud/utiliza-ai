@@ -1,6 +1,9 @@
+import React, { useState } from 'react';
 import { Briefcase, Calendar, User, ArrowRight } from 'lucide-react';
+import { isValidPhoto } from '../../utils/imageHelper';
 
 const ForecastBenchList = ({ employees, onEmployeeClick }) => {
+    const [failedImages, setFailedImages] = useState({});
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
@@ -40,8 +43,18 @@ const ForecastBenchList = ({ employees, onEmployeeClick }) => {
                                     <td className="py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm shrink-0 group-hover:scale-105 transition-transform">
-                                                {emp.photo_url ? (
-                                                    <img src={emp.photo_url} alt={emp.employee_name} className="w-full h-full object-cover" />
+                                                {isValidPhoto(emp.photo_url) && !failedImages[emp.employee_id] ? (
+                                                    <img 
+                                                        src={emp.photo_url} 
+                                                        alt={emp.employee_name} 
+                                                        className="w-full h-full object-cover" 
+                                                        onLoad={(e) => {
+                                                            if (e.target.naturalWidth === 102 && e.target.naturalHeight === 103) {
+                                                                setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }));
+                                                            }
+                                                        }}
+                                                        onError={() => setFailedImages(prev => ({ ...prev, [emp.employee_id]: true }))}
+                                                    />
                                                 ) : (
                                                     <User className="w-5 h-5 text-blue-600" />
                                                 )}

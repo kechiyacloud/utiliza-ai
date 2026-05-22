@@ -1398,6 +1398,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             const rowTotal = getRowTotal(r);
             const obj = {
                 'Resource': r.name,
+                'Employee ID': r.employee_id || '-',
                 'Role': r.role,
                 'Start Date': r.allocation_start_date || '-',
                 'End Date': r.allocation_end_date || '-',
@@ -1410,6 +1411,26 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             obj['Total'] = `${rowTotal}h`;
             return obj;
         });
+
+        const totalRow = {
+            'Resource': 'TOTAL',
+            'Employee ID': '',
+            'Role': '',
+            'Start Date': '',
+            'End Date': '',
+            'Alloc %': ''
+        };
+        let csvGrandTotal = 0;
+        visibleWeeks.forEach(wk => {
+            const wTotal = localRows.reduce((a, r) => {
+                const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                return a + (withinRange ? Number(hours || 0) : 0);
+            }, 0);
+            totalRow[wk.label] = `${wTotal}h`;
+            csvGrandTotal += wTotal;
+        });
+        totalRow['Total'] = `${csvGrandTotal}h`;
+        exportData.push(totalRow);
 
         const fileName = `Allocation_${projectId}_${new Date().toISOString().split('T')[0]}`;
 
@@ -1460,7 +1481,7 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         return withinRange && safeHours > 0 ? `${safeHours}h` : '\u2013';
                     });
                     return [
-                        r.name || '-',
+                        r.name ? (r.employee_id ? `${r.name} (${r.employee_id})` : r.name) : '-',
                         r.role || '-',
                         r.allocation_start_date || '-',
                         r.allocation_end_date || '-',
@@ -1511,7 +1532,10 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     foot: [[
                         'TOTAL', '', '', '', '',
                         ...visibleWeeks.map(wk => {
-                            const wTotal = localRows.reduce((a, r) => a + Number((r.weekly_hours || {})[wk.yearWeek] || 0), 0);
+                            const wTotal = localRows.reduce((a, r) => {
+                                const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
+                                return a + (withinRange ? Number(hours || 0) : 0);
+                            }, 0);
                             return `${wTotal}h`;
                         }),
                         `${grandTotal}h`,
@@ -1652,31 +1676,28 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     <div className="bg-slate-100/80 p-1 rounded-xl flex items-center shadow-inner w-fit border border-slate-200/60">
                         <button
                             onClick={() => setViewMode('previous')}
-                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
-                                viewMode === 'previous'
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'previous'
                                     ? 'bg-rose-600 text-white shadow-md scale-105'
                                     : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
-                            }`}
+                                }`}
                         >
                             ← Previous
                         </button>
                         <button
                             onClick={() => setViewMode('current')}
-                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${
-                                viewMode === 'current'
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${viewMode === 'current'
                                     ? 'bg-blue-600 text-white shadow-md scale-105'
                                     : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
-                            }`}
+                                }`}
                         >
                             ● Current
                         </button>
                         <button
                             onClick={() => setViewMode('upcoming')}
-                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${
-                                viewMode === 'upcoming'
+                            className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'upcoming'
                                     ? 'bg-emerald-600 text-white shadow-md scale-105'
                                     : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
-                            }`}
+                                }`}
                         >
                             Upcoming →
                         </button>
@@ -1693,14 +1714,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <button onClick={() => setIsImportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">
                                 <Users size={14} /> Import Resources
                             </button>
-                            <button 
-                                onClick={() => setIsDeleteAllModalOpen(true)} 
+                            <button
+                                onClick={() => setIsDeleteAllModalOpen(true)}
                                 disabled={validResourcesCount === 0}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                    validResourcesCount === 0 
-                                    ? 'bg-rose-50/50 text-rose-300 cursor-not-allowed border border-rose-100/50' 
-                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                                }`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${validResourcesCount === 0
+                                        ? 'bg-rose-50/50 text-rose-300 cursor-not-allowed border border-rose-100/50'
+                                        : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                    }`}
                             >
                                 <Trash2 size={14} /> Clear All Resources
                             </button>
@@ -1710,16 +1730,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <button onClick={() => { setIsEditing(false); setLocalRows((rows || []).map(normalizeAllocationRow)); setSaveError(''); }} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
                                 Cancel
                             </button>
-                            
+
                             <div className="relative group inline-block">
                                 <button
                                     onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                                     disabled={validResourcesCount === 0}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                                        validResourcesCount === 0 
-                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
-                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                    }`}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
+                                            ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
                                 >
                                     <Download size={14} />
                                     Export
@@ -1748,16 +1767,15 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                             <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors">
                                 <Pencil size={14} /> Edit Allocation
                             </button>
-                            
+
                             <div className="relative group inline-block">
                                 <button
                                     onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                                     disabled={validResourcesCount === 0}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                                        validResourcesCount === 0 
-                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed' 
-                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                    }`}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
+                                            ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
                                 >
                                     <Download size={14} />
                                     Export
@@ -1781,14 +1799,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                 )}
                             </div>
 
-                            <button 
+                            <button
                                 onClick={() => setIsConfirmDeleteAllAllocationsOpen(true)}
                                 disabled={validResourcesCount === 0}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                                    validResourcesCount === 0 
-                                    ? 'bg-rose-50/25 text-rose-300 cursor-not-allowed border border-rose-100/50' 
-                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100/80 border border-rose-100'
-                                }`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
+                                        ? 'bg-rose-50/25 text-rose-300 cursor-not-allowed border border-rose-100/50'
+                                        : 'bg-rose-50 text-rose-600 hover:bg-rose-100/80 border border-rose-100'
+                                    }`}
                             >
                                 <Trash2 size={14} /> Delete
                             </button>
@@ -1826,340 +1843,346 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 </div>
             ) : (
                 <div className="overflow-x-auto w-full rounded-xl border border-gray-100 shadow-sm bg-white">
-                <table className="min-w-[1200px] text-sm">
-                    <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[230px]">
-                                <div className="flex items-center gap-1.5"><Users size={13} /> Resource</div>
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[140px]">Role</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. Start</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. End</th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[100px]">
-                                <div className="flex flex-col gap-0.5">
-                                    <span>Allocation</span>
-                                    <span className="font-normal text-slate-400 normal-case text-[10px] leading-tight">(100% = 40h)</span>
-                                </div>
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Resource Type</th>
-                            {visibleWeeks.map((wk) => (
-                                <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${viewMode === 'previous' ? 'bg-rose-50/20' :
-                                        viewMode === 'upcoming' ? 'bg-emerald-50/20' :
-                                            'bg-transparent'
-                                    }`}>
-                                    <div className={`mx-auto rounded-md px-3 py-2 leading-tight ${wk.isCurrent ? 'bg-[#EEF2FF]' : ''
-                                        }`}>
-                                        <span className={`block text-[13px] font-semibold leading-[1.2] ${wk.isCurrent ? 'text-indigo-700' : 'text-slate-700'
-                                            }`}>
-                                            {wk.label}
-                                        </span>
-                                        <span className="block mt-1 text-[12px] font-medium leading-[1.25] text-[#6B7280]">
-                                            {wk.dateRange}
-                                        </span>
+                    <table className="min-w-[1200px] text-sm">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[230px]">
+                                    <div className="flex items-center gap-1.5"><Users size={13} /> Resource</div>
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[140px]">Role</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. Start</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Alloc. End</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[100px]">
+                                    <div className="flex flex-col gap-0.5">
+                                        <span>Allocation</span>
+                                        <span className="font-normal text-slate-400 normal-case text-[10px] leading-tight">(100% = 40h)</span>
                                     </div>
                                 </th>
-                            ))}
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Total</th>
-                            {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Actions</th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {localRows.length === 0 && isEditing && (
-                            <tr>
-                                <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
-                                    No resources added yet. Click Add Resource or Import Resources to start.
-                                </td>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[120px]">Resource Type</th>
+                                {visibleWeeks.map((wk) => (
+                                    <th key={wk.yearWeek} className={`px-3 py-2 text-center border-l border-slate-100 w-[132px] min-w-[132px] ${viewMode === 'previous' ? 'bg-rose-50/20' :
+                                        viewMode === 'upcoming' ? 'bg-emerald-50/20' :
+                                            'bg-transparent'
+                                        }`}>
+                                        <div className={`mx-auto rounded-md px-3 py-2 leading-tight ${wk.isCurrent ? 'bg-[#EEF2FF]' : ''
+                                            }`}>
+                                            <span className={`block text-[13px] font-semibold leading-[1.2] ${wk.isCurrent ? 'text-indigo-700' : 'text-slate-700'
+                                                }`}>
+                                                {wk.label}
+                                            </span>
+                                            <span className="block mt-1 text-[12px] font-medium leading-[1.25] text-[#6B7280]">
+                                                {wk.dateRange}
+                                            </span>
+                                        </div>
+                                    </th>
+                                ))}
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Total</th>
+                                {isEditing && <th className="px-3 py-3 text-center text-xs font-bold text-gray-600  tracking-wider min-w-[80px]">Actions</th>}
                             </tr>
-                        )}
-                        {displayRows.map((row, rowIdx) => {
-                            const ridx = row._sourceIndex;
-                            const isLastRow = rowIdx === displayRows.length - 1;
-                            const rowTotal = getRowTotal(row);
-                            const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+                        </thead>
+                        <tbody>
+                            {localRows.length === 0 && isEditing && (
+                                <tr>
+                                    <td colSpan={isEditing ? 12 : 11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                        No resources added yet. Click Add Resource or Import Resources to start.
+                                    </td>
+                                </tr>
+                            )}
+                            {displayRows.map((row, rowIdx) => {
+                                const ridx = row._sourceIndex;
+                                const isLastRow = rowIdx === displayRows.length - 1;
+                                const rowTotal = getRowTotal(row);
+                                const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
 
-                            // Business Logic for edits
-                            const pStatus = (project?.status || project?.project_status || '').toUpperCase();
-                            const isProjectNotStarted = pStatus === 'NOT STARTED' || pStatus === 'PENDING' || pStatus === '';
-                            const isProjectEnded = pStatus === 'ENDED' || pStatus === 'COMPLETED';
+                                // Business Logic for edits
+                                const pStatus = (project?.status || project?.project_status || '').toUpperCase();
+                                const isProjectNotStarted = pStatus === 'NOT STARTED' || pStatus === 'PENDING' || pStatus === '';
+                                const isProjectEnded = pStatus === 'ENDED' || pStatus === 'COMPLETED';
 
-                            const canEditStartDate = isEditing && (isProjectNotStarted || row.isNew);
-                            const canEditEndDate = isEditing && (!isProjectEnded);
+                                const canEditStartDate = isEditing && (isProjectNotStarted || row.isNew);
+                                const canEditEndDate = isEditing && (!isProjectEnded);
 
-                            return (
-                                <React.Fragment key={ridx}>
-                                    <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
-                                        <td className="px-4 py-3 font-semibold text-slate-800 min-w-[230px]">
-                                            {isEditing ? (
-                                                <SearchableDropdown
-                                                    items={employees}
-                                                    selectedId={row.employee_id || row.name}
-                                                    onSelect={(emp) => {
-                                                        // Prevent duplicates
-                                                        const isDuplicate = localRows.some((m, i) => i !== ridx && m.employee_id === emp.employee_id);
-                                                        if (isDuplicate) {
-                                                            alert(`${emp.employee_name} is already added to this project.`);
-                                                            return;
-                                                        }
+                                return (
+                                    <React.Fragment key={ridx}>
+                                        <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
+                                            <td className="px-4 py-3 font-semibold text-slate-800 min-w-[230px]">
+                                                {isEditing ? (
+                                                    <SearchableDropdown
+                                                        items={employees}
+                                                        selectedId={row.employee_id || row.name}
+                                                        onSelect={(emp) => {
+                                                            // Prevent duplicates
+                                                            const isDuplicate = localRows.some((m, i) => i !== ridx && m.employee_id === emp.employee_id);
+                                                            if (isDuplicate) {
+                                                                alert(`${emp.employee_name} is already added to this project.`);
+                                                                return;
+                                                            }
 
-                                                        const nextRole = emp?.role || emp?.role_designation || 'No role assigned';
-                                                        setLocalRows((current) => current.map((item, index) => (
-                                                            index === ridx
-                                                                ? normalizeAllocationRow({
-                                                                    ...item,
-                                                                    employee_id: emp?.employee_id || '',
-                                                                    name: emp?.employee_name || emp?.name || '',
-                                                                    role: nextRole,
-                                                                    billable_shadow: item.billable_shadow || 'Billable'
-                                                                })
-                                                                : item
-                                                        )));
-                                                        handleEmployeeSelect(emp, ridx);
-                                                    }}
-                                                    placeholder="Select Employee"
-                                                    label="Employee"
-                                                />
-                                            ) : (
-                                                row.employee_id ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
-                                                        <Link
-                                                            to={`/info/employee/${row.employee_id}`}
-                                                            className="text-slate-800 no-underline cursor-pointer hover:underline underline-offset-2 decoration-slate-300 transition-colors"
-                                                        >
-                                                            {row.name || '-'}
-                                                        </Link>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
-                                                        <span>{row.name || '-'}</span>
-                                                    </div>
-                                                )
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
-                                            {isEditing ? (
-                                                <input
-                                                    type="text"
-                                                    value={row.role || 'No role assigned'}
-                                                    readOnly
-                                                    title="Role is auto-assigned based on resource"
-                                                    className="w-full px-2 py-1.5 text-[11px] border rounded border-gray-200 outline-none bg-slate-50 text-slate-500 font-bold cursor-not-allowed shadow-sm"
-                                                />
-                                            ) : (
-                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
-                                                    {row.role || 'No role assigned'}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                            {canEditStartDate ? (
-                                                <input
-                                                    type="date"
-                                                    value={row.allocation_start_date || ''}
-                                                    min={row.isNew ? new Date().toISOString().split('T')[0] : undefined}
-                                                    onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)}
-                                                    className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
-                                                />
-                                            ) : (
-                                                row.allocation_start_date || '-'
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
-                                            {canEditEndDate ? (
-                                                <input type="date" value={row.allocation_end_date || ''} min={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
-                                            ) : (
-                                                row.allocation_end_date || '-'
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600 text-xs min-w-[100px]">
-                                            {isEditing ? (
-                                                <div className="flex items-center gap-1 justify-center">
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        max="100"
-                                                        step="any"
-                                                        placeholder="10"
-                                                        value={row.allocation_pct === '' ? '' : (row.allocation_pct ?? getAllocationPct(row))}
-                                                        onChange={(e) => handleRowChange(ridx, 'allocation_pct', e.target.value)}
-                                                        onBlur={(e) => handleRowBlur(ridx, 'allocation_pct', e.target.value)}
-                                                        className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                            const nextRole = emp?.role || emp?.role_designation || 'No role assigned';
+                                                            setLocalRows((current) => current.map((item, index) => (
+                                                                index === ridx
+                                                                    ? normalizeAllocationRow({
+                                                                        ...item,
+                                                                        employee_id: emp?.employee_id || '',
+                                                                        name: emp?.employee_name || emp?.name || '',
+                                                                        role: nextRole,
+                                                                        billable_shadow: item.billable_shadow || 'Billable'
+                                                                    })
+                                                                    : item
+                                                            )));
+                                                            handleEmployeeSelect(emp, ridx);
+                                                        }}
+                                                        placeholder="Select Employee"
+                                                        label="Employee"
                                                     />
-                                                </div>
-                                            ) : !isEditing && row.employee_id ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigate('/info/allocation', { state: { showBack: true, employeeId: row.employee_id, fromProjectId: projectId } })}
-                                                    className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 transition-colors"
-                                                    title="View allocation dashboard"
-                                                >
-                                                    {getAllocationPct(row)}%
-                                                </button>
-                                            ) : (
-                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
-                                                    {getAllocationPct(row)}%
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 min-w-[120px]">
-                                            {isEditing ? (
-                                                <div className="relative group">
-                                                    <select
-                                                        value={row.billable_shadow || 'Billable'}
-                                                        onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
-                                                        className={`w-full pl-2 pr-8 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
-                                                        ${row.billable_shadow === 'Billable'
-                                                                ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
-                                                                : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
-                                                            }`}
-                                                    >
-                                                        <option value="Billable">Billable</option>
-                                                        <option value="Non-billable">Non-billable</option>
-                                                    </select>
-                                                    <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-                                                        <ChevronDown size={14} className={`${row.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
-                                                ${row.billable_shadow === 'Billable'
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                        : 'bg-amber-50 text-amber-700 border-amber-100'
-                                                    }`}
-                                                >
-                                                    {row.billable_shadow || 'Billable'}
-                                                </span>
-                                            )}
-                                        </td>
-                                        {visibleWeeks.map((wk) => {
-                                            const { withinRange, hours, rawVal } = getWeeklyHoursForWeek(row, wk);
-                                            const safeHours = hours ?? 0;
-                                            const pct = withinRange ? Math.min(100, Math.round((safeHours / WEEK_DEFAULT_HOURS) * 100)) : 0;
-                                            const isCurrentWeek = wk.isCurrent;
-                                            const barColor = safeHours === 0 ? 'bg-gray-200' :
-                                                pct >= 100 ? 'bg-green-500' :
-                                                    pct >= 75 ? 'bg-blue-500' :
-                                                        pct >= 40 ? 'bg-indigo-400' :
-                                                            'bg-slate-300';
-
-                                            const otherProjectHours = withinRange && row.employee_id ? getOtherProjectHours(row.employee_id, wk.yearWeek) : 0;
-                                            const remainingAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjectHours);
-                                            // Previous tab is always read-only; Current/Upcoming are editable.
-                                            const isCellEditable = isEditing && viewMode !== 'previous' && withinRange && remainingAllowed > 0;
-
-                                            return (
-                                                <td key={wk.yearWeek} className={`px-3 py-2.5 text-center border-l ${viewMode === 'previous' ? 'border-rose-50/50 bg-rose-50/20' :
-                                                        viewMode === 'upcoming' ? 'border-emerald-50/50 bg-emerald-50/20' :
-                                                            'border-slate-100'
-                                                    } ${isCurrentWeek && !isEditing ? 'bg-blue-50/30' : ''}`}>
-                                                    {isCellEditable ? (
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                max="40"
-                                                                step="0.1"
-                                                                value={rawVal === undefined || rawVal === '' ? '' : rawVal}
-                                                                disabled={!isCellEditable}
-                                                                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                                                                onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
-                                                                onBlur={(e) => handleRowBlur(ridx, `week_${wk.yearWeek}`, e.target.value)}
-                                                                className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${safeHours > WEEK_DEFAULT_HOURS
-                                                                        ? 'border-rose-400 text-rose-600'
-                                                                        : 'border-gray-200 focus:border-blue-400'
-                                                                    } ${!isCellEditable ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'
-                                                                    }`}
-                                                            />
-                                                            {/* 'Rem: XXh' text removed per user request */}
+                                                ) : (
+                                                    row.employee_id ? (
+                                                        <div className="flex items-center gap-3">
+                                                            <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
+                                                            <Link
+                                                                to={`/info/employee/${row.employee_id}`}
+                                                                className="flex flex-col justify-center no-underline cursor-pointer group"
+                                                            >
+                                                                <span className="font-bold text-sm text-slate-800 truncate max-w-[150px] group-hover:underline underline-offset-2 decoration-slate-300 transition-colors">
+                                                                    {row.name || '-'}
+                                                                </span>
+                                                                <span className="text-[11px] text-gray-500 font-mono mt-0.5 group-hover:no-underline">{row.employee_id}</span>
+                                                            </Link>
                                                         </div>
                                                     ) : (
-                                                        !withinRange || safeHours === 0 ? (
-                                                            <span className={`text-xs font-medium ${viewMode === 'previous' ? 'text-rose-300' :
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
+                                                            <div className="flex flex-col justify-center">
+                                                                <span className="font-bold text-sm text-slate-800 truncate max-w-[150px]">{row.name || '-'}</span>
+                                                                {row.employee_id && <span className="text-[11px] text-gray-500 font-mono mt-0.5">{row.employee_id}</span>}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
+                                                {isEditing ? (
+                                                    <input
+                                                        type="text"
+                                                        value={row.role || 'No role assigned'}
+                                                        readOnly
+                                                        title="Role is auto-assigned based on resource"
+                                                        className="w-full px-2 py-1.5 text-[11px] border rounded border-gray-200 outline-none bg-slate-50 text-slate-500 font-bold cursor-not-allowed shadow-sm"
+                                                    />
+                                                ) : (
+                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
+                                                        {row.role || 'No role assigned'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
+                                                {canEditStartDate ? (
+                                                    <input
+                                                        type="date"
+                                                        value={row.allocation_start_date || ''}
+                                                        min={row.isNew ? new Date().toISOString().split('T')[0] : undefined}
+                                                        onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)}
+                                                        className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                    />
+                                                ) : (
+                                                    row.allocation_start_date || '-'
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
+                                                {canEditEndDate ? (
+                                                    <input type="date" value={row.allocation_end_date || ''} min={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                ) : (
+                                                    row.allocation_end_date || '-'
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-2 text-slate-600 text-xs min-w-[100px]">
+                                                {isEditing ? (
+                                                    <div className="flex items-center gap-1 justify-center">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max="100"
+                                                            step="any"
+                                                            placeholder="10"
+                                                            value={row.allocation_pct === '' ? '' : (row.allocation_pct ?? getAllocationPct(row))}
+                                                            onChange={(e) => handleRowChange(ridx, 'allocation_pct', e.target.value)}
+                                                            onBlur={(e) => handleRowBlur(ridx, 'allocation_pct', e.target.value)}
+                                                            className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        />
+                                                    </div>
+                                                ) : !isEditing && row.employee_id ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => navigate('/info/allocation', { state: { showBack: true, employeeId: row.employee_id, fromProjectId: projectId } })}
+                                                        className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 transition-colors"
+                                                        title="View allocation dashboard"
+                                                    >
+                                                        {getAllocationPct(row)}%
+                                                    </button>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-medium whitespace-nowrap">
+                                                        {getAllocationPct(row)}%
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 min-w-[120px]">
+                                                {isEditing ? (
+                                                    <div className="relative group">
+                                                        <select
+                                                            value={row.billable_shadow || 'Billable'}
+                                                            onChange={(e) => handleRowChange(ridx, 'billable_shadow', e.target.value)}
+                                                            className={`w-full pl-2 pr-8 py-1.5 text-xs border rounded-md outline-none focus:ring-1 bg-white cursor-pointer font-semibold appearance-none transition-all
+                                                        ${row.billable_shadow === 'Billable'
+                                                                    ? 'border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100'
+                                                                    : 'border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100'
+                                                                }`}
+                                                        >
+                                                            <option value="Billable">Billable</option>
+                                                            <option value="Non-billable">Non-billable</option>
+                                                        </select>
+                                                        <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+                                                            <ChevronDown size={14} className={`${row.billable_shadow === 'Billable' ? 'text-emerald-500' : 'text-amber-500'} group-hover:text-opacity-80 transition-colors`} />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap
+                                                ${row.billable_shadow === 'Billable'
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                            : 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        }`}
+                                                    >
+                                                        {row.billable_shadow || 'Billable'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            {visibleWeeks.map((wk) => {
+                                                const { withinRange, hours, rawVal } = getWeeklyHoursForWeek(row, wk);
+                                                const safeHours = hours ?? 0;
+                                                const pct = withinRange ? Math.min(100, Math.round((safeHours / WEEK_DEFAULT_HOURS) * 100)) : 0;
+                                                const isCurrentWeek = wk.isCurrent;
+                                                const barColor = safeHours === 0 ? 'bg-gray-200' :
+                                                    pct >= 100 ? 'bg-green-500' :
+                                                        pct >= 75 ? 'bg-blue-500' :
+                                                            pct >= 40 ? 'bg-indigo-400' :
+                                                                'bg-slate-300';
+
+                                                const otherProjectHours = withinRange && row.employee_id ? getOtherProjectHours(row.employee_id, wk.yearWeek) : 0;
+                                                const remainingAllowed = Math.max(0, WEEK_DEFAULT_HOURS - otherProjectHours);
+                                                // Previous tab is always read-only; Current/Upcoming are editable.
+                                                const isCellEditable = isEditing && viewMode !== 'previous' && withinRange && remainingAllowed > 0;
+
+                                                return (
+                                                    <td key={wk.yearWeek} className={`px-3 py-2.5 text-center border-l ${viewMode === 'previous' ? 'border-rose-50/50 bg-rose-50/20' :
+                                                        viewMode === 'upcoming' ? 'border-emerald-50/50 bg-emerald-50/20' :
+                                                            'border-slate-100'
+                                                        } ${isCurrentWeek && !isEditing ? 'bg-blue-50/30' : ''}`}>
+                                                        {isCellEditable ? (
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max="40"
+                                                                    step="0.1"
+                                                                    value={rawVal === undefined || rawVal === '' ? '' : rawVal}
+                                                                    disabled={!isCellEditable}
+                                                                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                                                                    onChange={(e) => handleRowChange(ridx, `week_${wk.yearWeek}`, e.target.value)}
+                                                                    onBlur={(e) => handleRowBlur(ridx, `week_${wk.yearWeek}`, e.target.value)}
+                                                                    className={`w-14 px-1 py-1 text-xs text-center border rounded outline-none focus:ring-1 focus:ring-blue-100 transition-colors ${safeHours > WEEK_DEFAULT_HOURS
+                                                                        ? 'border-rose-400 text-rose-600'
+                                                                        : 'border-gray-200 focus:border-blue-400'
+                                                                        } ${!isCellEditable ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'
+                                                                        }`}
+                                                                />
+                                                                {/* 'Rem: XXh' text removed per user request */}
+                                                            </div>
+                                                        ) : (
+                                                            !withinRange || safeHours === 0 ? (
+                                                                <span className={`text-xs font-medium ${viewMode === 'previous' ? 'text-rose-300' :
                                                                     viewMode === 'upcoming' ? 'text-emerald-300' :
                                                                         'text-slate-300'
-                                                                }`}>-</span>
-                                                        ) : (
-                                                            <div className="flex flex-col items-center gap-1">
-                                                                <span className={`text-xs font-bold ${pct >= 100 ? (viewMode === 'previous' ? 'text-rose-700' : viewMode === 'upcoming' ? 'text-emerald-700' : 'text-green-600') :
+                                                                    }`}>-</span>
+                                                            ) : (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className={`text-xs font-bold ${pct >= 100 ? (viewMode === 'previous' ? 'text-rose-700' : viewMode === 'upcoming' ? 'text-emerald-700' : 'text-green-600') :
                                                                         isCurrentWeek ? 'text-blue-700' :
                                                                             (viewMode === 'previous' ? 'text-rose-600' : viewMode === 'upcoming' ? 'text-emerald-600' : 'text-slate-700')
-                                                                    }`}>
-                                                                    {safeHours}h
-                                                                </span>
-                                                                <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
-                                                                    <div
-                                                                        className={`h-full rounded-full transition-all ${viewMode === 'previous' ? (pct > 0 ? 'bg-rose-400' : 'bg-gray-200') :
+                                                                        }`}>
+                                                                        {safeHours}h
+                                                                    </span>
+                                                                    <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
+                                                                        <div
+                                                                            className={`h-full rounded-full transition-all ${viewMode === 'previous' ? (pct > 0 ? 'bg-rose-400' : 'bg-gray-200') :
                                                                                 viewMode === 'upcoming' ? (pct > 0 ? 'bg-emerald-400' : 'bg-gray-200') :
                                                                                     barColor
-                                                                            }`}
-                                                                        style={{ width: `${pct}%` }}
-                                                                    />
+                                                                                }`}
+                                                                            style={{ width: `${pct}%` }}
+                                                                        />
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        )
-                                                    )}
-                                                </td>
-                                            );
-                                        })}
-                                        <td className="px-3 py-3 text-center font-bold text-blue-700 border-l-2 border-slate-200 text-sm">
-                                            {rowTotal > 0 ? `${rowTotal}h` : '-'}
-                                        </td>
+                                                            )
+                                                        )}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="px-3 py-3 text-center font-bold text-blue-700 border-l-2 border-slate-200 text-sm">
+                                                {rowTotal > 0 ? `${rowTotal}h` : '-'}
+                                            </td>
 
-                                        {isEditing && (
-                                            <td className="px-3 py-3 text-center">
-                                                <button onClick={() => handleRemoveRow(ridx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Remove Resource">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        )}
-                                    </tr>
-                                    {isEditing && isLastRow && (
-                                        <tr className="border-0 bg-transparent">
-                                            <td className="px-4 py-2 min-w-[230px]">
-                                                <button
-                                                    onClick={handleAddRow}
-                                                    className="flex items-center gap-1.5 text-blue-500 text-xs font-bold hover:text-blue-700 transition-colors"
-                                                >
-                                                    <Plus size={18} /> Add Resource
-                                                </button>
-                                            </td>
-                                            <td colSpan={7 + visibleWeeks.length}></td>
+                                            {isEditing && (
+                                                <td className="px-3 py-3 text-center">
+                                                    <button onClick={() => handleRemoveRow(ridx)} className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Remove Resource">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            )}
                                         </tr>
-                                    )}
-                                </React.Fragment>
-                            );
-                        })}
-                        {localRows.length > 0 && displayRows.length === 0 && (
-                            <tr>
-                                <td colSpan={8 + visibleWeeks.length + (isEditing ? 1 : 0)} className="px-4 py-8 text-center text-slate-400 text-sm">
-                                    No resources match the selected utilization filters.
+                                        {isEditing && isLastRow && (
+                                            <tr className="border-0 bg-transparent">
+                                                <td className="px-4 py-2 min-w-[230px]">
+                                                    <button
+                                                        onClick={handleAddRow}
+                                                        className="flex items-center gap-1.5 text-blue-500 text-xs font-bold hover:text-blue-700 transition-colors"
+                                                    >
+                                                        <Plus size={18} /> Add Resource
+                                                    </button>
+                                                </td>
+                                                <td colSpan={7 + visibleWeeks.length}></td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                            {localRows.length > 0 && displayRows.length === 0 && (
+                                <tr>
+                                    <td colSpan={8 + visibleWeeks.length + (isEditing ? 1 : 0)} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                        No resources match the selected utilization filters.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-slate-100 border-t-2 border-slate-200">
+                                <td className="px-4 py-3 font-extrabold text-slate-700 text-xs  tracking-wider" colSpan={5}>
+                                    Total
                                 </td>
-                            </tr>
-                        )}
-                    </tbody>
-                    <tfoot>
-                        <tr className="bg-slate-100 border-t-2 border-slate-200">
-                            <td className="px-4 py-3 font-extrabold text-slate-700 text-xs  tracking-wider" colSpan={5}>
-                                Total
-                            </td>
-                            <td></td>{ /* Resource Type placeholder */}
-                            {columnTotals.map((total, idx) => (
-                                <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' :
+                                <td></td>{ /* Resource Type placeholder */}
+                                {columnTotals.map((total, idx) => (
+                                    <td key={visibleWeeks[idx]?.yearWeek || idx} className={`px-3 py-3 text-center font-bold text-sm ${viewMode === 'previous' ? 'text-rose-700 border-l border-rose-100 bg-rose-50/10' :
                                         viewMode === 'upcoming' ? 'text-emerald-700 border-l border-emerald-100 bg-emerald-50/10' :
                                             'text-slate-700 border-l border-slate-200'
-                                    } ${visibleWeeks[idx]?.isCurrent ? 'bg-blue-50 text-blue-700' : ''}`}>
-                                    {total > 0 ? `${total}h` : '-'}
+                                        } ${visibleWeeks[idx]?.isCurrent ? 'bg-blue-50 text-blue-700' : ''}`}>
+                                        {total > 0 ? `${total}h` : '-'}
+                                    </td>
+                                ))}
+                                <td className="px-3 py-3 text-center font-extrabold text-blue-700 border-l-2 border-slate-200 text-sm">
+                                    {columnTotals.reduce((s, v) => s + v, 0)}h
                                 </td>
-                            ))}
-                            <td className="px-3 py-3 text-center font-extrabold text-blue-700 border-l-2 border-slate-200 text-sm">
-                                {columnTotals.reduce((s, v) => s + v, 0)}h
-                            </td>
-                            {isEditing && <td></td>}
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
+                                {isEditing && <td></td>}
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             )}
 
             <BulkAllocationModal
@@ -2221,17 +2244,6 @@ const calculateProjectProgress = (project, resources = []) => {
     // Calculate actual boundaries from resources
     let minS = project.start_date || project.startDate || project.start;
     let maxE = project.end_date || project.endDate || project.end;
-
-    if (resources && resources.length > 0) {
-        resources.forEach(r => {
-            if (r.allocation_start_date && (!minS || r.allocation_start_date < minS)) {
-                minS = r.allocation_start_date;
-            }
-            if (r.allocation_end_date && (!maxE || r.allocation_end_date > maxE)) {
-                maxE = r.allocation_end_date;
-            }
-        });
-    }
 
     const start = new Date(minS);
     const end = new Date(maxE);
@@ -2471,9 +2483,9 @@ const SkillsSection = ({ project, onUpdate }) => {
                     Project Skills
                 </h4>
                 {!isEditing && (
-                    <button 
-                        onClick={() => setIsEditing(true)} 
-                        className="text-gray-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" 
+                    <button
+                        onClick={() => setIsEditing(true)}
+                        className="text-gray-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
                         title="Edit Project Skills"
                     >
                         <Pencil size={14} />
@@ -2492,7 +2504,7 @@ const SkillsSection = ({ project, onUpdate }) => {
                                     className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100 flex items-center gap-1 shadow-sm"
                                 >
                                     {skill}
-                                    <button 
+                                    <button
                                         type="button"
                                         onClick={() => handleRemoveSkill(skill)}
                                         className="text-blue-400 hover:text-blue-600 p-0.5 rounded-full hover:bg-blue-100/50 transition-colors"
@@ -2529,19 +2541,19 @@ const SkillsSection = ({ project, onUpdate }) => {
                     </div>
 
                     <div className="flex gap-2 justify-end mt-4 pt-2 border-t border-gray-50">
-                        <button 
-                            onClick={handleCancel} 
+                        <button
+                            onClick={handleCancel}
                             disabled={isSaving}
                             className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
                         >
                             Cancel
                         </button>
-                        <button 
-                            onClick={handleSave} 
+                        <button
+                            onClick={handleSave}
                             disabled={isSaving}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
                         >
-                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                             Save
                         </button>
                     </div>
@@ -2658,24 +2670,8 @@ const ProjectHealthCard = ({ project, resources }) => {
         : 'SOW - NA';
 
     // 2. Timeline
-    const getMinMaxDates = (res) => {
-        if (!res || res.length === 0) return { start: null, end: null };
-        let minS = null;
-        let maxE = null;
-        res.forEach(r => {
-            if (r.allocation_start_date) {
-                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
-            }
-            if (r.allocation_end_date) {
-                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
-            }
-        });
-        return { start: minS, end: maxE };
-    };
-
-    const { start: minAllocStart, end: maxAllocEnd } = getMinMaxDates(resources);
-    const startDate = minAllocStart || project.start_date || project.startDate || 'TBD';
-    const endDate = maxAllocEnd || project.end_date || project.endDate || 'TBD';
+    const startDate = project.start_date || project.startDate || 'TBD';
+    const endDate = project.end_date || project.endDate || 'TBD';
     const timeline = `${startDate} - ${endDate}`;
 
     // 3. Team Size
@@ -2933,23 +2929,8 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
         setIsEditing(false);
     };
 
-    const { start: minAllocStart, end: maxAllocEnd } = useMemo(() => {
-        if (!resources || resources.length === 0) return { start: null, end: null };
-        let minS = null;
-        let maxE = null;
-        resources.forEach(r => {
-            if (r.allocation_start_date) {
-                if (!minS || r.allocation_start_date < minS) minS = r.allocation_start_date;
-            }
-            if (r.allocation_end_date) {
-                if (!maxE || r.allocation_end_date > maxE) maxE = r.allocation_end_date;
-            }
-        });
-        return { start: minS, end: maxE };
-    }, [resources]);
-
-    const displayStart = minAllocStart || project.start_date || 'Not Set';
-    const displayEnd = maxAllocEnd || project.end_date || 'TBD';
+    const displayStart = project.start_date || 'Not Set';
+    const displayEnd = project.end_date || 'TBD';
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full relative group w-full">
@@ -2968,29 +2949,29 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
             {isEditing ? (
                 <div className="space-y-4">
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-1 block">Objective &amp; Scope</label>
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Objective &amp; Scope</label>
                         <textarea rows={2} value={editData.objective} onChange={e => setEditData({ ...editData, objective: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white resize-none" />
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-1 block">Key Deliverables</label>
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Key Deliverables</label>
                         <input type="text" value={editData.deliverables} onChange={e => setEditData({ ...editData, deliverables: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-1 block">Start Date</label>
+                            <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Start Date</label>
                             <input type="date" value={editData.startDate === 'Not Set' ? '' : editData.startDate} onChange={e => setEditData({ ...editData, startDate: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-1 block">End Date</label>
+                            <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">End Date</label>
                             <input type="date" value={editData.endDate === 'TBD' ? '' : editData.endDate} onChange={e => setEditData({ ...editData, endDate: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-1 block">Major Milestones</label>
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Major Milestones</label>
                         <input type="text" value={editData.milestones} onChange={e => setEditData({ ...editData, milestones: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white" />
                     </div>
                     <div>
-                        <label className="text-xs text-slate-400 font-bold mb-1 block">Timeline Notes</label>
+                        <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Timeline Notes</label>
                         <textarea rows={2} value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} className="w-full text-sm border rounded px-3 py-1.5 outline-none focus:border-blue-400 bg-white resize-none" />
                     </div>
                     <div className="flex gap-2 justify-end mt-4 pt-2 border-t border-gray-50">
@@ -3003,29 +2984,29 @@ const ScopeSection = ({ project, resources, onUpdate }) => {
             ) : (
                 <div className="space-y-4">
                     <div>
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Objective &amp; Scope</p>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Objective &amp; Scope</p>
                         <p className="font-medium text-xs text-slate-700">{project.objective || 'Not defined.'}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Key Deliverables</p>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Key Deliverables</p>
                         <p className="font-medium text-xs text-slate-700">{project.deliverables || 'No deliverables listed.'}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-50">
                         <div>
-                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Start Date</p>
+                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Start Date</p>
                             <p className="font-mono text-xs font-bold text-slate-800">{displayStart}</p>
                         </div>
                         <div>
-                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">End Date</p>
+                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">End Date</p>
                             <p className="font-mono text-xs font-bold text-slate-800">{displayEnd}</p>
                         </div>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Major Milestones</p>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Major Milestones</p>
                         <p className="font-medium text-xs text-slate-700">{project.milestones || 'No milestones listed.'}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-widest mb-1 block">Timeline Notes</p>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-1 block">Timeline Notes</p>
                         <p className="font-medium text-xs text-slate-600 italic">{project.timeline_notes || 'No timeline notes.'}</p>
                     </div>
                 </div>
@@ -3059,21 +3040,10 @@ const ProjectDetailsPage = () => {
             project?.startDate,
             project?.start
         ];
-        (resources || []).forEach((r) => {
-            dateValues.push(r?.allocation_start_date);
-            dateValues.push(r?.start_date);
-            Object.keys(r?.weekly_hours || {}).forEach((weekKey) => {
-                const hours = r.weekly_hours[weekKey];
-                if (hours > 0) {
-                    const monday = getMondayFromISOWeek(weekKey);
-                    if (monday) dateValues.push(monday);
-                }
-            });
-        });
         const parsed = dateValues.map(parseDate).filter(Boolean);
         if (parsed.length === 0) return null;
         return new Date(Math.min(...parsed.map((d) => d.getTime())));
-    }, [project, resources]);
+    }, [project]);
 
     const allocationEndBoundary = useMemo(() => {
         const dateValues = [
@@ -3081,25 +3051,10 @@ const ProjectDetailsPage = () => {
             project?.endDate,
             project?.end
         ];
-        (resources || []).forEach((r) => {
-            dateValues.push(r?.allocation_end_date);
-            dateValues.push(r?.end_date);
-            Object.keys(r?.weekly_hours || {}).forEach((weekKey) => {
-                const hours = r.weekly_hours[weekKey];
-                if (hours > 0) {
-                    const monday = getMondayFromISOWeek(weekKey);
-                    if (monday) {
-                        const sunday = new Date(monday);
-                        sunday.setDate(monday.getDate() + 6);
-                        dateValues.push(sunday);
-                    }
-                }
-            });
-        });
         const parsed = dateValues.map(parseDate).filter(Boolean);
         if (parsed.length === 0) return null;
         return new Date(Math.max(...parsed.map((d) => d.getTime())));
-    }, [project, resources]);
+    }, [project]);
 
     const visibleWeeks = useMemo(() => {
         return getViewWeeks(viewMode, allocationStartBoundary, allocationEndBoundary);
@@ -3295,13 +3250,13 @@ const ProjectDetailsPage = () => {
 
                 {/* Scope, Commercial & Skills below allocation */}
                 <div className="mt-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div key={`scope-${project.project_id || project.id}`}>
                             <ScopeSection project={project} resources={resources} onUpdate={loadProjectData} />
                         </div>
-                        <div key={`commercial-${project.project_id || project.id}`}>
+                        {/* <div key={`commercial-${project.project_id || project.id}`}>
                             <CommercialSection project={project} onUpdate={loadProjectData} />
-                        </div>
+                        </div> */}
                         <div key={`skills-${project.project_id || project.id}`}>
                             <SkillsSection project={project} onUpdate={loadProjectData} />
                         </div>
