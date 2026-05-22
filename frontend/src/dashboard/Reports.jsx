@@ -357,7 +357,7 @@ const Reports = () => {
         },
         {
             id: 'clients',
-            title: 'Client',
+            title: 'Client Overview',
             description: 'Complete database of clients and associated partners.',
             icon: Building2,
             endpoint: '/clients',
