@@ -40,7 +40,7 @@ This is the heart of the pipeline, performing the Transform and Load operations.
 - **Field Mapping**: Maps Zoho fields (e.g., `EmployeeID`, `FirstName`, `LastName`) to the canonical database columns.
 - **Name Concatenation**: Merges `FirstName` and `LastName` into a single `employee_name` string.
 - **Data Cleaning**: Strips whitespace, normalizes empty strings/placeholders (like "N/A" or "-") to `NULL`.
-- **Manager Resolution**: Parses the `Reporting_To` string (e.g., "John Doe CD-001") to extract the specific `employee_id` required for the `reporting_manager_id` foreign key.
+- **Manager Resolution**: Parses the `Reporting_To` string to extract the specific `employee_id` required for the `reporting_manager_id` foreign key.
 - **Phone Normalization**: Strips non-numeric characters to store phone numbers as `BIGINT`.
 
 #### Data Delivery Strategy (Loading):

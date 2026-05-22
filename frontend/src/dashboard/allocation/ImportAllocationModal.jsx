@@ -12,26 +12,16 @@ import { exportToCSV } from '../../utils/exportUtils';
 
 // ── Column definitions ───────────────────────────────────────────────────────
 const MONTHLY_COLS = [
-    { name: 'employee_id',           required: true,  desc: 'Employee ID (e.g. EMP-00001)' },
+    { name: 'employee_id',           required: true,  desc: 'Employee ID' },
     { name: 'project_id',            required: 'dept', desc: 'Project ID — omit for Project-wise (auto-filled)' },
     { name: 'allocation_percentage', required: true,  desc: 'Integer 0–100' },
-    { name: 'role_in_project',       required: false, desc: 'Role on the project (e.g. Developer)' },
+    { name: 'role_in_project',       required: false, desc: 'Role on the project' },
     { name: 'project_tags',          required: false, desc: '"billable" or "non-billable". Defaults to billable.' },
 ];
 const BULK_EXTRA_COLS = [
     { name: 'allocation_start_date', required: true,  desc: 'Start date in YYYY-MM-DD format' },
     { name: 'allocation_end_date',   required: true,  desc: 'End date in YYYY-MM-DD format' },
 ];
-const SAMPLE_VALUES = {
-    employee_id: 'EMP-00001',
-    project_id: 'PRJ-00001',
-    allocation_percentage: 80,
-    role_in_project: 'Developer',
-    project_tags: 'billable',
-    allocation_start_date: '2025-01-01',
-    allocation_end_date: '2025-03-31',
-};
-
 const STEP_LABELS = ['Scope', 'Period', 'Template', 'Upload', 'Review'];
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -109,9 +99,9 @@ const ImportAllocationModal = ({ onClose, onImportSuccess }) => {
         const headers = cols
             .filter(c => !(importScope === 'project' && c.name === 'project_id'))
             .map(c => c.name);
-        const sampleRow = {};
-        headers.forEach(h => { sampleRow[h] = SAMPLE_VALUES[h] ?? ''; });
-        exportToCSV([sampleRow], 'allocation_import_template');
+        const templateRow = {};
+        headers.forEach(h => { templateRow[h] = ''; });
+        exportToCSV([templateRow], 'allocation_import_template');
     };
 
     // ── File parsing ─────────────────────────────────────────────────────────

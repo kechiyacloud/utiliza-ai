@@ -127,7 +127,9 @@ def allocation_metrics(
                                     THEN eb.employee_id END)                                            AS bench_strength,
                 COUNT(DISTINCT CASE WHEN es.is_notice = 1 THEN eb.employee_id END)                      AS notice_count,
                 ROUND(
-                    COALESCE(SUM(CASE WHEN es.is_notice = 0 THEN aa.total_pct ELSE 0 END), 0) / 
+                    (COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) +
+                     COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END)
+                    ) * 100.0 /
                     NULLIF(COUNT(DISTINCT eb.employee_id), 0),
                 1)                                                                                      AS avg_utilization,
                 COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) > 100
@@ -306,44 +308,84 @@ def organization_utilization(
     cur = conn.cursor()
 
     try:
-        # 1. Avg Utilization
-        util_query = """
-            SELECT COALESCE(AVG(pa.allocation_percentage), 0) 
-            FROM projects_allocation pa
-            JOIN projects pj ON pa.project_id = pj.project_id
-            JOIN employee_master em ON pa.employee_id = em.employee_id
-            LEFT JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
-            WHERE pa.allocation_start_date <= CURRENT_DATE
-              AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-              AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-        """
-        where_clauses = [
+        # --- Build shared filter fragments (mirrors /metrics endpoint) ---
+        emp_filters = [
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
             "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
         ]
         params = []
+
         if department and department != 'All Departments':
             dept_list = [d.strip() for d in department.split(',')]
-            where_clauses.append("em.department = ANY(%s)")
+            emp_filters.append("em.department = ANY(%s)")
             params.append(dept_list)
         if location and location != 'All Locations':
-            where_clauses.append("em.location = %s")
+            emp_filters.append("em.location = %s")
             params.append(location)
-        
+
+        emp_where = " AND ".join(emp_filters)
+
+        # Resource-type row-level pre-filter (same as /metrics)
+        rt_filter = ""
         if resource_type == 'Billable Only':
-            where_clauses.append("LOWER(pa.project_tags) = 'billable'")
+            rt_filter = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_rt
+                    WHERE pa_rt.employee_id = em.employee_id
+                      AND (LOWER(pa_rt.project_tags) IN ('billable', 'yes', 'y'))
+                      AND (pa_rt.allocation_end_date IS NULL OR pa_rt.allocation_end_date >= CURRENT_DATE)
+                )"""
         elif resource_type == 'Internal Only':
-            where_clauses.append("LOWER(pa.project_tags) = 'non-billable'")
-        elif resource_type == 'Bench Strength':
-             # Utilization is 0 for bench by definition, but let's check if the query returns 0
-             where_clauses.append("ppro.employee_status = 'Bench'")
-        
-        if where_clauses:
-            util_query += " AND " + " AND ".join(where_clauses)
-        
+            rt_filter = """
+                AND EXISTS (
+                    SELECT 1 FROM projects_allocation pa_rt
+                    WHERE pa_rt.employee_id = em.employee_id
+                      AND (LOWER(pa_rt.project_tags) LIKE '%%non%%' OR LOWER(pa_rt.project_tags) = 'no')
+                      AND (pa_rt.allocation_end_date IS NULL OR pa_rt.allocation_end_date >= CURRENT_DATE)
+                )"""
+
+        # 1. Avg Utilization via CTE headcount ratio (Allocated HC / Total HC * 100)
+        util_query = textwrap.dedent(f"""
+            WITH ActiveAlloc AS (
+                SELECT
+                    pa.employee_id,
+                    SUM(pa.allocation_percentage) AS total_pct,
+                    MAX(CASE WHEN (LOWER(pa.project_tags) IN ('billable', 'yes', 'y')) THEN 1 ELSE 0 END) AS has_billable,
+                    MAX(CASE WHEN (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags) = 'no') THEN 1 ELSE 0 END) AS has_non_billable
+                FROM projects_allocation pa
+                JOIN projects pj ON pa.project_id = pj.project_id
+                WHERE pa.allocation_start_date <= CURRENT_DATE
+                  AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                  AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                GROUP BY pa.employee_id
+            ),
+            EmpBase AS (
+                SELECT em.employee_id
+                FROM employee_master em
+                WHERE {emp_where}
+                {rt_filter}
+            ),
+            EmpStatus AS (
+                SELECT eb.employee_id,
+                       CASE WHEN (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%') THEN 1 ELSE 0 END AS is_notice
+                FROM EmpBase eb
+                LEFT JOIN employee_master_pro p ON eb.employee_id = p.employee_id
+            )
+            SELECT
+                COUNT(DISTINCT eb.employee_id) AS total_hc,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) AS billable_hc,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END) AS non_billable_hc
+            FROM EmpBase eb
+            JOIN EmpStatus es ON eb.employee_id = es.employee_id
+            LEFT JOIN ActiveAlloc aa ON aa.employee_id = eb.employee_id
+        """)
+
         cur.execute(util_query, tuple(params))
-        avg_util = float(cur.fetchone()[0])
+        util_row = cur.fetchone()
+        total_hc, billable_hc, non_billable_hc = util_row
+        allocated_hc = billable_hc + non_billable_hc
+        avg_util = round((allocated_hc * 100.0) / max(1, total_hc), 1)
 
         # 2. Breakdown by employee status
         breakdown_query = """

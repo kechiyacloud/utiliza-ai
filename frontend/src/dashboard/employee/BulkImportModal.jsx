@@ -30,16 +30,9 @@ const CSV_HEADERS = [
   'Skills (Comma Separated)', 'Reporting Manager ID'
 ];
 
-const CSV_SAMPLE_ROW = [
-  'EMP001', 'John Doe', 'john.doe@organization.com', '+1 234 567 890', '2024-01-15',
-  'Senior Developer', 'Engineering', 'Chennai', 'Hybrid', 'Full Time',
-  'React,Node.js,PostgreSQL', 'MGR001'
-];
-
 function downloadCSVTemplate() {
   const csvContent = [
-    CSV_HEADERS.join(','),
-    CSV_SAMPLE_ROW.join(',')
+    CSV_HEADERS.join(',')
   ].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);

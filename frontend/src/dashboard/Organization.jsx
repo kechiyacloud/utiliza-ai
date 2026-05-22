@@ -49,9 +49,9 @@ const Organization = () => {
                         name: emp.employee_name,
                         role: emp.role_designation,
                         avatar: emp.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.employee_name)}`,
-                        email: emp.email || 'user@example.com',
-                        phone: emp.phone || '+1 234 567 890',
-                        location: emp.location || 'New York, USA',
+                        email: emp.email || '',
+                        phone: emp.phone || '',
+                        location: emp.location || '',
                         status: emp.employee_status || 'Active'
                     });
                 });
