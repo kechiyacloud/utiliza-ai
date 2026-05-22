@@ -558,10 +558,10 @@ const ImportFileModal = ({ isOpen, onClose, onAddFromFile, employees, existingLo
 
     const handleDownloadTemplate = () => {
         exportToCSV([{
-            employee_id: 'EMP-00001',
-            employee_name: 'John Doe',
-            role_in_project: 'Developer',
-            allocation_percentage: 100,
+            employee_id: '',
+            employee_name: '',
+            role_in_project: '',
+            allocation_percentage: '',
             allocation_start_date: '',
             allocation_end_date: '',
         }], 'allocation_import_template');

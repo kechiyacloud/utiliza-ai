@@ -1054,7 +1054,7 @@ const AddEmployee = () => {
                         onChange={handleInputChange}
                         maxLength={100}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="John Doe"
+                        placeholder="Full name"
                         required
                     />
                     {errors.employee_name && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.employee_name}</p>}
@@ -1073,7 +1073,7 @@ const AddEmployee = () => {
                         maxLength={100}
                         onBlur={handleBlur}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="john.doe@clouddestinations.com"
+                        placeholder="Email address"
                         required
                     />
                     {errors.email && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.email}</p>}
@@ -1199,7 +1199,7 @@ const AddEmployee = () => {
                         onChange={handleInputChange}
                         maxLength={100}
                         className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.role_designation ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                        placeholder="Senior Developer"
+                        placeholder="Designation"
                         required
                     />
                     {errors.role_designation && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.role_designation}</p>}

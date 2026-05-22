@@ -619,9 +619,10 @@ def get_dashboard_all(
             """, dept_params)
             utilization_trends = [{"month": r[0], "value": float(r[1])} for r in cur.fetchall()]
 
-            # Team Utilization: Actual weighted average
-            utilization = int(total_alloc_pct / max(1, total_emp))
-            utilization = min(100, utilization) # Cap at 100% for the main KPI
+            # Team Utilization: Headcount ratio (Allocated HC / Total HC * 100)
+            allocated_hc = billable_hc + non_billable_hc
+            utilization = int((allocated_hc * 100) / max(1, total_emp))
+            utilization = min(100, utilization)  # Cap at 100% for the main KPI
             executive = {
                 "companyUtilization": utilization,
                 "billableHeadcount": billable_hc,

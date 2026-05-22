@@ -23,7 +23,7 @@ const Navbar = () => {
     const [showNavBlocker, setShowNavBlocker] = useState(false);
     const [pendingPath, setPendingPath] = useState(null);
 
-    const userEmail = localStorage.getItem('userEmail') || 'user@example.com';
+    const userEmail = localStorage.getItem('userEmail') || '';
     const userName = (userEmail || '').split('@')[0] || 'User';
     const userInitials = (userName || 'U').substring(0, 2).toUpperCase();
 
