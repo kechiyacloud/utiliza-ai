@@ -811,11 +811,13 @@ function Dashboard() {
                       : 'All tasks completed 🎉'}
                   </p>
                   <button
-                    onClick={() => navigate('/info/todo')}
-                    className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors group"
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-widest cursor-not-allowed"
                   >
                     Full Board
-                    <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+                    <ArrowRight size={11} />
                   </button>
                 </div>
 

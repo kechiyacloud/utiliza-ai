@@ -110,7 +110,7 @@ function Employee() {
       setLoading(true)
       setError(null)
       try {
-        const data = await getEmployeeList(refreshKey > 0, showArchived, showDeleted)
+        const data = await getEmployeeList(true, showArchived, showDeleted)
         if (!mounted) return
 
         setAllEmployees(data)

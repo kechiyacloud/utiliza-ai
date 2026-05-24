@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db_connection, release_db_connection
@@ -22,8 +22,67 @@ class FeedbackRequest(BaseModel):
     priority: str  # "Low" | "Medium" | "High"
 
 
+def _push_feedback_to_redis(ticket_id, data_dict, created_at):
+    try:
+        import redis as redis_lib
+        r = redis_lib.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD") or None,
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        payload = json.dumps({
+            **data_dict,
+            "ticket_id": ticket_id,
+            "status": "open",
+            "created_at": str(created_at),
+        })
+        r.lpush("feedback_tickets", payload)
+    except Exception as redis_err:
+        print(f"[Redis] Failed to push ticket: {redis_err}")
+
+
+def _send_feedback_email(ticket_id, data_dict, created_at):
+    try:
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASS")
+        smtp_from = os.getenv("SMTP_FROM", smtp_user)
+        recipients = [e.strip() for e in os.getenv("TEAM_EMAILS", "").split(",") if e.strip()]
+
+        if not (smtp_user and smtp_password and recipients):
+            return
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"[{data_dict['priority']}] New Feedback #{ticket_id}: {data_dict['subject']}"
+        msg["From"] = smtp_from
+        msg["To"] = ", ".join(recipients)
+
+        html = f"""
+        <h2>New Feedback Ticket #{ticket_id}</h2>
+        <p><b>From:</b> {data_dict.get('employee_name') or 'Unknown'} ({data_dict.get('employee_email')})</p>
+        <p><b>Type:</b> {data_dict['type']} &nbsp;|&nbsp; <b>Priority:</b> {data_dict['priority']}</p>
+        <p><b>Subject:</b> {data_dict['subject']}</p>
+        <hr/>
+        <p style="white-space: pre-wrap;">{data_dict['description']}</p>
+        <hr/>
+        <p style="color: #888; font-size: 12px;">Submitted via CD Utiliza AI &mdash; {str(created_at)}</p>
+        """
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(
+            os.getenv("SMTP_HOST", "smtp.gmail.com"),
+            int(os.getenv("SMTP_PORT", 587))
+        ) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, recipients, msg.as_string())
+    except Exception as mail_err:
+        print(f"[SMTP] Failed to send email: {mail_err}")
+
+
 @router.post("/feedback")
-def submit_feedback(data: FeedbackRequest):
+def submit_feedback(data: FeedbackRequest, background_tasks: BackgroundTasks):
     valid_types = ["Bug", "Feature Request", "General"]
     valid_priorities = ["Low", "Medium", "High"]
 
@@ -55,66 +114,9 @@ def submit_feedback(data: FeedbackRequest):
     finally:
         release_db_connection(conn)
 
-    # Push to Redis — non-blocking, failure is logged only
-    try:
-        import redis as redis_lib
-        r = redis_lib.Redis(
-            host=os.getenv("REDIS_HOST", "localhost"),
-            port=int(os.getenv("REDIS_PORT", 6379)),
-            password=os.getenv("REDIS_PASSWORD") or None,
-            decode_responses=True,
-            socket_connect_timeout=2
-        )
-        payload = json.dumps({
-            "ticket_id": ticket_id,
-            "employee_id": data.employee_id,
-            "employee_name": data.employee_name,
-            "employee_email": data.employee_email,
-            "subject": data.subject,
-            "description": data.description,
-            "type": data.type,
-            "priority": data.priority,
-            "status": "open",
-            "created_at": str(created_at)
-        })
-        r.lpush("feedback_tickets", payload)
-    except Exception as redis_err:
-        print(f"[Redis] Failed to push ticket: {redis_err}")
-
-    # Send email notification — non-blocking, failure is logged only
-    try:
-        smtp_user = os.getenv("SMTP_USER")
-        smtp_password = os.getenv("SMTP_PASS")
-        team_emails_raw = os.getenv("TEAM_EMAILS", "")
-        recipients = [e.strip() for e in team_emails_raw.split(",") if e.strip()]
-
-        if smtp_user and smtp_password and recipients:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"[{data.priority}] New Feedback #{ticket_id}: {data.subject}"
-            msg["From"] = smtp_user
-            msg["To"] = ", ".join(recipients)
-
-            html = f"""
-            <h2>New Feedback Ticket #{ticket_id}</h2>
-            <p><b>From:</b> {data.employee_name or 'Unknown'} ({data.employee_email})</p>
-            <p><b>Type:</b> {data.type} &nbsp;|&nbsp; <b>Priority:</b> {data.priority}</p>
-            <p><b>Subject:</b> {data.subject}</p>
-            <hr/>
-            <p style="white-space: pre-wrap;">{data.description}</p>
-            <hr/>
-            <p style="color: #888; font-size: 12px;">Submitted via CD Utiliza AI &mdash; {str(created_at)}</p>
-            """
-            msg.attach(MIMEText(html, "html"))
-
-            with smtplib.SMTP(
-                os.getenv("SMTP_HOST", "smtp.gmail.com"),
-                int(os.getenv("SMTP_PORT", 587))
-            ) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.sendmail(smtp_user, recipients, msg.as_string())
-    except Exception as mail_err:
-        print(f"[SMTP] Failed to send email: {mail_err}")
+    data_dict = data.dict()
+    background_tasks.add_task(_push_feedback_to_redis, ticket_id, data_dict, created_at)
+    background_tasks.add_task(_send_feedback_email, ticket_id, data_dict, created_at)
 
     return {
         "success": True,

@@ -294,7 +294,7 @@ export default function BulkImportModal({ onClose }) {
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-800">Start with our CSV Template</p>
-                <p className="text-xs text-blue-600">Pre-filled with correct column headers and a sample row</p>
+                <p className="text-xs text-blue-600">Pre-filled with the correct column headers</p>
               </div>
             </div>
             <button
