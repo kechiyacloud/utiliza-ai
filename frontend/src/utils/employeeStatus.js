@@ -9,16 +9,22 @@ export const getEmployeeStatus = (employee) => {
     if (status.includes('pip')) return 'PIP';
     if (status.includes('resign')) return 'Resigned';
 
-    // 1. Leadership Status Rules
+    // 1. Leadership Status Rules (contains director, vice president, vp, head)
     const desig = (employee.role_designation || employee.designation || '').toLowerCase().trim();
-    const leadershipKeywords = ['director', 'vp', 'head'];
+    const leadershipKeywords = ['director', 'vice president', 'vp', 'head'];
     if (leadershipKeywords.some(keyword => desig.includes(keyword))) {
         return 'Leadership';
     }
 
-    // 2. Trainees -> Training
+    // 2. Training (exact 'associate', or contains trainee/intern in type or designation)
     const type = (employee.employee_type || '').toLowerCase().trim();
-    if (type.includes('trainee') || type.includes('intern') || desig.includes('trainee') || desig.includes('intern')) {
+    if (
+        desig === 'associate' ||
+        type.includes('trainee') ||
+        type.includes('intern') ||
+        desig.includes('trainee') ||
+        desig.includes('intern')
+    ) {
         return 'Training';
     }
 

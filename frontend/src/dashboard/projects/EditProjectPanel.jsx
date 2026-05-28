@@ -838,11 +838,6 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
                                         onChange={handleChange}
                                         title={hasProjectStarted ? "Project has already started. Be careful when updating the start date." : ""}
                                     />
-                                    {hasProjectStarted && startedWeeksAgo > 2 && (
-                                        <p className="text-[10px] mt-1 font-semibold text-red-500">
-                                            ⚠️ Start date cannot be changed after project has started (beyond 2-week threshold)
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-bold text-gray-500 ">End date <span className="text-red-500">*</span></label>

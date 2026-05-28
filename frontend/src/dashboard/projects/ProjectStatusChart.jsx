@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpDown } from 'lucide-react';
 
 const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
+    const [imgFailed, setImgFailed] = useState(false);
     // Generate a consistent vibrant background color based on name
     const colors = [
         'bg-blue-500', 'bg-emerald-500', 'bg-indigo-500', 'bg-rose-500',
@@ -13,19 +14,15 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
 
     return (
         <div
-            className={`${size} rounded-full border-2 border-white ${avatar_url ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`}
+            className={`${size} rounded-full border-2 border-white ${avatar_url && !imgFailed ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`}
             title={name}
         >
-            {avatar_url ? (
+            {avatar_url && !imgFailed ? (
                 <img
                     src={avatar_url}
                     alt={name}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = '';
-                        e.target.parentElement.innerHTML = `<span class="text-[9px] font-black text-white font-sans">${name?.[0]?.toUpperCase() || '?'}</span>`;
-                    }}
+                    onError={() => setImgFailed(true)}
                 />
             ) : (
                 <span className="text-[9px] font-black text-white font-sans">{name?.[0]?.toUpperCase() || '?'}</span>

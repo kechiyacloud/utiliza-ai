@@ -139,6 +139,7 @@ def _sync_employee_allocations(cur, employee_ids):
                 WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
                 WHEN (
                     LOWER(m.role_designation) LIKE '%%director%%'
+                    OR LOWER(m.role_designation) LIKE '%%vice president%%'
                     OR LOWER(m.role_designation) LIKE '%%vp%%'
                     OR LOWER(m.role_designation) LIKE '%%head%%'
                 ) THEN 'Leadership'
@@ -147,6 +148,7 @@ def _sync_employee_allocations(cur, employee_ids):
                     OR LOWER(m.employee_type) LIKE '%%intern%%'
                     OR LOWER(m.role_designation) LIKE '%%trainee%%'
                     OR LOWER(m.role_designation) LIKE '%%intern%%'
+                    OR LOWER(m.role_designation) = 'associate'
                 ) THEN 'Training'
                 WHEN (
                     LOWER(m.department) LIKE '%%hr%%'
@@ -403,6 +405,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
             "        WHEN ( "
             "            LOWER(m.role_designation) LIKE '%%director%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%vice president%%' "
             "            OR LOWER(m.role_designation) LIKE '%%vp%%' "
             "            OR LOWER(m.role_designation) LIKE '%%head%%' "
             "        ) THEN 'Leadership' "
@@ -411,6 +414,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "            OR LOWER(m.employee_type) LIKE '%%intern%%' "
             "            OR LOWER(m.role_designation) LIKE '%%trainee%%' "
             "            OR LOWER(m.role_designation) LIKE '%%intern%%' "
+            "            OR LOWER(m.role_designation) = 'associate' "
             "        ) THEN 'Training' "
             "        WHEN ( "
             "            LOWER(m.department) LIKE '%%hr%%' "
@@ -813,6 +817,7 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status 
                     WHEN (
                         LOWER(m.role_designation) LIKE '%%director%%'
+                        OR LOWER(m.role_designation) LIKE '%%vice president%%'
                         OR LOWER(m.role_designation) LIKE '%%vp%%'
                         OR LOWER(m.role_designation) LIKE '%%head%%'
                     ) THEN 'Leadership'
@@ -821,6 +826,7 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                         OR LOWER(m.employee_type) LIKE '%%intern%%'
                         OR LOWER(m.role_designation) LIKE '%%trainee%%'
                         OR LOWER(m.role_designation) LIKE '%%intern%%'
+                        OR LOWER(m.role_designation) = 'associate'
                     ) THEN 'Training'
                     WHEN (
                         LOWER(m.department) LIKE '%%hr%%'
