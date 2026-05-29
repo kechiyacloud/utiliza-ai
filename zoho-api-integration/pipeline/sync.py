@@ -30,6 +30,22 @@ def parse_date(value):
     except ValueError:
         return None
 
+def months_to_years(raw):
+    """Zoho People returns total_experience in months. Convert to years (2 decimals)."""
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        months = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    if months <= 0:
+        return 0.0
+    years = round(months / 12.0, 2)
+    # Sanity cap — no one has 80+ years of work experience
+    if years > 80:
+        return 0.0
+    return years
+
 def extract_manager_id(reporting_to_str):
     s = clean_str(reporting_to_str)
     if not s:
@@ -105,11 +121,7 @@ def sync_employees():
             print(f"Skipping {emp_id} due to missing email")
             continue
 
-        exp_str = clean_str(emp.get("total_experience"))
-        try:
-            exp = float(exp_str) if exp_str else 0.0
-        except ValueError:
-            exp = 0.0
+        exp = months_to_years(emp.get("total_experience"))
 
         master_data = {
             "employee_id": emp_id,

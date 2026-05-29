@@ -1,4 +1,6 @@
-project_name,project_type,project_status,billable,start_date,end_date,client_id,partner_id,department_id,employee_id,role_in_project,allocation_percentage,allocation_start_date,allocation_end_date,location,project_tags
-AI Search Assistant,Client,Active,Billable,2026-06-01,2026-12-31,CLT-0001,PRT-0001,DEPT-001,samuelj@clouddestinations.com,Frontend Engineer,50,2026-06-01,2026-12-31,Remote,Billable
-AI Search Assistant,Client,Active,Billable,2026-06-01,2026-12-31,CLT-0001,PRT-0001,DEPT-001,nareng@clouddestinations.com,Backend Lead,50,2026-06-01,2026-12-31,Remote,Billable
-Internal Analytics Dashboard,Internal,Active,Non-Billable,2026-06-01,2026-09-30,,,DEPT-001,devajith@clouddestinations.com,Fullstack Developer,100,2026-06-01,2026-09-30,Remote,Non-Billable
+project_name,project_type,project_status,billable,start_date,end_date,client_id,client_name,partner_id,partner_name,department_id,department_name,employee_id,role_in_project,allocation_percentage,allocation_start_date,allocation_end_date,location,project_tags
+AI Search Assistant,Client,Active,Billable,2026-06-01,2026-12-31,CLT-0001,,PRT-0001,,DEPT-001,,samuelj@clouddestinations.com,Frontend Engineer,50,2026-06-01,2026-12-31,Remote,Billable
+AI Search Assistant,Client,Active,Billable,2026-06-01,2026-12-31,CLT-0001,,PRT-0001,,DEPT-001,,nareng@clouddestinations.com,Backend Lead,50,2026-06-01,2026-12-31,Remote,Billable
+Internal Analytics Dashboard,Internal,Active,Non-Billable,2026-06-01,2026-09-30,,,,,DEPT-001,,devajith@clouddestinations.com,Fullstack Developer,100,2026-06-01,2026-09-30,Remote,Non-Billable
+New Client Project,Client,Active,Billable,2026-07-01,2026-12-31,,Acme Corp,,,DEPT-001,,samuelj@clouddestinations.com,Developer,100,2026-07-01,2026-12-31,Remote,Billable
+Design Sprint Q3,Internal,Active,Non-Billable,2026-08-01,2026-09-30,,,,,,Product Design,samuelj@clouddestinations.com,Designer,100,2026-08-01,2026-09-30,Remote,Non-Billable

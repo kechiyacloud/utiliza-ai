@@ -8,6 +8,7 @@ import { Soon_GIF } from '../Assets';
 import EmployeeStatusTag from '../components/EmployeeStatusTag';
 import { useEmployees } from '../context/EmployeeContext';
 import BulkImportModal from './employee/BulkImportModal';
+import BulkProjectImportModal from './project/BulkProjectImportModal';
 import {
     ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Clock,
     Building2, Laptop, Award, Send, MessageSquare,
@@ -20,6 +21,7 @@ import ExportPreviewModal from './employee/ExportPreviewModal';
 import { clearDashboardCache } from '../api/dashboardApi';
 import ModuleLoader from '../components/ModuleLoader';
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { formatYears } from '../utils/formatExperience';
 
 // ─────────────────────────────────────────────
 // Reusable sub-components
@@ -131,7 +133,7 @@ const ProfileSection = ({ employeeData, loading, notLinked }) => {
                 <InfoField icon={Briefcase} label="Designation" value={employeeData.designation || employeeData.role} />
                 <InfoField icon={Laptop} label="Work Mode" value={employeeData.mode_of_work} />
                 <InfoField icon={Calendar} label="Date of Joining" value={formatDate(employeeData.date_of_joining)} />
-                <InfoField icon={Clock} label="Total Experience" value={employeeData.total_experience ? `${employeeData.total_experience} years` : '—'} />
+                <InfoField icon={Clock} label="Total Experience" value={employeeData.total_experience ? formatYears(employeeData.total_experience) : '—'} />
                 <InfoField icon={Award} label="Shift" value={employeeData.shift} />
                 <InfoField icon={User} label="Employee Type" value={employeeData.employee_type} />
             </div>
@@ -277,7 +279,7 @@ const FeedbackSection = ({ employeeData }) => {
 // Section E — Data
 // ─────────────────────────────────────────────
 
-const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, isAdmin }) => {
+const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, onBulkProjectImport, isAdmin }) => {
     const { showArchived, setShowArchived } = useEmployees();
 
 
@@ -333,6 +335,18 @@ const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing,
                             </div>
                         </button>
                     )}
+                    <button
+                        onClick={onBulkProjectImport}
+                        className="flex-1 min-w-[200px] flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-colors text-left"
+                    >
+                        <div className="p-3 bg-blue-600 text-white rounded-xl">
+                            <Upload size={20} />
+                        </div>
+                        <div>
+                            <p className="font-bold text-blue-900">Bulk Import Projects</p>
+                            <p className="text-xs text-blue-700/60 font-medium">Upload CSV to create projects &amp; allocations</p>
+                        </div>
+                    </button>
                 </div>
             </div>
 
@@ -923,6 +937,7 @@ const Settings = () => {
     const [employeeData, setEmployeeData] = useState(null);
     const [empLoading, setEmpLoading] = useState(true);
     const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showBulkProjectModal, setShowBulkProjectModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportData, setExportData] = useState([]);
     const [isExporting, setIsExporting] = useState(false);
@@ -1044,6 +1059,7 @@ const Settings = () => {
                             onExport={handleExportClick}
                             onImport={() => setShowBulkModal(true)}
                             onSync={handleSyncAll}
+                            onBulkProjectImport={() => setShowBulkProjectModal(true)}
                             isExporting={isExporting}
                             isSyncing={isSyncing}
                             isAdmin={isAdmin}
@@ -1056,6 +1072,7 @@ const Settings = () => {
             </div>
 
             {showBulkModal && <BulkImportModal onClose={() => setShowBulkModal(false)} />}
+            {showBulkProjectModal && <BulkProjectImportModal onClose={() => setShowBulkProjectModal(false)} />}
             {showExportModal && (
                 <ExportPreviewModal
                     employees={exportData}

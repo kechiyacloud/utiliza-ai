@@ -24,6 +24,7 @@ import { usePermissions } from '../../hooks/usePermissions'
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 import { decodeId } from '../../utils/idEncoder'
 import { isValidPhoto } from '../../utils/imageHelper'
+import { formatYears } from '../../utils/formatExperience'
 
 const ProjectAllocationDropdown = ({ project, rawProject, navigate }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -545,7 +546,7 @@ const EmployeeDetails = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">Total Exp</p>
-                                <p className="font-semibold text-slate-700">{userData.totalExperience} Yrs</p>
+                                <p className="font-semibold text-slate-700">{formatYears(userData.totalExperience)}</p>
                             </div>
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">CD Exp</p>

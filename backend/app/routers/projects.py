@@ -1,10 +1,12 @@
 from datetime import date, datetime, timedelta
 import uuid
 import json
+import csv
+import io
 from typing import Dict, List, Optional
 
 import psycopg2
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -676,6 +678,7 @@ def projects_list(
                 p.project_name,
                 p.project_status,
                 p.project_type,
+                p.sub_status,
                 p.start_date,
                 p.end_date,
                 COALESCE(p.start_date, (SELECT MIN(allocation_start_date) FROM projects_allocation WHERE project_id = p.project_id)) as effective_start,
@@ -721,7 +724,7 @@ def projects_list(
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
             LEFT JOIN departments d ON p.department_id = d.department_id
             {where_clause}
-            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id, p.uuid, p.department_id, d.department_name
+            GROUP BY p.project_id, p.project_name, p.project_status, p.project_type, p.sub_status, p.start_date, p.end_date, c.client_name, pr.partner_name, p.billable, p.client_id, p.partner_id, p.uuid, p.department_id, d.department_name
             ORDER BY p.start_date DESC NULLS LAST
         """, tuple(params))
         results = cur.fetchall()
@@ -731,24 +734,24 @@ def projects_list(
                 "project_id": r[0],
                 "project_name": r[1],
                 "status": _normalize_project_status(r[2], strict=False) if r[2] else "Unknown",
-                "sub_status": None,
+                "sub_status": _normalize_sub_status(r[4]) if r[4] else None,
                 "type": _normalize_project_type(r[3], strict=False) if r[3] else "Unknown",
-                "start_date": r[4],
-                "end_date": r[5],
-                "effective_start": r[6],
-                "effective_end": r[7],
-                "resource_count": r[8],
-                "team_members": r[9] if r[9] else [],
-                "resource_names": r[10] or "None",
-                "client_name": r[11],
-                "partner_name": r[12],
-                "billable": r[13] if r[13] else "Unknown",
-                "client_id": r[14],
-                "partner_id": r[15],
-                "uuid": str(r[16]) if r[16] else None,
-                "department_id": r[17],
-                "department_name": r[18],
-                "skills": r[19] if r[19] else []
+                "start_date": r[5],
+                "end_date": r[6],
+                "effective_start": r[7],
+                "effective_end": r[8],
+                "resource_count": r[9],
+                "team_members": r[10] if r[10] else [],
+                "resource_names": r[11] or "None",
+                "client_name": r[12],
+                "partner_name": r[13],
+                "billable": r[14] if r[14] else "Unknown",
+                "client_id": r[15],
+                "partner_id": r[16],
+                "uuid": str(r[17]) if r[17] else None,
+                "department_id": r[18],
+                "department_name": r[19],
+                "skills": r[20] if r[20] else []
             }
             for r in results
         ]
@@ -837,7 +840,7 @@ def get_project_details(project_id: str, _user: dict = Depends(require_min_role(
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
                 p.client_id, p.partner_id, p.project_type, p.uuid,
-                p.department_id, d.department_name
+                p.department_id, d.department_name, p.sub_status
             FROM projects p
             LEFT JOIN clients c ON p.client_id = c.client_id
             LEFT JOIN partners pr ON p.partner_id = pr.partner_id
@@ -854,7 +857,7 @@ def get_project_details(project_id: str, _user: dict = Depends(require_min_role(
             "project_id": row[0],
             "project_name": row[1],
             "status": _normalize_project_status(row[2], strict=False) if row[2] else None,
-            "sub_status": None,
+            "sub_status": _normalize_sub_status(row[23]) if row[23] else None,
             "billable": row[3],
             "start_date": row[4],
             "end_date": row[5],
@@ -1373,7 +1376,6 @@ def update_project(project_id: str, updates: ProjectUpdate):
         status_value = payload.get("project_status")
         sub_status_value = payload.get("sub_status")
         normalized_status = None
-        normalized_sub_status = None
         if status_value is not None:
             normalized_status, _ = _validate_status_and_substatus(status_value, None)
 
@@ -1420,15 +1422,20 @@ def update_project(project_id: str, updates: ProjectUpdate):
         if "department_id" in payload:
             updates_map["department_id"] = _normalize_fk_id(payload["department_id"]) or None
 
-        # Handle sub_status column removed from projects table logic to fix crash
-        # tracking sub_status in memory but not saving to DB
-        ignore_sub_status = None
-        # Handle sub_status once
-        if sub_status_value is not None or ("project_status" in payload):
-            if (normalized_status or "").lower() == "in progress":
-                ignore_sub_status = normalized_sub_status
+        # sub_status (SOW status) — the column exists in the projects table and must be saved.
+        # Accepts: 'SOW_SIGNED' | 'SOW_NOT_SIGNED'. For Internal projects the frontend sends null.
+        if "sub_status" in payload:
+            raw_sub = sub_status_value
+            if raw_sub:
+                normalized_sub = _normalize_sub_status(raw_sub)
+                if normalized_sub is None:
+                    allowed = ", ".join(VALID_SUB_STATUSES.values())
+                    raise HTTPException(status_code=422, detail=f"sub_status must be one of: {allowed}.")
+                updates_map["sub_status"] = normalized_sub
             else:
-                ignore_sub_status = None
+                # Internal project or explicitly cleared — allow null
+                updates_map["sub_status"] = None
+            print(f"SOW STATUS for project {project_id}: sub_status -> '{updates_map.get('sub_status')}'")
 
         if not updates_map and "skills" not in payload:
             raise HTTPException(status_code=400, detail="No valid project fields were provided.")
@@ -1461,6 +1468,88 @@ def update_project(project_id: str, updates: ProjectUpdate):
     except HTTPException:
         conn.rollback()
         raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        release_db_connection(conn)
+
+
+@router.post("/import/bulk", dependencies=[Depends(require_min_role("editor"))])
+async def import_projects_bulk(
+    file: UploadFile = File(...),
+    dry_run: bool = True,
+):
+    from app.scripts.bulk_upload_utility import (
+        validate_records, upload_records,
+        _resolve_or_create_partner, _resolve_or_create_client, _resolve_or_create_department,
+    )
+
+    content = await file.read()
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded CSV.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    fieldnames = reader.fieldnames or []
+    headers = [h.strip().lower() for h in fieldnames]
+    missing = {'project_name', 'employee_id'} - set(headers)
+    if missing:
+        raise HTTPException(status_code=400, detail=f"CSV missing required columns: {', '.join(missing)}")
+
+    records = [
+        {k.strip().lower(): (v.strip() if v else '') for k, v in row.items() if k}
+        for row in reader
+    ]
+
+    if not records:
+        raise HTTPException(status_code=400, detail="CSV file has no data rows.")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        errors, resolved_employees = validate_records(cur, records)
+
+        if errors:
+            return {"success": False, "errors": errors}
+
+        unique_projects = len({
+            (r.get('project_name', '').lower(), r.get('client_id', ''), r.get('client_name', ''))
+            for r in records
+        })
+        new_clients = sum(1 for r in records if r.get('_resolve_client_by_name'))
+        new_partners = sum(1 for r in records if r.get('_resolve_partner_by_name'))
+        new_departments = sum(1 for r in records if r.get('_resolve_department_by_name'))
+
+        if dry_run:
+            conn.rollback()
+            return {
+                "success": True,
+                "dry_run": True,
+                "summary": {
+                    "projects": unique_projects,
+                    "allocations": len(records),
+                    "new_clients": new_clients,
+                    "new_partners": new_partners,
+                    "new_departments": new_departments,
+                },
+            }
+
+        upload_records(cur, records, resolved_employees)
+        conn.commit()
+        return {
+            "success": True,
+            "dry_run": False,
+            "summary": {
+                "projects": unique_projects,
+                "allocations": len(records),
+                "new_clients": new_clients,
+                "new_partners": new_partners,
+                "new_departments": new_departments,
+            },
+        }
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))

@@ -533,8 +533,9 @@ const EditProjectPanel = ({ isOpen, onClose, project, onSave }) => {
         try {
             await onSave(payload);
             setSaveSuccess('Project updated successfully');
+            toast.success('Saved successfully');
             setIsSaving(false);
-            // Panel remains open automatically
+            onClose();
         } catch (error) {
             const msg = error?.response?.data?.detail || 'Failed to save project.';
             setSaveError(msg);

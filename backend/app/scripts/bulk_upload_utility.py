@@ -64,6 +64,66 @@ def load_csv(file_path):
     return records
 
 
+def _resolve_or_create_partner(cur, partner_name: str) -> str:
+    name = partner_name.strip()
+    cur.execute(
+        "SELECT partner_id FROM partners WHERE LOWER(partner_name) = LOWER(%s) LIMIT 1;",
+        (name,)
+    )
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    cur.execute(
+        "INSERT INTO partners (partner_name) VALUES (%s) RETURNING partner_id;",
+        (name,)
+    )
+    return cur.fetchone()[0]
+
+
+def _resolve_or_create_client(cur, client_name: str, partner_id=None) -> str:
+    name = client_name.strip()
+    if partner_id:
+        cur.execute(
+            "SELECT client_id FROM clients WHERE LOWER(client_name) = LOWER(%s) AND partner_id = %s LIMIT 1;",
+            (name, partner_id)
+        )
+    else:
+        cur.execute(
+            "SELECT client_id FROM clients WHERE LOWER(client_name) = LOWER(%s) AND partner_id IS NULL LIMIT 1;",
+            (name,)
+        )
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    if partner_id:
+        cur.execute(
+            "INSERT INTO clients (client_name, partner_id) VALUES (%s, %s) RETURNING client_id;",
+            (name, partner_id)
+        )
+    else:
+        cur.execute(
+            "INSERT INTO clients (client_name) VALUES (%s) RETURNING client_id;",
+            (name,)
+        )
+    return cur.fetchone()[0]
+
+
+def _resolve_or_create_department(cur, department_name: str) -> str:
+    name = " ".join(department_name.split())
+    cur.execute(
+        "SELECT department_id FROM departments WHERE LOWER(department_name) = LOWER(%s) LIMIT 1;",
+        (name,)
+    )
+    row = cur.fetchone()
+    if row:
+        return row[0]
+    cur.execute(
+        "INSERT INTO departments (department_name) VALUES (%s) RETURNING department_id;",
+        (name,)
+    )
+    return cur.fetchone()[0]
+
+
 def validate_records(cur, records):
     """Performs rigorous dry-run validations on all records to guarantee zero runtime database errors."""
     print("Starting pre-validation checks...")
@@ -106,23 +166,32 @@ def validate_records(cur, records):
         if p_type not in ('Client', 'Partner', 'Internal'):
             row_errors.append(f"Invalid Project Type '{p_type}'. Must be Client, Partner, or Internal.")
             
-        # Validate Client ID if type is Client
+        # Validate Client — accept ID or name (name triggers auto-create at upload time)
         if p_type == 'Client':
-            if not client_id:
-                row_errors.append("Client ID is mandatory for Client projects.")
-            elif client_id not in clients:
-                row_errors.append(f"Client ID '{client_id}' does not exist in clients table.")
-                
-        # Validate Partner ID if type is Partner
+            if client_id:
+                if client_id not in clients:
+                    row_errors.append(f"Client ID '{client_id}' does not exist in clients table.")
+            elif client_name_val := row.get('client_name', '').strip():
+                row['_resolve_client_by_name'] = True
+            else:
+                row_errors.append("Provide client_id or client_name for Client projects.")
+
+        # Validate Partner — accept ID or name (name triggers auto-create at upload time)
         if p_type == 'Partner':
-            if not partner_id:
-                row_errors.append("Partner ID is mandatory for Partner projects.")
-            elif partner_id not in partners:
-                row_errors.append(f"Partner ID '{partner_id}' does not exist in partners table.")
+            if partner_id:
+                if partner_id not in partners:
+                    row_errors.append(f"Partner ID '{partner_id}' does not exist in partners table.")
+            elif partner_name_val := row.get('partner_name', '').strip():
+                row['_resolve_partner_by_name'] = True
+            else:
+                row_errors.append("Provide partner_id or partner_name for Partner projects.")
                 
-        # Validate Department ID if provided
-        if dept_id and dept_id not in departments:
-            row_errors.append(f"Department ID '{dept_id}' does not exist in departments table.")
+        # Validate Department — accept ID or name (name triggers auto-create at upload time)
+        if dept_id:
+            if dept_id not in departments:
+                row_errors.append(f"Department ID '{dept_id}' does not exist in departments table.")
+        elif dept_name_val := row.get('department_name', '').strip():
+            row['_resolve_department_by_name'] = True
             
         # Validate Project Dates
         p_start, p_end = None, None
@@ -196,6 +265,16 @@ def upload_records(cur, records, resolved_employees):
     affected_employee_ids = set()
     
     for idx, row in enumerate(records, start=2):
+        # Auto-create partner/client by name when IDs not supplied
+        if row.get('_resolve_partner_by_name'):
+            row['partner_id'] = _resolve_or_create_partner(cur, row.get('partner_name', ''))
+        if row.get('_resolve_client_by_name'):
+            row['client_id'] = _resolve_or_create_client(
+                cur, row.get('client_name', ''), row.get('partner_id') or None
+            )
+        if row.get('_resolve_department_by_name'):
+            row['department_id'] = _resolve_or_create_department(cur, row.get('department_name', ''))
+
         p_name = row.get('project_name', '').strip()
         p_type = row.get('project_type', 'Client').strip().capitalize()
         p_status = row.get('project_status', 'Active').strip().capitalize()
