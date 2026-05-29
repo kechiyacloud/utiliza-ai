@@ -49,6 +49,7 @@ const BulkProjectImportModal = ({ onClose }) => {
     const [dryRunResult, setDryRunResult] = useState(null);
     const [finalResult, setFinalResult] = useState(null);
     const [apiError, setApiError] = useState('');
+    const [showFields, setShowFields] = useState(false);
     const fileInputRef = useRef();
 
     const handleDownloadTemplate = () => {
@@ -171,6 +172,58 @@ const BulkProjectImportModal = ({ onClose }) => {
                                     Upload a CSV with project and allocation data.
                                     Use <strong>client_name</strong> / <strong>partner_name</strong> / <strong>department_name</strong> instead of IDs — new ones are auto-created.
                                 </p>
+                            </div>
+
+                            {/* Field requirements card */}
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowFields(s => !s)}
+                                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-amber-100/50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Info size={15} className="text-amber-700" />
+                                        <span className="text-sm font-semibold text-amber-900">Field requirements</span>
+                                    </div>
+                                    {showFields ? <ChevronUp size={15} className="text-amber-700" /> : <ChevronDown size={15} className="text-amber-700" />}
+                                </button>
+
+                                {showFields && (
+                                    <div className="px-4 pb-3 pt-1 space-y-3 border-t border-amber-200">
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wide text-red-700 mb-1">Mandatory (every row)</p>
+                                            <ul className="text-xs text-gray-700 space-y-0.5 pl-1">
+                                                <li>• <code className="bg-white px-1 rounded">project_name</code> — any non-empty string</li>
+                                                <li>• <code className="bg-white px-1 rounded">employee_id</code> — existing <code className="bg-white px-1 rounded">EMP-xxxx</code> or company email</li>
+                                            </ul>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700 mb-1">Conditional (depends on project_type)</p>
+                                            <ul className="text-xs text-gray-700 space-y-0.5 pl-1">
+                                                <li>• <strong>Client</strong> projects → <code className="bg-white px-1 rounded">client_id</code> <em>or</em> <code className="bg-white px-1 rounded">client_name</code></li>
+                                                <li>• <strong>Partner</strong> projects → <code className="bg-white px-1 rounded">partner_id</code> <em>or</em> <code className="bg-white px-1 rounded">partner_name</code></li>
+                                                <li>• <strong>Internal</strong> projects → none required</li>
+                                            </ul>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 mb-1">Optional (have defaults)</p>
+                                            <ul className="text-xs text-gray-700 space-y-0.5 pl-1">
+                                                <li>• <code className="bg-white px-1 rounded">project_type</code> → <code>Client</code> &nbsp; <code className="bg-white px-1 rounded">project_status</code> → <code>Active</code></li>
+                                                <li>• <code className="bg-white px-1 rounded">billable</code> → <code>Billable</code> &nbsp; <code className="bg-white px-1 rounded">location</code> → <code>Remote</code></li>
+                                                <li>• <code className="bg-white px-1 rounded">department_id</code> / <code className="bg-white px-1 rounded">department_name</code> — auto-created by name</li>
+                                                <li>• <code className="bg-white px-1 rounded">start_date</code> / <code className="bg-white px-1 rounded">end_date</code> — format <code>YYYY-MM-DD</code></li>
+                                                <li>• <code className="bg-white px-1 rounded">allocation_percentage</code> → <code>100</code> (range 0–100)</li>
+                                                <li>• <code className="bg-white px-1 rounded">role_in_project</code> → <code>Developer</code></li>
+                                            </ul>
+                                        </div>
+
+                                        <p className="text-[11px] text-amber-800 italic pt-1">
+                                            Tip: if both ID and name are filled for the same entity, ID wins.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <button
