@@ -54,3 +54,27 @@ backend/scratch/
 scratch/
 
 
+# Added by code-review-graph
+.code-review-graph/
+
+# AI tool configs & editor folders
+.cursorrules
+.gemini/
+.github/
+.kiro/
+.opencode.json
+.qoder/
+.vscode/
+.windsurfrules
+
+# Agent/AI documentation files
+AGENTS.md
+GEMINI.md
+QODER.md
+
+# Debug docs
+database/experence-debug.md
+
+# Local config files (already tracked)
+.mcp.json
+backend/fix_total_experience_units.py

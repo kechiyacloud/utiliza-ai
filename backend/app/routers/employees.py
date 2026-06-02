@@ -332,6 +332,35 @@ def sync_all_employees():
             _sync_employee_allocations(cur, ids)
         return {"status": "success", "synced_count": len(ids)}
 
+@router.post("/employees/zoho-import", dependencies=[Depends(require_role("master_admin"))])
+def import_employees_from_zoho():
+    import subprocess, sys, json
+    from pathlib import Path
+
+    import os
+    pipeline_dir = os.environ.get("ZOHO_PIPELINE_DIR") or str(
+        Path(__file__).resolve().parent.parent.parent.parent / "zoho-api-integration" / "pipeline"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "sync.py"],
+        cwd=str(pipeline_dir),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr or "Zoho sync failed")
+
+    sync_data = {"new": 0, "updated": 0, "errors": 0}
+    for line in result.stdout.splitlines():
+        if line.startswith("SYNC_RESULT:"):
+            sync_data = json.loads(line[len("SYNC_RESULT:"):])
+            break
+
+    return {"status": "success", "new": sync_data["new"], "updated": sync_data["updated"], "errors": sync_data["errors"]}
+
 @router.get("/employees/list")
 def get_all_employees(include_resigned: bool = False, include_deleted: bool = False, _user: dict = Depends(_require_viewer)):
     print("API: Fetching all employees...")

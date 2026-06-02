@@ -2,7 +2,7 @@ import sys, os
 from dotenv import load_dotenv
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(backend_dir)
-load_dotenv(os.path.join(backend_dir, '.env'))
+load_dotenv(os.path.join(backend_dir, '.env.prod'))
 from app.database import get_db_connection, release_db_connection
 
 # One-shot backfill: rows with total_experience > 80 are almost certainly stored

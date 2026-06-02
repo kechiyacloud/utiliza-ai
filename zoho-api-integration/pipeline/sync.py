@@ -91,6 +91,7 @@ def sync_employees():
             total_experience = EXCLUDED.total_experience,
             photo_url = EXCLUDED.photo_url,
             updated_at = CURRENT_TIMESTAMP
+        RETURNING (xmax = 0) AS is_new
     """
 
     pro_query = """
@@ -105,6 +106,8 @@ def sync_employees():
 
     processed = 0
     errors = 0
+    new_count = 0
+    updated_count = 0
 
     for emp in raw_employees:
         emp_id = clean_str(emp.get("EmployeeID"))
@@ -146,6 +149,11 @@ def sync_employees():
         try:
             cur.execute("SAVEPOINT sp")
             cur.execute(master_query, master_data)
+            row = cur.fetchone()
+            if row and row[0]:
+                new_count += 1
+            else:
+                updated_count += 1
             cur.execute("RELEASE SAVEPOINT sp")
             processed += 1
         except Exception as e:
@@ -203,6 +211,8 @@ def sync_employees():
     cur.close()
     conn.close()
 
+    import json
+    print(f"SYNC_RESULT:{json.dumps({'new': new_count, 'updated': updated_count, 'errors': errors})}")
     print(f"Sync complete. Processed {processed} records successfully. Errors: {errors}")
 
 if __name__ == "__main__":

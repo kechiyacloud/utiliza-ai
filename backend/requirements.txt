@@ -7,3 +7,4 @@ pydantic
 redis
 mcp
 python-jose[cryptography]
+requests

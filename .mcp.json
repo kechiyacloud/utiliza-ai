@@ -2,7 +2,18 @@
   "mcpServers": {
     "feedback-agent": {
       "command": "python",
-      "args": ["backend/mcp_server.py"]
+      "args": [
+        "backend/mcp_server.py"
+      ]
+    },
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "cwd": "C:\\Users\\PrasanthSubramanian\\Desktop\\cd-utiliza-ai",
+      "type": "stdio"
     }
   }
 }
