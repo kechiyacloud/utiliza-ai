@@ -35,11 +35,18 @@ export const STATUS_OPTIONS = [
     'Resigned',
     'Leadership',
     'Internal Operations',
-    'Training'
+    'System account'
 ];
 
 // Statuses that must be manually set by admin (not auto-calculated from allocation)
-export const MANUAL_STATUS_OPTIONS = ['Notice period', 'PIP', 'Resigned'];
+export const MANUAL_STATUS_OPTIONS = [
+    'Notice period',
+    'PIP',
+    'Resigned',
+    'Internal Operations',
+    'Leadership',
+    'System account'
+];
 
 export const PROJECT_STATUS_OPTIONS = [
     'Not Started',

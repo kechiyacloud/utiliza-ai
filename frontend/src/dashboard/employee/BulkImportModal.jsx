@@ -100,7 +100,10 @@ export default function BulkImportModal({ onClose }) {
 
           const managerId = normalizedRow.reporting_manager_id || normalizedRow.manager_id || normalizedRow.manager;
           
-          if (!empId || !empName || !email || !dojRaw || !managerId) {
+          const designationLower = (normalizedRow.role_designation || normalizedRow.designation || normalizedRow.role || '').toLowerCase().trim();
+          const isCEO = designationLower === 'ceo' || designationLower.includes('chief executive') || designationLower.includes('founder');
+
+          if (!empId || !empName || !email || (!isCEO && !dojRaw) || (!isCEO && !managerId)) {
             errorsCount++;
             if (errorDetails.length < 5) errorDetails.push(`Entry ${index + 1}: Missing ID, Name, Email, DOJ, or Reporting Manager`);
             return;

@@ -202,8 +202,12 @@ const EmployeeDetails = () => {
                     id: sourceData.employee_id || sourceData.id,
                     reportingManager: (() => {
                         const mgr = sourceData.reporting_manager || sourceData.reportingManager;
+                        const designationLower = (sourceData.role_designation || sourceData.designation || '').toLowerCase().trim();
+                        const isCEO = designationLower === 'ceo' || designationLower.includes('chief executive') || designationLower.includes('founder');
                         // If it looks like an employee ID (e.g. starts with CD-), don't show it
-                        if (!mgr || /^CD-/i.test(String(mgr))) return 'N/A';
+                        if (!mgr || /^CD-/i.test(String(mgr))) {
+                            return isCEO ? 'None (CEO)' : 'N/A';
+                        }
                         return mgr;
                     })(),
                     joiningDate: sourceData.date_of_joining || sourceData.joiningDate,
@@ -388,6 +392,9 @@ const EmployeeDetails = () => {
     });
 
 
+    const designationLower = (userData.designation || '').toLowerCase().trim();
+    const isCEO = designationLower === 'ceo' || designationLower.includes('chief executive') || designationLower.includes('founder');
+
     return (
         <div className="p-6 bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col gap-6">
             <ConfirmDeleteModal
@@ -476,7 +483,7 @@ const EmployeeDetails = () => {
                         <EmployeeStatusTag
                             status={userData.status?.allocated}
                         />
-                        {userData.billable && !['leadership', 'internal operations', 'training', 'resigned'].includes((userData.status?.allocated || '').toLowerCase()) && (
+                        {userData.billable && !['leadership', 'internal operations', 'training', 'resigned', 'system account', 'system_account'].includes((userData.status?.allocated || '').toLowerCase()) && (
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${userData.billable === 'billable'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                                 : 'bg-slate-100 text-slate-400 border-slate-200'
@@ -513,7 +520,9 @@ const EmployeeDetails = () => {
                         <h2 className="text-lg font-bold text-slate-800">Profile Details</h2>
                         <div className="flex gap-2">
                             <EmployeeStatusTag status={userData.status?.allocated} size="sm" />
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-[10px] rounded-md font-bold uppercase tracking-wider border border-purple-200">{userData.status?.workMode}</span>
+                            {userData.status?.workMode && !['system account', 'system_account'].includes((userData.status?.allocated || '').toLowerCase()) && (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-700 text-[10px] rounded-md font-bold uppercase tracking-wider border border-purple-200">{userData.status?.workMode}</span>
+                            )}
                         </div>
                     </div>
 
@@ -522,10 +531,12 @@ const EmployeeDetails = () => {
                             <p className="text-slate-400 text-xs mb-1">Department</p>
                             <p className="font-semibold text-slate-700">{userData.department}</p>
                         </div>
-                        <div>
-                            <p className="text-slate-400 text-xs mb-1">Reporting Manager</p>
-                            <p className="font-semibold text-slate-700">{userData.reportingManager}</p>
-                        </div>
+                        {!isCEO && (
+                            <div>
+                                <p className="text-slate-400 text-xs mb-1">Reporting Manager</p>
+                                <p className="font-semibold text-slate-700">{userData.reportingManager}</p>
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-slate-400 text-xs mb-1">Joining Date</p>

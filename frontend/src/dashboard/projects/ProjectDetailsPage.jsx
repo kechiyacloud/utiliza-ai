@@ -122,19 +122,16 @@ function buildWeekDescriptor(mondayDate, index) {
 const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
     const safeName = name || 'User';
     const initial = (safeName[0] || 'U').toUpperCase();
+    const [hasError, setHasError] = useState(false);
 
     return (
         <div className={`${size} rounded-full border-2 border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={safeName}>
-            {photo_url ? (
+            {photo_url && !hasError ? (
                 <img
                     src={photo_url}
                     alt={safeName}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = '';
-                        e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-slate-400">${initial}</span>`;
-                    }}
+                    onError={() => setHasError(true)}
                 />
             ) : (
                 <span className="text-xs font-bold text-slate-400">{initial}</span>

@@ -33,7 +33,7 @@ def get_all_availability(
             LEFT JOIN projects p ON pa.project_id = p.project_id
             WHERE (em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE) 
               AND (em.is_deleted IS FALSE OR em.is_deleted IS NULL)
-              AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')
+              AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))
         """
         params = []
         if department:
@@ -92,7 +92,7 @@ def get_availability_filters():
 
     try:
         # Get departments
-        cur.execute("SELECT DISTINCT department FROM employee_master m WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%') AND department IS NOT NULL AND department != '' ORDER BY department")
+        cur.execute("SELECT DISTINCT department FROM employee_master m WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%')) AND department IS NOT NULL AND department != '' ORDER BY department")
         departments = [row[0] for row in cur.fetchall()]
 
         # Get projects
@@ -100,7 +100,7 @@ def get_availability_filters():
         projects = [row[0] for row in cur.fetchall()]
 
         # Get locations
-        cur.execute("SELECT DISTINCT location FROM employee_master m WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%') AND location IS NOT NULL AND location != '' ORDER BY location")
+        cur.execute("SELECT DISTINCT location FROM employee_master m WHERE (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%')) AND location IS NOT NULL AND location != '' ORDER BY location")
         locations = [row[0] for row in cur.fetchall()]
 
         return {

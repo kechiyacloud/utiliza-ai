@@ -7,19 +7,16 @@ export const getEmployeeStatus = (employee) => {
     const status = (employee.employee_status || '').toLowerCase().trim();
     if (status.includes('notice')) return 'Notice Period';
     if (status.includes('pip')) return 'PIP';
-    if (status.includes('resign')) return 'Resigned';
+    if (status.includes('resign') || status.includes('terminate')) return 'Resigned';
+    if (status.includes('leadership')) return 'Leadership';
+    if (status.includes('internal operations') || status === 'internal_operations') return 'Internal Operations';
+    if (status.includes('system account') || status === 'system_account') return 'System account';
 
     // 1. Leadership Status Rules
     const desig = (employee.role_designation || employee.designation || '').toLowerCase().trim();
-    const leadershipKeywords = ['director', 'vp', 'head'];
+    const leadershipKeywords = ['director', 'vp', 'head', 'ceo', 'chief executive', 'founder', 'president'];
     if (leadershipKeywords.some(keyword => desig.includes(keyword))) {
         return 'Leadership';
-    }
-
-    // 2. Trainees -> Training
-    const type = (employee.employee_type || '').toLowerCase().trim();
-    if (type.includes('trainee') || type.includes('intern') || desig.includes('trainee') || desig.includes('intern')) {
-        return 'Training';
     }
 
     // 3. Internal teams -> Internal Operations
