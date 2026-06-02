@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_db_connection, release_db_connection, db_cursor
 from app.rbac_utils import require_min_role, require_role, get_role, strip_fields
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import List, Optional
 import re
 from datetime import datetime, date
@@ -67,6 +67,30 @@ def _ensure_employee_columns(cur):
             END IF;
         END $$;
     """)
+
+
+def purge_expired_employees(cur) -> int:
+    """Deletes all soft-deleted records more than 30 days old."""
+    cur.execute("""
+        SELECT employee_id FROM employee_master 
+        WHERE is_deleted = TRUE 
+          AND updated_at < CURRENT_DATE - INTERVAL '30 days'
+    """)
+    expired_ids = [row[0] for row in cur.fetchall()]
+    if not expired_ids:
+        return 0
+        
+    # Cascade delete relations manually
+    cur.execute("UPDATE employee_master_pro SET reporting_manager_id = NULL WHERE reporting_manager_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM employee_certificates WHERE employee_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM employee_skills WHERE employee_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM weekly_allocations WHERE allocation_id IN (SELECT allocation_id FROM projects_allocation WHERE employee_id = ANY(%s))", (expired_ids,))
+    cur.execute("DELETE FROM projects_allocation WHERE employee_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM users WHERE employee_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM employee_master_pro WHERE employee_id = ANY(%s)", (expired_ids,))
+    cur.execute("DELETE FROM employee_master WHERE employee_id = ANY(%s)", (expired_ids,))
+    
+    return len(expired_ids)
 
 
 def _table_has_column(cur, table_name: str, column_name: str) -> bool:
@@ -137,11 +161,19 @@ def _sync_employee_allocations(cur, employee_ids):
                 WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%leadership%%' THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%internal operations%%' THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%training%%' THEN p.employee_status
+                WHEN p.employee_status ILIKE '%%system account%%' THEN p.employee_status
                 WHEN (
                     LOWER(m.role_designation) LIKE '%%director%%'
                     OR LOWER(m.role_designation) LIKE '%%vice president%%'
                     OR LOWER(m.role_designation) LIKE '%%vp%%'
                     OR LOWER(m.role_designation) LIKE '%%head%%'
+                    OR LOWER(m.role_designation) LIKE '%%ceo%%'
+                    OR LOWER(m.role_designation) LIKE '%%chief executive%%'
+                    OR LOWER(m.role_designation) LIKE '%%founder%%'
+                    OR LOWER(m.role_designation) LIKE '%%president%%'
                 ) THEN 'Leadership'
                 WHEN (
                     LOWER(m.employee_type) LIKE '%%trainee%%'
@@ -187,15 +219,15 @@ class EmployeeCreateUpdate(BaseModel):
     date_of_birth: Optional[str] = None
     address: Optional[str] = None
     photo_url: Optional[str] = None
-    date_of_joining: date
-    role_designation: str
-    department: str
-    employment_type: str
-    location: str
-    work_mode: str
+    date_of_joining: Optional[date] = None
+    role_designation: Optional[str] = None
+    department: Optional[str] = None
+    employment_type: Optional[str] = None
+    location: Optional[str] = None
+    work_mode: Optional[str] = None
     employee_status: str
     employee_allocations: int
-    reporting_manager_id: str
+    reporting_manager_id: Optional[str] = None
     date_of_resign: Optional[date] = None
     pip_start_date: Optional[date] = None
     pip_end_date: Optional[date] = None
@@ -205,6 +237,15 @@ class EmployeeCreateUpdate(BaseModel):
     projects: List[ProjectAllocationInput] = []
     certificates: List[CertificateInput] = []
     shift: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def coerce_empty_strings_to_none(cls, data):
+        if isinstance(data, dict):
+            for key, val in data.items():
+                if val == "":
+                    data[key] = None
+        return data
 
 class NominationInput(BaseModel):
     employee_id: str
@@ -267,7 +308,7 @@ def get_bench_employee_count():
             LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
             WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
               AND (p.employee_status NOT ILIKE CHR(37) || 'resign' || CHR(37) OR p.employee_status IS NULL)
-              AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
+              AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
               AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) 
               AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE((
@@ -325,12 +366,41 @@ def sync_all_employees():
             LEFT JOIN employee_master_pro p ON em.employee_id = p.employee_id
             WHERE (em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE) 
               AND (em.is_deleted IS FALSE OR em.is_deleted IS NULL)
-              AND (p.employee_status IS NULL OR p.employee_status NOT ILIKE '%%resign%%')
+              AND (p.employee_status IS NULL OR (p.employee_status NOT ILIKE '%%resign%%' AND p.employee_status NOT ILIKE '%%terminate%%'))
         """)
         ids = [row[0] for row in cur.fetchall()]
         if ids:
             _sync_employee_allocations(cur, ids)
         return {"status": "success", "synced_count": len(ids)}
+
+@router.post("/employees/zoho-import", dependencies=[Depends(require_role("master_admin"))])
+def import_employees_from_zoho():
+    import subprocess, sys, json
+    from pathlib import Path
+
+    import os
+    pipeline_dir = os.environ.get("ZOHO_PIPELINE_DIR") or str(
+        Path(__file__).resolve().parent.parent.parent.parent / "zoho-api-integration" / "pipeline"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "sync.py"],
+        cwd=str(pipeline_dir),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr or "Zoho sync failed")
+
+    sync_data = {"new": 0, "updated": 0, "errors": 0}
+    for line in result.stdout.splitlines():
+        if line.startswith("SYNC_RESULT:"):
+            sync_data = json.loads(line[len("SYNC_RESULT:"):])
+            break
+
+    return {"status": "success", "new": sync_data["new"], "updated": sync_data["updated"], "errors": sync_data["errors"]}
 
 @router.get("/employees/list")
 def get_all_employees(include_resigned: bool = False, include_deleted: bool = False, _user: dict = Depends(_require_viewer)):
@@ -403,11 +473,18 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "        WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status "
             "        WHEN p.employee_status ILIKE '%%pip%%' THEN p.employee_status "
             "        WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status "
+            "        WHEN p.employee_status ILIKE '%%leadership%%' THEN 'Leadership' "
+            "        WHEN p.employee_status ILIKE '%%internal operations%%' THEN 'Internal Operations' "
+            "        WHEN p.employee_status ILIKE '%%system account%%' THEN 'System account' "
             "        WHEN ( "
             "            LOWER(m.role_designation) LIKE '%%director%%' "
             "            OR LOWER(m.role_designation) LIKE '%%vice president%%' "
             "            OR LOWER(m.role_designation) LIKE '%%vp%%' "
             "            OR LOWER(m.role_designation) LIKE '%%head%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%ceo%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%chief executive%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%founder%%' "
+            "            OR LOWER(m.role_designation) LIKE '%%president%%' "
             "        ) THEN 'Leadership' "
             "        WHEN ( "
             "            LOWER(m.employee_type) LIKE '%%trainee%%' "
@@ -448,7 +525,7 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "LEFT JOIN SkillsAgg sk ON m.employee_id = sk.employee_id "
             "LEFT JOIN AllocAgg al ON m.employee_id = al.employee_id "
             "LEFT JOIN CertsAgg ca ON m.employee_id = ca.employee_id "
-            "WHERE (((m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (p.employee_status IS NULL OR p.employee_status NOT ILIKE '%%resign%%')) OR %s = TRUE) "
+            "WHERE (((m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (p.employee_status IS NULL OR (p.employee_status NOT ILIKE '%%resign%%' AND p.employee_status NOT ILIKE '%%terminate%%'))) OR %s = TRUE) "
             "  AND " + is_deleted_expr + " "
             "ORDER BY m.employee_name ASC"
         )
@@ -483,7 +560,7 @@ def get_upcoming_bench():
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')
             AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
             AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%')
-            AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status IN ('Leadership', 'Training', 'Internal Operations'))
+            AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status IN ('Leadership', 'Internal Operations', 'System account'))
             AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
             AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
             AND NOT EXISTS (
@@ -815,11 +892,18 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                     {notice_status_expr} 
                     WHEN p.employee_status ILIKE '%%pip%%'    THEN p.employee_status 
                     WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status 
+                    WHEN p.employee_status ILIKE '%%leadership%%' THEN 'Leadership'
+                    WHEN p.employee_status ILIKE '%%internal operations%%' THEN 'Internal Operations'
+                    WHEN p.employee_status ILIKE '%%system account%%' THEN 'System account'
                     WHEN (
                         LOWER(m.role_designation) LIKE '%%director%%'
                         OR LOWER(m.role_designation) LIKE '%%vice president%%'
                         OR LOWER(m.role_designation) LIKE '%%vp%%'
                         OR LOWER(m.role_designation) LIKE '%%head%%'
+                        OR LOWER(m.role_designation) LIKE '%%ceo%%'
+                        OR LOWER(m.role_designation) LIKE '%%chief executive%%'
+                        OR LOWER(m.role_designation) LIKE '%%founder%%'
+                        OR LOWER(m.role_designation) LIKE '%%president%%'
                     ) THEN 'Leadership'
                     WHEN (
                         LOWER(m.employee_type) LIKE '%%trainee%%'
@@ -1048,6 +1132,7 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
     """, update_params + [employee_id])
 
     # 2. Update employee_master_pro
+    reporting_manager = emp.reporting_manager_id.strip() if emp.reporting_manager_id and emp.reporting_manager_id.strip() else None
     cur.execute("SELECT employee_id FROM employee_master_pro WHERE employee_id = %s", (employee_id,))
     if cur.fetchone():
         cur.execute("""
@@ -1055,12 +1140,12 @@ def _perform_employee_update(cur, employee_id, emp: EmployeeCreateUpdate):
                 employee_status = %s, employee_allocations = %s, reporting_manager_id = %s,
                 pip_start_date = %s, pip_end_date = %s, notice_start_date = %s, notice_end_date = %s
             WHERE employee_id = %s
-        """, (emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date, employee_id))
+        """, (emp.employee_status, emp.employee_allocations, reporting_manager, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date, employee_id))
     else:
         cur.execute("""
             INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
+        """, (employee_id, emp.employee_status, emp.employee_allocations, reporting_manager, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
 
     # 3. Update skills (delete old, insert new)
     cur.execute("DELETE FROM employee_skills WHERE employee_id = %s", (employee_id,))
@@ -1161,10 +1246,11 @@ def create_employee(emp: EmployeeCreateUpdate, upsert: bool = False):
         cur.execute(f"INSERT INTO employee_master ({', '.join(cols)}) VALUES ({placeholders})", tuple(vals))
 
         # 2. Insert into employee_master_pro
+        reporting_manager = emp.reporting_manager_id.strip() if emp.reporting_manager_id and emp.reporting_manager_id.strip() else None
         cur.execute("""
             INSERT INTO employee_master_pro (employee_id, employee_status, employee_allocations, reporting_manager_id, pip_start_date, pip_end_date, notice_start_date, notice_end_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, emp.reporting_manager_id, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
+        """, (emp.employee_id, emp.employee_status, emp.employee_allocations, reporting_manager, emp.pip_start_date, emp.pip_end_date, emp.notice_start_date, emp.notice_end_date))
 
         # 3. Handle skills
         for skill_name in emp.skills:
@@ -1260,7 +1346,7 @@ def delete_employee(employee_id: str, permanent: bool = Query(False)):
             return {"detail": "Employee permanently deleted from database"}
         else:
             # Standard Soft Delete
-            cur.execute("UPDATE employee_master SET is_deleted = TRUE WHERE employee_id = %s", (actual_id,))
+            cur.execute("UPDATE employee_master SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE employee_id = %s", (actual_id,))
             return {"detail": "Employee soft-deleted (archived) successfully"}
 
 

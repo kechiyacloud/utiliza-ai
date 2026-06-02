@@ -19,15 +19,15 @@ import cdBlueLogo from '../../assets/CD-Blue.svg';
 import { PROJECT_SUB_STATUS_OPTIONS } from '../../data/constants';
 
 const AvatarCircle = ({ name, avatar_url, size = 'w-6 h-6' }) => {
-    const [imgFailed, setImgFailed] = useState(false);
+    const [hasError, setHasError] = useState(false);
     return (
         <div className={`${size} rounded-full border border-white bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative`} title={name}>
-            {avatar_url && !imgFailed ? (
+            {avatar_url && !hasError ? (
                 <img
                     src={avatar_url}
                     alt={name}
                     className="w-full h-full object-cover"
-                    onError={() => setImgFailed(true)}
+                    onError={() => setHasError(true)}
                 />
             ) : (
                 <span className="text-[8px] font-bold text-slate-400 font-sans">{name?.[0]?.toUpperCase() || '?'}</span>

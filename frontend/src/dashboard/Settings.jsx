@@ -280,7 +280,7 @@ const FeedbackSection = ({ employeeData }) => {
 // ─────────────────────────────────────────────
 
 const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, onBulkProjectImport, isAdmin }) => {
-    const { showArchived, setShowArchived } = useEmployees();
+    const { showArchived, setShowArchived, setShowDeleted } = useEmployees();
 
 
 
@@ -304,7 +304,7 @@ const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing,
                             </div>
                         </div>
                         <button
-                            onClick={() => setShowArchived(!showArchived)}
+                            onClick={() => { setShowArchived(!showArchived); setShowDeleted(!showArchived); }}
                             className={`w-12 h-6 rounded-full transition-colors relative ${showArchived ? 'bg-blue-600' : 'bg-gray-300'}`}
                         >
                             <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${showArchived ? 'left-7' : 'left-1'}`} />
@@ -331,7 +331,7 @@ const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing,
                             </div>
                             <div>
                                 <p className="font-bold text-amber-900">Sync All Data</p>
-                                <p className="text-xs text-amber-700/60 font-medium">Re-calculate allocations & statuses</p>
+                                <p className="text-xs text-amber-700/60 font-medium">Import & update employees from Zoho People</p>
                             </div>
                         </button>
                     )}
@@ -942,6 +942,9 @@ const Settings = () => {
     const [exportData, setExportData] = useState([]);
     const [isExporting, setIsExporting] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [showSyncConfirmModal, setShowSyncConfirmModal] = useState(false);
+    const [showSyncResultModal, setShowSyncResultModal] = useState(false);
+    const [syncResult, setSyncResult] = useState(null);
     const [empNotLinked, setEmpNotLinked] = useState(false);
 
     useEffect(() => {
@@ -985,17 +988,17 @@ const Settings = () => {
     };
 
     const handleSyncAll = async () => {
-        if (!window.confirm("This will re-calculate all employee allocations and statuses based on current project data. This may take a few seconds. Continue?")) return;
-
         setIsSyncing(true);
         try {
-            await api.post('/employees/sync-all');
+            const res = await api.post('/employees/zoho-import', null, { timeout: 310000 });
             clearDashboardCache();
-            toast.success("Global data synchronization completed successfully.");
-            window.location.reload();
+            setSyncResult(res.data);
+            setShowSyncConfirmModal(false);
+            setShowSyncResultModal(true);
         } catch (err) {
-            console.error("Sync all failed", err);
-            toast.error("Failed to sync data: " + (err.response?.data?.detail || err.message));
+            console.error("Zoho sync failed", err);
+            toast.error("Failed to sync from Zoho: " + (err.response?.data?.detail || err.message));
+            setShowSyncConfirmModal(false);
         } finally {
             setIsSyncing(false);
         }
@@ -1058,7 +1061,7 @@ const Settings = () => {
                             employeeData={employeeData}
                             onExport={handleExportClick}
                             onImport={() => setShowBulkModal(true)}
-                            onSync={handleSyncAll}
+                            onSync={() => setShowSyncConfirmModal(true)}
                             onBulkProjectImport={() => setShowBulkProjectModal(true)}
                             isExporting={isExporting}
                             isSyncing={isSyncing}
@@ -1078,6 +1081,72 @@ const Settings = () => {
                     employees={exportData}
                     onClose={() => setShowExportModal(false)}
                 />
+            )}
+
+            {showSyncConfirmModal && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2.5 bg-amber-100 rounded-xl">
+                                <RefreshCcw size={20} className="text-amber-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-gray-800">Sync Employee Data</h2>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-6">
+                            This will import all employee data from Zoho People and update the database. This may take up to a minute.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowSyncConfirmModal(false)}
+                                disabled={isSyncing}
+                                className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSyncAll}
+                                disabled={isSyncing}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isSyncing ? <><Loader2 size={14} className="animate-spin" /> Syncing...</> : 'Sync Now'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSyncResultModal && syncResult && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2.5 bg-emerald-100 rounded-xl">
+                                <CheckCircle2 size={20} className="text-emerald-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-gray-800">Sync Complete</h2>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
+                                <p className="text-2xl font-bold text-emerald-700">{syncResult.new}</p>
+                                <p className="text-xs font-semibold text-emerald-600 mt-1">New Employees Added</p>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+                                <p className="text-2xl font-bold text-blue-700">{syncResult.updated}</p>
+                                <p className="text-xs font-semibold text-blue-600 mt-1">Records Updated</p>
+                            </div>
+                        </div>
+                        {syncResult.errors > 0 && (
+                            <p className="text-xs text-red-500 mb-4">{syncResult.errors} record(s) failed to sync.</p>
+                        )}
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => { setShowSyncResultModal(false); window.location.reload(); }}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-mainTheme hover:opacity-90 rounded-xl transition-colors"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

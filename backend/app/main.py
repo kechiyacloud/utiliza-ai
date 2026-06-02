@@ -13,6 +13,12 @@ async def startup_event():
     with db_cursor() as cur:
         employees._ensure_employee_columns(cur)
         auth._ensure_auth_schema(cur)
+        try:
+            purged = employees.purge_expired_employees(cur)
+            if purged > 0:
+                print(f"Purged {purged} expired soft-deleted employee records.")
+        except Exception as pe:
+            print("Failed to run automated employee purge:", pe)
     print("Schema check complete.")
 
 # -------------------- Global Exception Handler (CORS Robustness) --------------------

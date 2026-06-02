@@ -66,6 +66,20 @@ const AddEmployee = () => {
     const [showPreview, setShowPreview] = useState(false); // Track if preview tab should be visible
     const [completedSections, setCompletedSections] = useState([]); // Track which sections are completed
     const [allEmployees, setAllEmployees] = useState([]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const set = new Set();
+        set.add('CEO');
+        set.add('Co-Founder & CEO');
+        set.add('Founder & CEO');
+        set.add('President & CEO');
+        allEmployees.forEach(emp => {
+            if (emp.role_designation) {
+                set.add(emp.role_designation.trim());
+            }
+        });
+        return Array.from(set).sort();
+    }, [allEmployees]);
     const [allProjects, setAllProjects] = useState([]);
     const [dynamicDepartments, setDynamicDepartments] = useState([]);
     const [dynamicLocations, setDynamicLocations] = useState([]);
@@ -771,7 +785,7 @@ const AddEmployee = () => {
         
         if (!formData.employee_id?.trim() || formData.employee_id === 'CD-') newErrors.employee_id = 'Employee ID is required';
         else if (formData.employee_id.length > 20) newErrors.employee_id = 'Employee ID must be under 20 chars';
-        else if (!formData.employee_id.startsWith('CD-')) newErrors.employee_id = 'Employee ID must start with CD-';
+        else if (!isEditMode && !formData.employee_id.startsWith('CD-')) newErrors.employee_id = 'Employee ID must start with CD-';
 
         if (!formData.employee_name?.trim()) newErrors.employee_name = 'Employee Name is required';
         else if (formData.employee_name.length > 100) newErrors.employee_name = 'Name must be under 100 chars';
@@ -794,9 +808,16 @@ const AddEmployee = () => {
             }
         }
 
-        if (!formData.date_of_joining) {
+        const designationLower = (formData.role_designation || '').toLowerCase().trim();
+        const isCEO = designationLower === 'ceo' || 
+                      designationLower.includes('chief executive') || 
+                      designationLower.includes('founder');
+
+        const isSystemAccount = (formData.employee_status || '').toLowerCase() === 'system account';
+
+        if (!isCEO && !isSystemAccount && !formData.date_of_joining) {
             newErrors.date_of_joining = 'Date of Joining is required';
-        } else {
+        } else if (formData.date_of_joining) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const doj = new Date(formData.date_of_joining);
@@ -823,15 +844,30 @@ const AddEmployee = () => {
 
     const validateProfessionalSection = (showErrors = true) => {
         const newErrors = {};
+        const isSystemAccount = (formData.employee_status || '').toLowerCase() === 'system account';
 
-        if (!formData.role_designation?.trim()) newErrors.role_designation = 'Designation is required';
-        else if (formData.role_designation.length > 100) newErrors.role_designation = 'Designation too long';
+        if (isSystemAccount) {
+            if (formData.role_designation && formData.role_designation.length > 100) {
+                newErrors.role_designation = 'Designation too long';
+            }
+        } else {
+            if (!formData.role_designation?.trim()) newErrors.role_designation = 'Designation is required';
+            else if (formData.role_designation.length > 100) newErrors.role_designation = 'Designation too long';
 
-        if (!formData.department) newErrors.department = 'Department is required';
-        if (!formData.reporting_manager_id) newErrors.reporting_manager_id = 'Reporting Manager is required';
-        if (!formData.employment_type) newErrors.employment_type = 'Employment Type is required';
-        if (!formData.location) newErrors.location = 'Location is required';
-        if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
+            if (!formData.department) newErrors.department = 'Department is required';
+            const designationLower = (formData.role_designation || '').toLowerCase().trim();
+            const isCEO = designationLower === 'ceo' || 
+                          designationLower.includes('chief executive') || 
+                          designationLower.includes('founder');
+
+            if (!isCEO && !formData.reporting_manager_id) {
+                newErrors.reporting_manager_id = 'Reporting Manager is required';
+            }
+            if (!formData.employment_type) newErrors.employment_type = 'Employment Type is required';
+            if (!formData.location) newErrors.location = 'Location is required';
+            if (!formData.shift?.trim()) newErrors.shift = 'Shift Timing is required';
+        }
+
         if (!formData.employee_status) newErrors.employee_status = 'Status is required';
 
         // Certificate validation: If any certificate is added, it must have a name and a file
@@ -868,7 +904,7 @@ const AddEmployee = () => {
     // Auto-calculate status and allocation based on project selection.
     // Skips override for manually-pinned statuses: Notice period, PIP, Resigned.
     useEffect(() => {
-        const MANUAL_STATUSES = ['notice', 'pip', 'resign'];
+        const MANUAL_STATUSES = ['notice', 'pip', 'resign', 'internal operations', 'system account', 'leadership'];
         const totalAllocation = formData.projects.reduce((sum, p) => sum + (parseInt(p.project_allocation) || 0), 0);
         
         setFormData(prev => {
@@ -1037,7 +1073,7 @@ const AddEmployee = () => {
                         onChange={handleInputChange}
                         maxLength={20}
                         onBlur={handleBlur}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.employee_id ? 'border-red-500 bg-red-50' : 'border-gray-300'} ${isEditMode ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
                         placeholder="CD-0001"
                         required
                         disabled={isEditMode}
@@ -1104,19 +1140,26 @@ const AddEmployee = () => {
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Date of Joining <span className="text-black ml-1">*</span></label>
-
-                    <input
-                        type="date"
-                        name="date_of_joining"
-                        value={formData.date_of_joining}
-                        onChange={handleInputChange}
-                        min={!isEditMode ? new Date().toISOString().split('T')[0] : undefined}
-                        className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.date_of_joining ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                        }`}
-                        required
-                    />
+                    {(() => {
+                        const designationLower = (formData.role_designation || '').toLowerCase().trim();
+                        const isCEO = designationLower === 'ceo' || designationLower.includes('chief executive') || designationLower.includes('founder');
+                        return (
+                            <>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Date of Joining {!isCEO && <span className="text-black ml-1">*</span>}</label>
+                                <input
+                                    type="date"
+                                    name="date_of_joining"
+                                    value={formData.date_of_joining}
+                                    onChange={handleInputChange}
+                                    min={!isEditMode ? new Date().toISOString().split('T')[0] : undefined}
+                                    className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                        errors.date_of_joining ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                    }`}
+                                    required={!isCEO}
+                                />
+                            </>
+                        );
+                    })()}
                     {errors.date_of_joining && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.date_of_joining}</p>}
                 </div>
             </div>
@@ -1195,6 +1238,7 @@ const AddEmployee = () => {
                     <input
                         type="text"
                         name="role_designation"
+                        list="designation-suggestions"
                         value={formData.role_designation}
                         onChange={handleInputChange}
                         maxLength={100}
@@ -1202,6 +1246,11 @@ const AddEmployee = () => {
                         placeholder="Designation"
                         required
                     />
+                    <datalist id="designation-suggestions">
+                        {uniqueDesignations.map(desig => (
+                            <option key={desig} value={desig} />
+                        ))}
+                    </datalist>
                     {errors.role_designation && <p className="text-[10px] text-red-600 mt-0.5 font-bold">{errors.role_designation}</p>}
                 </div>
                 <div>
@@ -1392,6 +1441,9 @@ const AddEmployee = () => {
                             <option value="Notice period">Notice period</option>
                             <option value="PIP">PIP</option>
                             <option value="Resigned">Resigned</option>
+                            <option value="Leadership">Leadership</option>
+                            <option value="Internal Operations">Internal Operations</option>
+                            <option value="System account">System account</option>
                         </optgroup>
                     </select>
                     <p className="text-[10px] text-gray-400 mt-1 font-medium italic">
@@ -1864,7 +1916,19 @@ const AddEmployee = () => {
                     <div><span className="font-semibold">Status:</span> <span className={`px-2 py-1 rounded text-xs ${formData.employee_status === 'Allocated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{formData.employee_status}</span></div>
                     <div><span className="font-semibold">Shift:</span> {formData.shift || 'N/A'}</div>
                     <div><span className="font-semibold">Allocation:</span> {formData.employee_allocations}%</div>
-                    <div><span className="font-semibold">Reporting Manager:</span> {formData.reporting_manager_id ? (() => { const mgr = allEmployees.find(e => e.employee_id === formData.reporting_manager_id); return mgr ? `${mgr.employee_name} (${mgr.employee_id})` : formData.reporting_manager_id; })() : 'N/A'}</div>
+                    <div>
+                        <span className="font-semibold">Reporting Manager:</span>{' '}
+                        {formData.reporting_manager_id ? (() => {
+                            const mgr = allEmployees.find(e => e.employee_id === formData.reporting_manager_id);
+                            return mgr ? `${mgr.employee_name} (${mgr.employee_id})` : formData.reporting_manager_id;
+                        })() : (
+                            (() => {
+                                const designationLower = (formData.role_designation || '').toLowerCase().trim();
+                                const isCEO = designationLower === 'ceo' || designationLower.includes('chief executive') || designationLower.includes('founder');
+                                return isCEO ? 'None (CEO)' : 'N/A';
+                            })()
+                        )}
+                    </div>
                 </div>
                 {formData.skills.length > 0 && (
                     <div className="mt-3">

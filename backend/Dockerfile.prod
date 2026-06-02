@@ -8,12 +8,15 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app ./app
-COPY mailer.py .
+COPY backend/app ./app
+COPY backend/mailer.py .
+
+# Copy Zoho pipeline (needed for sync endpoint)
+COPY zoho-api-integration/pipeline ./zoho-api-integration/pipeline
 
 # Expose FastAPI port
 EXPOSE 8000

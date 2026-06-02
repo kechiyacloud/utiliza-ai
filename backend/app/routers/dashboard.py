@@ -120,8 +120,8 @@ def get_dashboard_all(
         }
         
         # Base filters: only show active, non-deleted employees
-        m_base = " AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%') "
-        e_base = " AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE) AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = e.employee_id AND p_sub.employee_status ILIKE '%%resign%%') "
+        m_base = " AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE) AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%')) "
+        e_base = " AND (e.date_of_resign IS NULL OR e.date_of_resign > CURRENT_DATE) AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL) AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = e.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%')) "
 
         m_filter = m_base
         e_filter = e_base
@@ -170,87 +170,96 @@ def get_dashboard_all(
         print(" -> Batch 1: Core Metrics")
         try:
             core_metrics_query = textwrap.dedent(f"""
+                WITH emp_status_cte AS (
+                    SELECT 
+                        m.employee_id,
+                        CASE 
+                            WHEN p.employee_status ILIKE '%%notice%%' AND p.notice_end_date IS NOT NULL AND p.notice_end_date < CURRENT_DATE THEN 'Resigned' 
+                            WHEN p.employee_status ILIKE '%%notice%%' THEN p.employee_status 
+                            WHEN p.employee_status ILIKE '%%pip%%' THEN p.employee_status 
+                            WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status 
+                            WHEN p.employee_status ILIKE '%%leadership%%' THEN 'Leadership' 
+                            WHEN p.employee_status ILIKE '%%internal operations%%' THEN 'Internal Operations' 
+                            WHEN p.employee_status ILIKE '%%system account%%' THEN 'System account' 
+                            WHEN ( 
+                                LOWER(m.role_designation) LIKE '%%director%%' 
+                                OR LOWER(m.role_designation) LIKE '%%vp%%' 
+                                OR LOWER(m.role_designation) LIKE '%%head%%' 
+                                OR LOWER(m.role_designation) LIKE '%%ceo%%' 
+                                OR LOWER(m.role_designation) LIKE '%%chief executive%%' 
+                                OR LOWER(m.role_designation) LIKE '%%founder%%' 
+                                OR LOWER(m.role_designation) LIKE '%%president%%' 
+                            ) THEN 'Leadership' 
+                            WHEN ( 
+                                LOWER(m.department) LIKE '%%hr%%' 
+                                OR LOWER(m.department) LIKE '%%finance%%' 
+                                OR LOWER(m.department) LIKE '%%it operations%%' 
+                                OR LOWER(m.department) LIKE '%%system operations%%' 
+                                OR LOWER(m.department) LIKE '%%exo%%' 
+                                OR LOWER(m.department) LIKE '%%management%%' 
+                                OR LOWER(m.department) LIKE '%%training & development%%' 
+                            ) THEN 'Internal Operations' 
+                            WHEN COALESCE(al.total_alloc, 0) > 0 THEN 'Allocated' 
+                            ELSE 'Bench' 
+                        END as employee_status,
+                        CASE 
+                            WHEN al.priority_rank = 3 THEN 'billable' 
+                            WHEN al.priority_rank = 2 THEN 'non-billable' 
+                            WHEN al.priority_rank = 1 THEN 'billable' 
+                            ELSE 'bench' 
+                        END as billable
+                    FROM employee_master m
+                    LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
+                    LEFT JOIN (
+                        SELECT 
+                            pa.employee_id, 
+                            COALESCE(SUM(pa.allocation_percentage), 0) as total_alloc, 
+                            MAX(CASE 
+                                WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 3 
+                                WHEN COALESCE(pa.allocation_percentage, 0) > 0 AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags) = 'no') THEN 2 
+                                WHEN COALESCE(pa.allocation_percentage, 0) = 0 AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') THEN 1 
+                                ELSE 0 
+                            END) as priority_rank 
+                        FROM projects_allocation pa 
+                        LEFT JOIN projects pj ON pa.project_id = pj.project_id 
+                        WHERE pa.allocation_start_date <= CURRENT_DATE 
+                          AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE) 
+                          AND LOWER(pj.project_status) NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold') 
+                        GROUP BY pa.employee_id
+                    ) al ON m.employee_id = al.employee_id
+                    WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                      AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
+                      AND NOT EXISTS (
+                          SELECT 1 FROM employee_master_pro p_sub 
+                          WHERE p_sub.employee_id = m.employee_id 
+                            AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%')
+                      )
+                      {m_filter}
+                )
                 SELECT
-                    (SELECT COUNT(*) FROM employee_master m 
-                     WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                       AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
-                       {m_filter}),
-                    (SELECT COUNT(*) FROM employee_master m JOIN employee_master_pro p ON m.employee_id=p.employee_id
-                     WHERE (p.employee_status ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status ILIKE CHR(37)||'pip'||CHR(37)) {m_filter}),
-                    (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
-                     JOIN projects pj ON pa.project_id = pj.project_id
-                     JOIN employee_master m ON pa.employee_id=m.employee_id
-                     LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                     WHERE pa.allocation_start_date <= CURRENT_DATE
-                       AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                       AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
-                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                       AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                       AND (LOWER(pa.project_tags)='billable' OR LOWER(pa.project_tags)='yes' OR LOWER(pa.project_tags)='y') 
-                       AND (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
-                       {m_filter} AND pa.allocation_percentage > 0),
-                    (SELECT COUNT(DISTINCT m.employee_id) FROM employee_master m
-                     LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                     WHERE (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
-                       AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
-                       AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                       AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
-                       {m_filter}
-                       AND COALESCE((
-                           SELECT SUM(pa_sub.allocation_percentage) 
-                           FROM projects_allocation pa_sub 
-                           JOIN projects pj_sub ON pa_sub.project_id = pj_sub.project_id
-                           WHERE pa_sub.employee_id = m.employee_id 
-                             AND pa_sub.allocation_start_date <= CURRENT_DATE
-                             AND (pa_sub.allocation_end_date IS NULL OR pa_sub.allocation_end_date >= CURRENT_DATE)
-                             AND COALESCE(LOWER(pj_sub.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                       ), 0) <= 0),
-                    (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
-                     JOIN projects pj ON pa.project_id = pj.project_id
-                     JOIN employee_master m ON pa.employee_id=m.employee_id
-                     LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                     WHERE pa.allocation_start_date <= CURRENT_DATE
-                       AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                       AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
-                       AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
-                       AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                       AND (LOWER(pa.project_tags) LIKE '%%non%%' OR LOWER(pa.project_tags)='no') 
-                       AND (p.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) AND p.employee_status NOT ILIKE CHR(37)||'pip'||CHR(37) OR p.employee_status IS NULL)
-                       {m_filter} AND pa.allocation_percentage > 0
-                       AND NOT EXISTS (
-                           SELECT 1 FROM projects_allocation pa2
-                           JOIN projects pj2 ON pa2.project_id = pj2.project_id
-                           WHERE pa2.employee_id = pa.employee_id
-                             AND (LOWER(pa2.project_tags)='billable' OR LOWER(pa2.project_tags)='yes' OR LOWER(pa2.project_tags)='y')
-                             AND pa2.allocation_start_date <= CURRENT_DATE
-                             AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
-                             AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                       )),
-                    (SELECT COUNT(DISTINCT pa.employee_id) FROM projects_allocation pa
-                     LEFT JOIN projects pj ON pa.project_id = pj.project_id
-                     JOIN employee_master m ON pa.employee_id=m.employee_id
-                     LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
-                     WHERE pa.allocation_start_date <= CURRENT_DATE
-                       AND pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE+INTERVAL '30 days')
-                       AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                       AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
-                       AND m.date_of_resign IS NULL
-                       AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
-                       AND NOT EXISTS (
-                           SELECT 1 FROM projects_allocation pa2
-                           LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
-                           WHERE pa2.employee_id = pa.employee_id
-                             AND pa2.allocation_id <> pa.allocation_id
-                             AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
-                             AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
-                             AND pa2.allocation_start_date <= CURRENT_DATE
-                             AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
-                       )
-                       {m_filter}
-                    ),
-                    (SELECT COUNT(*) FROM employee_master m 
-                     WHERE m.date_of_joining >= CURRENT_DATE - INTERVAL '30 days'
-                     {m_filter}),
+                    (SELECT COUNT(*) FROM employee_master m WHERE 1=1 {m_filter}),
+                    (SELECT COUNT(*) FROM employee_master m JOIN employee_master_pro p ON m.employee_id=p.employee_id WHERE (p.employee_status ILIKE CHR(37)||'notice'||CHR(37) OR p.employee_status ILIKE CHR(37)||'pip'||CHR(37)) {m_filter}),
+                    (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND billable = 'billable'),
+                    (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Bench'),
+                    (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND billable = 'non-billable'),
+                    (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND employee_id IN (
+                        SELECT DISTINCT pa.employee_id FROM projects_allocation pa
+                        JOIN projects pj ON pa.project_id = pj.project_id
+                        WHERE pa.allocation_start_date <= CURRENT_DATE
+                          AND pa.allocation_end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE+INTERVAL '30 days')
+                          AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                          AND NOT EXISTS (
+                              SELECT 1 FROM projects_allocation pa2
+                              LEFT JOIN projects pj2 ON pa2.project_id = pj2.project_id
+                              WHERE pa2.employee_id = pa.employee_id
+                                AND pa2.allocation_id <> pa.allocation_id
+                                AND (pa2.allocation_end_date > pa.allocation_end_date OR pa2.allocation_end_date IS NULL)
+                                AND COALESCE(LOWER(pj2.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                                AND pa2.allocation_start_date <= CURRENT_DATE
+                                AND (pa2.allocation_end_date IS NULL OR pa2.allocation_end_date >= CURRENT_DATE)
+                          )
+                    )),
+                    (SELECT COUNT(*) FROM employee_master m WHERE m.date_of_joining >= CURRENT_DATE - INTERVAL '30 days' {m_filter}),
                     (SELECT COALESCE(SUM(pa.allocation_percentage), 0) FROM projects_allocation pa
                      JOIN projects pj ON pa.project_id = pj.project_id
                      JOIN employee_master m ON pa.employee_id = m.employee_id
@@ -552,7 +561,7 @@ def get_dashboard_all(
                     LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
+                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
                       AND e.date_of_resign IS NULL AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
                       AND COALESCE((
                           SELECT SUM(pa2.allocation_percentage) 
@@ -579,7 +588,7 @@ def get_dashboard_all(
                 JOIN employee_master m ON es.employee_id = m.employee_id
                 LEFT JOIN employee_master_pro emp ON emp.employee_id = m.employee_id
                 WHERE (emp.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR emp.employee_status IS NULL)
-                  AND (emp.employee_status IS NULL OR emp.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
+                  AND (emp.employee_status IS NULL OR emp.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
                   AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
                   AND COALESCE((
                       SELECT SUM(pa_b.allocation_percentage) 

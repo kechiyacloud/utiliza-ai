@@ -64,6 +64,8 @@ def fetch_employees(limit=200):
             break
             
         all_employees.extend(page_employees)
+        if len(page_employees) < limit:
+            break
         s_index += limit
         
     return all_employees
