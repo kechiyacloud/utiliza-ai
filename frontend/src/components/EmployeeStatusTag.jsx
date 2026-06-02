@@ -25,7 +25,7 @@ export const getEmployeeTag = (status) => {
             dot: 'bg-yellow-500',
         };
     }
-    if (s.includes('resign')) {
+    if (s.includes('resign') || s.includes('terminate')) {
         return {
             label: 'Resigned',
             color: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -84,6 +84,13 @@ export const getEmployeeTag = (status) => {
     if (s === 'completed') {
         return {
             label: 'Completed',
+            color: 'bg-slate-50 text-slate-500 border-slate-200',
+            dot: 'bg-slate-400',
+        };
+    }
+    if (s === 'system account' || s === 'system_account') {
+        return {
+            label: 'System account',
             color: 'bg-slate-50 text-slate-500 border-slate-200',
             dot: 'bg-slate-400',
         };

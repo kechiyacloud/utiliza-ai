@@ -42,7 +42,7 @@ def allocation_metrics(
         emp_filters = [
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)", 
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
-            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))"
         ]
         params = []
 
@@ -198,7 +198,7 @@ def allocation_projects(
         where_clauses = [
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
-            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))"
         ]
         params = []
         
@@ -312,7 +312,7 @@ def organization_utilization(
         emp_filters = [
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
-            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))"
         ]
         params = []
 
@@ -396,7 +396,7 @@ def organization_utilization(
         where_clauses_b = [
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)",
-            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))"
         ]
         params_b = []
         if department and department != 'All Departments':
@@ -467,7 +467,7 @@ def department_allocation_breakdown(
         where_clauses = [
             "(em.date_of_resign IS NULL OR em.date_of_resign > CURRENT_DATE)", 
             "(em.is_deleted IS FALSE OR em.is_deleted IS NULL)",
-            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND p_sub.employee_status ILIKE '%%resign%%')"
+            "NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = em.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))"
         ]
         params = []
         
@@ -559,8 +559,8 @@ def get_forecast_bench(
             WHERE pa.allocation_end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
               AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
               AND (m.date_of_resign IS NULL OR m.date_of_resign > CURRENT_DATE)
-              AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND p_sub.employee_status ILIKE '%%resign%%')
-              AND (ppro.employee_status IS NULL OR ppro.employee_status NOT IN ('Leadership', 'Training', 'Internal Operations'))
+              AND NOT EXISTS (SELECT 1 FROM employee_master_pro p_sub WHERE p_sub.employee_id = m.employee_id AND (p_sub.employee_status ILIKE '%%resign%%' OR p_sub.employee_status ILIKE '%%terminate%%'))
+              AND (ppro.employee_status IS NULL OR ppro.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
               AND COALESCE(LOWER(p.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
         """
         

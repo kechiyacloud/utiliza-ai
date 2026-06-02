@@ -11,18 +11,19 @@ const AvatarCircle = ({ name, avatar_url, size = 'w-7 h-7' }) => {
     ];
     const colorIndex = name ? name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length : 0;
     const bgColor = colors[colorIndex];
+    const [hasError, setHasError] = useState(false);
 
     return (
         <div
-            className={`${size} rounded-full border-2 border-white ${avatar_url && !imgFailed ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`}
+            className={`${size} rounded-full border-2 border-white ${avatar_url && !hasError ? 'bg-slate-100' : bgColor} flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0 group/avatar relative hover:z-20 hover:scale-110 transition-all duration-200 cursor-pointer`}
             title={name}
         >
-            {avatar_url && !imgFailed ? (
+            {avatar_url && !hasError ? (
                 <img
                     src={avatar_url}
                     alt={name}
                     className="w-full h-full object-cover"
-                    onError={() => setImgFailed(true)}
+                    onError={() => setHasError(true)}
                 />
             ) : (
                 <span className="text-[9px] font-black text-white font-sans">{name?.[0]?.toUpperCase() || '?'}</span>

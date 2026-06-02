@@ -70,6 +70,12 @@ def sync_employees():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    # Pre-sync check: Check if Victoria Jenifer D. Jayaraj already exists in local DB
+    cur.execute("SELECT 1 FROM public.employee_master WHERE LOWER(employee_name) LIKE %s OR LOWER(email_id) = %s OR employee_id = %s",
+                ('%victoria jenifer%', 'jenniferv@clouddestinations.com', 'CD-CJB01-00067'))
+    victoria_already_in_db = cur.fetchone() is not None
+    print(f"Victoria Jenifer D. Jayaraj already in database: {victoria_already_in_db}")
+
     master_query = """
         INSERT INTO public.employee_master (
             employee_id, employee_name, phone_number, email_id, location,
@@ -124,12 +130,33 @@ def sync_employees():
             print(f"Skipping {emp_id} due to missing email")
             continue
 
-        exp = months_to_years(emp.get("total_experience"))
+        # Check if email exists in DB with a different ID to match Zoho employee ID
+        cur.execute("SELECT employee_id FROM public.employee_master WHERE LOWER(TRIM(email_id)) = LOWER(TRIM(%s))", (email,))
+        row = cur.fetchone()
+        if row and row[0] != emp_id:
+            old_id = row[0]
+            print(f"Updating employee ID for {emp_name} to match Zoho ID: {old_id} -> {emp_id}")
+            cur.execute("UPDATE public.employee_master SET employee_id = %s WHERE employee_id = %s", (emp_id, old_id))
+
+        exp_str = clean_str(emp.get("total_experience"))
+        try:
+            # Zoho API returns total_experience in months; convert to years
+            exp = round(float(exp_str) / 12.0, 2) if exp_str else 0.0
+        except ValueError:
+            exp = 0.0
+
+        phone = parse_phone(emp.get("Mobile"))
+        if phone:
+            cur.execute("SELECT employee_id, employee_name FROM public.employee_master WHERE phone_number = %s AND employee_id != %s", (phone, emp_id))
+            dup = cur.fetchone()
+            if dup:
+                print(f"Warning: Phone number {phone} for {emp_name} ({emp_id}) is a duplicate of {dup[1]} ({dup[0]}). Setting to NULL to avoid constraint violation.")
+                phone = None
 
         master_data = {
             "employee_id": emp_id,
             "employee_name": emp_name,
-            "phone_number": parse_phone(emp.get("Mobile")),
+            "phone_number": phone,
             "email_id": email,
             "location": clean_str(emp.get("LocationName")),
             "date_of_joining": parse_date(emp.get("Dateofjoining")),
@@ -208,6 +235,54 @@ def sync_employees():
             continue
             
     conn.commit()
+
+    # --- Recycle Bin Purge: Delete employees soft-deleted > 30 days ago ---
+    try:
+        cur.execute("""
+            SELECT employee_id FROM employee_master 
+            WHERE is_deleted = TRUE 
+              AND updated_at < CURRENT_DATE - INTERVAL '30 days'
+        """)
+        expired_ids = [row[0] for row in cur.fetchall()]
+        if expired_ids:
+            print(f"Purging {len(expired_ids)} soft-deleted employees older than 30 days from database...")
+            cur.execute("UPDATE employee_master_pro SET reporting_manager_id = NULL WHERE reporting_manager_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM employee_certificates WHERE employee_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM employee_skills WHERE employee_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM weekly_allocations WHERE allocation_id IN (SELECT allocation_id FROM projects_allocation WHERE employee_id = ANY(%s))", (expired_ids,))
+            cur.execute("DELETE FROM projects_allocation WHERE employee_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM users WHERE employee_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM employee_master_pro WHERE employee_id = ANY(%s)", (expired_ids,))
+            cur.execute("DELETE FROM employee_master WHERE employee_id = ANY(%s)", (expired_ids,))
+            conn.commit()
+            print("Purge complete.")
+    except Exception as pe:
+        print(f"Failed to run automated 30-day recycle bin purge: {pe}")
+        conn.rollback()
+
+    # Post-sync cleanup check for Victoria Jenifer D. Jayaraj
+    if not victoria_already_in_db:
+        try:
+            cur.execute("SELECT employee_id FROM public.employee_master WHERE LOWER(employee_name) LIKE %s OR LOWER(email_id) = %s OR employee_id = %s",
+                        ('%victoria jenifer%', 'jenniferv@clouddestinations.com', 'CD-CJB01-00067'))
+            victoria_row = cur.fetchone()
+            if victoria_row:
+                victoria_id = victoria_row[0]
+                print(f"Victoria Jenifer D. Jayaraj was created by sync. Deleting her record (ID: {victoria_id}) as requested...")
+                cur.execute("UPDATE public.employee_master_pro SET reporting_manager_id = NULL WHERE reporting_manager_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.employee_certificates WHERE employee_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.employee_skills WHERE employee_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.weekly_allocations WHERE allocation_id IN (SELECT allocation_id FROM public.projects_allocation WHERE employee_id = %s)", (victoria_id,))
+                cur.execute("DELETE FROM public.projects_allocation WHERE employee_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.users WHERE employee_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.employee_master_pro WHERE employee_id = %s", (victoria_id,))
+                cur.execute("DELETE FROM public.employee_master WHERE employee_id = %s", (victoria_id,))
+                conn.commit()
+                print("Victoria Jenifer D. Jayaraj deleted successfully.")
+        except Exception as ve:
+            print(f"Failed to check/delete Victoria Jenifer D. Jayaraj: {ve}")
+            conn.rollback()
+
     cur.close()
     conn.close()
 

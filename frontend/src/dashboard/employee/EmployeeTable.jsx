@@ -386,7 +386,7 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                                                         const computedStatus = getEmployeeStatus(emp);
                                                         const tag = getEmployeeTag(computedStatus);
                                                         const isBillable = emp.billable === 'billable';
-                                                        const hideBilling = ['leadership', 'internal operations', 'training', 'resigned'].includes(computedStatus.toLowerCase());
+                                                        const hideBilling = ['leadership', 'internal operations', 'training', 'resigned', 'system account', 'system_account'].includes(computedStatus.toLowerCase());
                                                         return (
                                                             <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border ${tag.color} whitespace-nowrap shadow-sm`}>
                                                                 {tag.label}
