@@ -59,13 +59,19 @@ function getMondayFromISOWeek(yearWeekStr) {
 }
 
 
-/** Returns ISO week number (1–53) for a given date. */
 function getISOWeekNumber(date) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() + 4 - (d.getDay() || 7));
     const yearStart = new Date(d.getFullYear(), 0, 1);
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function getISOYear(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    return d.getFullYear();
 }
 
 /** Formats a Date as "Mar 17" */
@@ -98,7 +104,7 @@ function buildWeekDescriptor(mondayDate, index) {
     const isFuture = status === 'upcoming';
 
     const wkNum = getISOWeekNumber(mondayDate);
-    const yr = mondayDate.getFullYear();
+    const yr = getISOYear(mondayDate);
     const yearWeek = `${yr}-${wkNum}`;
 
     const label = getDynamicWeekLabel(mondayDate, index);
