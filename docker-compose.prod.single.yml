@@ -1,0 +1,97 @@
+# =============================================================================
+# PRODUCTION — Single Instance (one EC2 / one host)
+# Runs everything: PostgreSQL + Redis + Backend (FastAPI) + Frontend (Nginx).
+# All services talk over the internal Docker network by service name.
+#
+# Usage:
+#   1. Fill backend/.env.prod.single (DB/Redis passwords, Zoho creds).
+#   2. docker compose -f docker-compose.prod.single.yml up -d --build
+#
+# Port mapping:
+#   - Only the frontend (Nginx) is published, on ${APP_PORT:-80}:80.
+#   - Nginx serves the SPA and reverse-proxies /api/ to backend:8000.
+#   - Postgres/Redis are NOT published to the host — internal network only.
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: prod-single-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234567@CD
+      POSTGRES_DB: migration_db
+    volumes:
+      - postgres_data_prod_single:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d migration_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: prod-single-redis
+    restart: always
+    command: redis-server --requirepass 1234567@CD --appendonly yes
+    volumes:
+      - redis_data_prod_single:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "1234567@CD", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    container_name: prod-single-backend
+    restart: always
+    env_file: ./backend/.env.prod.single
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: prod-single-frontend
+    restart: always
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod_single:
+  redis_data_prod_single:

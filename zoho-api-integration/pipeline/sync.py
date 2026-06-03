@@ -1,4 +1,5 @@
 import re
+import sys
 from datetime import datetime
 from db import get_db_connection
 from zoho_api import fetch_employees
@@ -62,8 +63,8 @@ def sync_employees():
     try:
         raw_employees = fetch_employees()
     except Exception as e:
-        print(f"Error fetching employees: {e}")
-        return
+        print(f"Error fetching employees: {e}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Retrieved {len(raw_employees)} records. Processing...")
     

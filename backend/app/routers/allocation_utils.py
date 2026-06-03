@@ -152,7 +152,7 @@ def _build_weekly_hours_from_pct(allocation_pct: int, alloc_start: date, alloc_e
     per_day_hours = full_week_hours / 5
     weekly_map = {}
     if overrides:
-        default_year = alloc_start.year if alloc_start else date.today().year
+        default_year = alloc_start.isocalendar()[0] if alloc_start else date.today().isocalendar()[0]
         for key, hrs in overrides.items():
             wk_key = _normalize_week_key(key, default_year)
             if wk_key and hrs not in ("", None):

@@ -279,7 +279,7 @@ const FeedbackSection = ({ employeeData }) => {
 // Section E — Data
 // ─────────────────────────────────────────────
 
-const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, onBulkProjectImport, isAdmin }) => {
+const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing, onSync, onBulkProjectImport, isAdmin, lastSync }) => {
     const { showArchived, setShowArchived, setShowDeleted } = useEmployees();
 
 
@@ -332,6 +332,11 @@ const DataSection = ({ employeeData, onExport, onImport, isExporting, isSyncing,
                             <div>
                                 <p className="font-bold text-amber-900">Sync All Data</p>
                                 <p className="text-xs text-amber-700/60 font-medium">Import & update employees from Zoho People</p>
+                                <p className="text-[11px] text-amber-700 font-semibold mt-1">
+                                    {lastSync?.last_synced_at
+                                        ? `Last synced: ${new Date(lastSync.last_synced_at).toLocaleString()}`
+                                        : 'Never synced'}
+                                </p>
                             </div>
                         </button>
                     )}
@@ -945,6 +950,7 @@ const Settings = () => {
     const [showSyncConfirmModal, setShowSyncConfirmModal] = useState(false);
     const [showSyncResultModal, setShowSyncResultModal] = useState(false);
     const [syncResult, setSyncResult] = useState(null);
+    const [lastSync, setLastSync] = useState(null);
     const [empNotLinked, setEmpNotLinked] = useState(false);
 
     useEffect(() => {
@@ -971,6 +977,17 @@ const Settings = () => {
         fetchEmployee();
     }, []);
 
+    const fetchLastSync = async () => {
+        try {
+            const r = await api.get('/employees/zoho-import/status');
+            setLastSync(r.data?.last_synced_at ? r.data : null);
+        } catch {
+            // non-critical: last-sync display only
+        }
+    };
+
+    useEffect(() => { fetchLastSync(); }, []);
+
     const handleExportClick = async () => {
         setIsExporting(true);
         try {
@@ -993,6 +1010,7 @@ const Settings = () => {
             const res = await api.post('/employees/zoho-import', null, { timeout: 310000 });
             clearDashboardCache();
             setSyncResult(res.data);
+            setLastSync({ last_synced_at: res.data.synced_at, ...res.data });
             setShowSyncConfirmModal(false);
             setShowSyncResultModal(true);
         } catch (err) {
@@ -1066,6 +1084,7 @@ const Settings = () => {
                             isExporting={isExporting}
                             isSyncing={isSyncing}
                             isAdmin={isAdmin}
+                            lastSync={lastSync}
                         />
                     )}
                     {activeTab === 'feedback' && <FeedbackSection employeeData={employeeData} />}
