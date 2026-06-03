@@ -113,13 +113,37 @@ def _weekday_overlap_count(week_monday: date, alloc_start: date, alloc_end: Opti
     return count
 
 def _normalize_week_key(raw_key, default_year: int) -> Optional[tuple]:
+    """Parse a week key and auto-correct the ISO year if it mismatches.
+    e.g. '2025-53' is invalid (2025 only has 52 ISO weeks); this returns (2026, 53).
+    """
     if raw_key in ("", None):
         return None
     try:
         if isinstance(raw_key, str) and "-" in raw_key:
-            y_str, w_str = raw_key.split("-")
-            return int(y_str), int(w_str)
-        return default_year, int(raw_key)
+            parts = raw_key.split("-")
+            year, week = int(parts[0]), int(parts[1])
+        else:
+            year, week = default_year, int(str(raw_key))
+
+        # Auto-correct ISO year: verify the week actually belongs to that ISO year.
+        # Python's date.fromisocalendar raises ValueError for invalid combos (e.g. year=2025, week=53).
+        if 1 <= week <= 53:
+            try:
+                monday = date.fromisocalendar(year, week, 1)
+                corrected_year = monday.isocalendar()[0]
+                if corrected_year != year:
+                    year = corrected_year
+            except ValueError:
+                # The (year, week) combo is invalid — try adjacent years to find the correct one.
+                for candidate in (year + 1, year - 1):
+                    try:
+                        monday = date.fromisocalendar(candidate, week, 1)
+                        year = monday.isocalendar()[0]
+                        break
+                    except ValueError:
+                        continue
+
+        return year, week
     except Exception:
         return None
 
@@ -389,12 +413,17 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
     overrides = dict(tm.weekly_hours or {})
     legacy_hours = [tm.w1, tm.w2, tm.w3, tm.w4]
     if any(h > 0 for h in legacy_hours):
-        _today = date.today()
-        _monday = _today - timedelta(days=_today.weekday())
-        _week_dates = [_monday - timedelta(weeks=i) for i in range(3, -1, -1)]
+        # _get_project_week_numbers() returns the ISO week numbers for the last 4 weeks.
+        # We must pair each week number with its correct ISO year (not alloc_start calendar year).
+        today = date.today()
+        monday_of_today = today - timedelta(days=today.weekday())
+        real_week_mondays = [
+            monday_of_today - timedelta(weeks=i)
+            for i in range(3, -1, -1)
+        ]
         for idx, hours in enumerate(legacy_hours):
             if hours > 0:
-                iso_year, iso_week, _ = _week_dates[idx].isocalendar()
+                iso_year, iso_week, _ = real_week_mondays[idx].isocalendar()
                 overrides[f"{iso_year}-{iso_week}"] = hours
 
     requested_pct = _compute_allocation_pct(tm)

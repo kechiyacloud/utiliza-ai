@@ -221,25 +221,21 @@ BEGIN
             NEW.allocation_year::TEXT || ' ' || NEW.week_number::TEXT || ' 1',
             'IYYY IW ID'
         );
-        IF EXTRACT(ISOYEAR FROM test_date) != NEW.allocation_year THEN
-            RAISE EXCEPTION
-                'Week % does not belong to ISO year %. Use year % instead.',
-                NEW.week_number,
-                NEW.allocation_year,
-                EXTRACT(ISOYEAR FROM test_date)::INTEGER;
-        END IF;
-
-        -- Set computed dates
-        NEW.week_start_date := test_date;
-        NEW.week_end_date   := to_date(
-            NEW.allocation_year::TEXT || ' ' || NEW.week_number::TEXT || ' 7',
-            'IYYY IW ID'
-        );
     EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION
-            'Invalid ISO week: Year % does not have Week %. Verify the week number.',
-            NEW.allocation_year, NEW.week_number;
+        RAISE EXCEPTION 'Invalid week number or year format for Year % Week %', NEW.allocation_year, NEW.week_number;
     END;
+
+    IF EXTRACT(ISOYEAR FROM test_date) != NEW.allocation_year THEN
+        RAISE EXCEPTION
+            'Week % does not belong to ISO year %. Use year % instead.',
+            NEW.week_number,
+            NEW.allocation_year,
+            EXTRACT(ISOYEAR FROM test_date)::INTEGER;
+    END IF;
+
+    -- Set computed dates
+    NEW.week_start_date := test_date;
+    NEW.week_end_date   := test_date + 6;
     RETURN NEW;
 END;
 $$;

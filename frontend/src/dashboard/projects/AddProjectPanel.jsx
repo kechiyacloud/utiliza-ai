@@ -81,10 +81,9 @@ const sanitizeWeeklyHours = (wh = {}) => {
     const cleaned = {};
     Object.entries(wh || {}).forEach(([wk, hrs]) => {
         if (hrs === '' || hrs === null || hrs === undefined) return;
-        const numWeek = Number(wk);
         const numHours = Number(hrs);
-        if (Number.isFinite(numWeek) && Number.isFinite(numHours)) {
-            cleaned[numWeek] = numHours;
+        if (Number.isFinite(numHours)) {
+            cleaned[wk] = numHours;
         }
     });
     return cleaned;
@@ -124,6 +123,12 @@ function getISOWeekNumber(date) {
     const yearStart = new Date(d.getFullYear(), 0, 1);
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
+function getISOYear(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    return d.getFullYear();
+}
 function fmtDate(d) {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -141,7 +146,7 @@ function getLast4Weeks() {
             label: i === 0 ? `This Week` : `Week -${i}`,
             dateRange: `${fmtDate(monday)} – ${fmtDate(sunday)}`,
             weekNum: wk,
-            year: monday.getFullYear()
+            year: getISOYear(monday)
         });
     }
     return weeks;
@@ -169,7 +174,7 @@ function getProjectWeeks(startDateStr, endDateStr) {
         sunday.setDate(cursor.getDate() + 6);
         weeks.push({
             weekNum: getISOWeekNumber(cursor),
-            year: cursor.getFullYear(),
+            year: getISOYear(cursor),
             label: `W${wIdx}`,
             dateRange: `${fmtDate(cursor)} – ${fmtDate(sunday)}`,
         });
@@ -1275,7 +1280,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
         }
 
         const newWeeklyHours = {};
-        targetWeeks.forEach(w => { newWeeklyHours[w.weekNum] = hours; });
+        targetWeeks.forEach(w => { newWeeklyHours[`${w.year}-${w.weekNum}`] = hours; });
 
         const newTeam = [...formData.teamMembers];
         newTeam[index] = { ...updatedMember, weekly_hours: newWeeklyHours };
@@ -1318,7 +1323,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
 
                     const newWeeklyHours = { ...(updated.weekly_hours || {}) };
                     targetWeeks.forEach(w => {
-                        newWeeklyHours[w.weekNum] = hours;
+                        newWeeklyHours[`${w.year}-${w.weekNum}`] = hours;
                     });
                     updated.weekly_hours = newWeeklyHours;
                 }
@@ -1340,7 +1345,7 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                     }
                     const newWeeklyHours = { ...(updated.weekly_hours || {}) };
                     targetWeeks.forEach(w => {
-                        newWeeklyHours[w.weekNum] = hours;
+                        newWeeklyHours[`${w.year}-${w.weekNum}`] = hours;
                     });
                     updated.weekly_hours = newWeeklyHours;
                 }
@@ -2069,8 +2074,8 @@ const AddProjectPanel = ({ isOpen, onClose, onAdd, pageMode = false }) => {
                                                                         <input
                                                                             type="number" min="0" max="40"
                                                                             placeholder="0h"
-                                                                            value={(member.weekly_hours || {})[wk.weekNum] ?? ''}
-                                                                            onChange={(e) => handleWeekHoursChange(idx, wk.weekNum, e.target.value)}
+                                                                            value={(member.weekly_hours || {})[`${wk.year}-${wk.weekNum}`] ?? ''}
+                                                                            onChange={(e) => handleWeekHoursChange(idx, `${wk.year}-${wk.weekNum}`, e.target.value)}
                                                                             title={weekLabel}
                                                                             className="w-full px-1.5 py-1.5 text-xs text-center border border-blue-100 rounded-md outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white font-semibold placeholder-slate-300"
                                                                         />
