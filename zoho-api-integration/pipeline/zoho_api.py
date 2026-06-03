@@ -11,6 +11,14 @@ ZOHO_DOMAIN = "people.zoho.in"
 ZOHO_ACCOUNTS_DOMAIN = "accounts.zoho.in"
 
 def get_access_token():
+    missing = [n for n, v in (
+        ("ZOHO_CLIENT_ID", ZOHO_CLIENT_ID),
+        ("ZOHO_CLIENT_SECRET", ZOHO_CLIENT_SECRET),
+        ("ZOHO_REFRESH_TOKEN", ZOHO_REFRESH_TOKEN),
+    ) if not v or v.startswith("<")]
+    if missing:
+        raise Exception(f"Missing/placeholder Zoho credentials: {', '.join(missing)}")
+
     url = f"https://{ZOHO_ACCOUNTS_DOMAIN}/oauth/v2/token"
     params = {
         "refresh_token": ZOHO_REFRESH_TOKEN,

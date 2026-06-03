@@ -373,6 +373,18 @@ def sync_all_employees():
             _sync_employee_allocations(cur, ids)
         return {"status": "success", "synced_count": len(ids)}
 
+def _ensure_sync_log_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS zoho_sync_log (
+            id SERIAL PRIMARY KEY,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            new_count INT DEFAULT 0,
+            updated_count INT DEFAULT 0,
+            error_count INT DEFAULT 0,
+            status TEXT DEFAULT 'success'
+        )
+    """)
+
 @router.post("/employees/zoho-import", dependencies=[Depends(require_role("master_admin"))])
 def import_employees_from_zoho():
     import subprocess, sys, json
@@ -400,7 +412,29 @@ def import_employees_from_zoho():
             sync_data = json.loads(line[len("SYNC_RESULT:"):])
             break
 
-    return {"status": "success", "new": sync_data["new"], "updated": sync_data["updated"], "errors": sync_data["errors"]}
+    with db_cursor() as cur:
+        _ensure_sync_log_table(cur)
+        cur.execute(
+            "INSERT INTO zoho_sync_log (new_count, updated_count, error_count, status) "
+            "VALUES (%s, %s, %s, %s) RETURNING synced_at",
+            (sync_data["new"], sync_data["updated"], sync_data["errors"], "success"),
+        )
+        synced_at = cur.fetchone()[0]
+
+    return {"status": "success", "new": sync_data["new"], "updated": sync_data["updated"],
+            "errors": sync_data["errors"], "synced_at": synced_at.isoformat()}
+
+@router.get("/employees/zoho-import/status")
+def get_zoho_sync_status(_user: dict = Depends(_require_viewer)):
+    with db_cursor() as cur:
+        _ensure_sync_log_table(cur)
+        cur.execute("SELECT synced_at, new_count, updated_count, error_count, status "
+                    "FROM zoho_sync_log ORDER BY synced_at DESC LIMIT 1")
+        row = cur.fetchone()
+    if not row:
+        return {"last_synced_at": None}
+    return {"last_synced_at": row[0].isoformat(), "new": row[1],
+            "updated": row[2], "errors": row[3], "status": row[4]}
 
 @router.get("/employees/list")
 def get_all_employees(include_resigned: bool = False, include_deleted: bool = False, _user: dict = Depends(_require_viewer)):

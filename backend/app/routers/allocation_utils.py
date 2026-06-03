@@ -128,7 +128,7 @@ def _build_weekly_hours_from_pct(allocation_pct: int, alloc_start: date, alloc_e
     per_day_hours = full_week_hours / 5
     weekly_map = {}
     if overrides:
-        default_year = alloc_start.year if alloc_start else date.today().year
+        default_year = alloc_start.isocalendar()[0] if alloc_start else date.today().isocalendar()[0]
         for key, hrs in overrides.items():
             wk_key = _normalize_week_key(key, default_year)
             if wk_key and hrs not in ("", None):
@@ -389,9 +389,13 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
     overrides = dict(tm.weekly_hours or {})
     legacy_hours = [tm.w1, tm.w2, tm.w3, tm.w4]
     if any(h > 0 for h in legacy_hours):
-        real_week_nums = _get_project_week_numbers()
+        _today = date.today()
+        _monday = _today - timedelta(days=_today.weekday())
+        _week_dates = [_monday - timedelta(weeks=i) for i in range(3, -1, -1)]
         for idx, hours in enumerate(legacy_hours):
-            if hours > 0: overrides[f"{alloc_start.year}-{real_week_nums[idx]}"] = hours
+            if hours > 0:
+                iso_year, iso_week, _ = _week_dates[idx].isocalendar()
+                overrides[f"{iso_year}-{iso_week}"] = hours
 
     requested_pct = _compute_allocation_pct(tm)
     if tm.allocation_pct is None and not tm.weekly_hours and not any(h > 0 for h in legacy_hours):
