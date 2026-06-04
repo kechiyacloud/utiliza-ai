@@ -554,26 +554,31 @@ def projects_overview(
         for p_id, p_status, p_type, p_start, p_end in projects:
             # 1. Normalize Type
             norm_type = _normalize_project_type(p_type, strict=False).lower()
-            if norm_type in ('internal', 'poc'):
-                stats["internalProjects"] += 1
-            else:
-                stats["externalProjects"] += 1
-
+            
             # 2. Derive Status (using Output mode, strict=False)
-            # This logic must match frontend's indicator logic
             derived = _normalize_project_status(p_status, end_date=p_end, strict=False)
+            
+            # Check if project is active (In Progress, Overdue, Ending Soon)
+            is_active = False
             
             if derived == "Completed":
                 stats["completedProjects"] += 1
-            elif "Overdue" in derived:
-                stats["overdueProjects"] += 1
-            elif "Ending Soon" in derived:
-                stats["endingSoonProjects"] += 1
-            elif derived in ("In Progress", "Not Started", "On Hold"):
-                stats["ongoingProjects"] += 1
-            
-            if derived == "Not Started":
+            elif derived in ("Not Started", "On Hold"):
                 stats["upcomingProjects"] += 1
+            else:
+                stats["ongoingProjects"] += 1
+                is_active = True
+                if "Overdue" in derived:
+                    stats["overdueProjects"] += 1
+                elif "Ending Soon" in derived:
+                    stats["endingSoonProjects"] += 1
+
+            # 3. External/Internal Classification (Only for Active Projects)
+            if is_active:
+                if norm_type in ('internal', 'poc'):
+                    stats["internalProjects"] += 1
+                else:
+                    stats["externalProjects"] += 1
 
         return stats
     except Exception as e:
@@ -706,7 +711,7 @@ def projects_list(
                     WHERE pa3.project_id = p.project_id
                 ) AS resource_names,
                 c.client_name,
-                pr.partner_name,
+                COALESCE(NULLIF(pr.partner_name, ''), 'Cloud Destinations') AS partner_name,
                 p.billable,
                 p.client_id,
                 p.partner_id,
@@ -836,7 +841,7 @@ def get_project_details(project_id: str, _user: dict = Depends(require_min_role(
         cur.execute("""
             SELECT 
                 p.project_id, p.project_name, p.project_status, p.billable, p.start_date, p.end_date,
-                c.client_name, pr.partner_name,
+                c.client_name, COALESCE(NULLIF(pr.partner_name, ''), 'Cloud Destinations') AS partner_name,
                 pc.budget, pc.billing_type, pc.contract_type, pc.revenue_model, pc.commercial_notes,
                 ps.objective, ps.deliverables, ps.milestones, ps.timeline_notes,
                 p.client_id, p.partner_id, p.project_type, p.uuid,
@@ -1002,9 +1007,13 @@ def project_resources(project_id: str):
                 wa.week_number,
                 COALESCE(wa.allocated_hours, 0),
                 pa.project_tags,
-                em.photo_url
+                em.photo_url,
+                em.date_of_resign,
+                ppro.notice_end_date,
+                ppro.employee_status
             FROM projects_allocation pa
             JOIN employee_master em ON pa.employee_id = em.employee_id
+            LEFT JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
             LEFT JOIN weekly_allocations wa ON pa.allocation_id = wa.allocation_id
             WHERE pa.project_id = %s
             ORDER BY em.employee_name, wa.allocation_year, wa.week_number
@@ -1020,9 +1029,10 @@ def project_resources(project_id: str):
         target_weeks = []
         for i in range(3, -1, -1):
             target_date = monday - datetime.timedelta(weeks=i)
-            target_weeks.append(target_date.isocalendar()[1])
+            iso_yr, iso_wk, _ = target_date.isocalendar()
+            target_weeks.append((iso_yr, iso_wk))
         
-        # Mapping from absolute week number to UI slot (w1..w4)
+        # Mapping from (year, week) tuple to UI slot (w1..w4)
         week_to_slot = { week: f"w{i+1}" for i, week in enumerate(target_weeks) }
 
         # Group allocations by employee
@@ -1032,6 +1042,22 @@ def project_resources(project_id: str):
             if emp_id not in resources_dict:
                 raw_tag = (r[11] or "").strip().lower()
                 billable_shadow = "Non-billable" if raw_tag == "non-billable" else "Billable"
+                
+                # Calculate indicators
+                date_of_resign = r[13]
+                notice_end_date = r[14]
+                employee_status = r[15] or ""
+                allocation_end_date = r[6]
+                
+                leaving_in_days = None
+                leaving_date = date_of_resign or notice_end_date
+                if leaving_date:
+                    leaving_in_days = (leaving_date - today).days
+
+                alloc_ending_in_days = None
+                if allocation_end_date:
+                    alloc_ending_in_days = (allocation_end_date - today).days
+                
                 resources_dict[emp_id] = {
                     "employee_id": emp_id,
                     "name": r[0] if r[0] else "Unknown Resource",
@@ -1040,10 +1066,15 @@ def project_resources(project_id: str):
                     "location": r[2] if r[2] else "Remote",
                     "allocation_id": r[4],
                     "allocation_start_date": str(r[5]) if r[5] else None,
-                    "allocation_end_date": str(r[6]) if r[6] else None,
+                    "allocation_end_date": str(allocation_end_date) if allocation_end_date else None,
                     "allocation_percentage": r[7] or 0,
                     "billable_shadow": billable_shadow,
                     "photo_url": r[12],
+                    "date_of_resign": str(date_of_resign) if date_of_resign else None,
+                    "notice_end_date": str(notice_end_date) if notice_end_date else None,
+                    "employee_status": employee_status,
+                    "leaving_in_days": leaving_in_days,
+                    "allocation_ending_in_days": alloc_ending_in_days,
                     "w1": 0.0, "w2": 0.0, "w3": 0.0, "w4": 0.0,
                     "weekly_hours": {},
                     "_has_weekly_data": False,
@@ -1061,8 +1092,8 @@ def project_resources(project_id: str):
                 resources_dict[emp_id]["weekly_hours"][f"{year_num}-{week_num}"] = hours
                 
                 # Backwards compatibility w1-w4 (current 4-week window)
-                if week_num in week_to_slot:
-                    resources_dict[emp_id][week_to_slot[week_num]] = hours
+                if (year_num, week_num) in week_to_slot:
+                    resources_dict[emp_id][week_to_slot[(year_num, week_num)]] = hours
 
                 resources_dict[emp_id]["_has_weekly_data"] = True
 
@@ -1237,9 +1268,48 @@ def export_project_resources_pdf(project_id: str, payload: ProjectResourcesPdfEx
         title = _normalize_text(payload.title) or f"Resource Allocation - {resolved_project_id}"
         generated_on = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        cur.execute(
+            """
+            SELECT 
+                p.project_name,
+                c.client_name,
+                COALESCE(NULLIF(pr.partner_name, ''), 'Cloud Destinations') AS partner_name,
+                d.department_name,
+                p.project_type,
+                pc.billing_type
+            FROM projects p
+            LEFT JOIN clients c ON p.client_id = c.client_id
+            LEFT JOIN partners pr ON p.partner_id = pr.partner_id
+            LEFT JOIN departments d ON p.department_id = d.department_id
+            LEFT JOIN project_commercials pc ON p.project_id = pc.project_id
+            WHERE p.project_id = %s
+            """,
+            (resolved_project_id,),
+        )
+        proj_row = cur.fetchone()
+        project_name = "-"
+        client_name = "-"
+        partner_name = "Cloud Destinations"
+        department_name = "-"
+        project_type = "-"
+        billing_type = "Not Set"
+        if proj_row:
+            project_name = proj_row[0] or "-"
+            client_name = proj_row[1] or "-"
+            partner_name = proj_row[2] or "Cloud Destinations"
+            department_name = proj_row[3] or "-"
+            project_type = proj_row[4] or "-"
+            billing_type = proj_row[5] or "Not Set"
+
         lines = [
             title,
             f"Generated on: {generated_on}",
+            "",
+            f"Project Name: {project_name}",
+            f"Client Name: {client_name}",
+            f"Partner Name: {partner_name}",
+            f"Department: {department_name}",
+            f"Project Type: {project_type}",
             "",
             "Resource | Role | Start | End | Allocation | W1 | W2 | W3 | W4 | Total",
         ]
@@ -1299,6 +1369,21 @@ def update_project_resources(project_id: str, payload: ResourceAllocationUpdate)
         _validate_resource_rows(payload.resources)
 
         project_billable = (project_row[0] or "").lower()
+        project_start = project_row[1]
+        project_end = project_row[2]
+
+        for tm in payload.resources:
+            tm_start = _parse_optional_date(tm.allocation_start_date)
+            tm_end = _parse_optional_date(tm.allocation_end_date)
+            
+            if tm_end and project_end and tm_end > project_end:
+                raise HTTPException(status_code=422, detail=f"Allocation end date for {tm.name} ({tm.allocation_end_date}) cannot be after project end date ({project_end}).")
+            if tm_start and project_start and tm_start < project_start:
+                raise HTTPException(status_code=422, detail=f"Allocation start date for {tm.name} ({tm.allocation_start_date}) cannot be before project start date ({project_start}).")
+            if tm_start and tm_end and tm_start > tm_end:
+                raise HTTPException(status_code=422, detail=f"Allocation dates for {tm.name} are invalid: start date ({tm.allocation_start_date}) cannot be after end date ({tm.allocation_end_date}).")
+
+
 
         # Capture all employee IDs currently in this project to sync them later (even if they are removed)
         cur.execute("SELECT DISTINCT employee_id FROM projects_allocation WHERE project_id = %s", (project_id,))

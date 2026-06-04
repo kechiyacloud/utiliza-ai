@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fetchProjectEmployees } from '../../api/allocationApi';
+import { getOffboardingStatus } from '../../utils/indicatorUtils';
 
 const getAllocationColor = (pct) => {
     if (pct === 0) return { bg: 'bg-gray-50', text: 'text-gray-400' };
@@ -13,6 +14,7 @@ const getAllocationColor = (pct) => {
 const ProjectEmployeeAllocation = ({ project, onClose }) => {
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [filterStatus, setFilterStatus] = useState('All');
 
     useEffect(() => {
         const loadEmployees = async () => {
@@ -49,6 +51,23 @@ const ProjectEmployeeAllocation = ({ project, onClose }) => {
                 </button>
             </div>
 
+            {/* Filters */}
+            <div className="flex gap-2 mb-4 shrink-0 overflow-x-auto pb-1 custom-scrollbar">
+                {['All', 'Notice Period', 'Leaving Soon', 'Allocation Ending'].map(f => (
+                    <button
+                        key={f}
+                        onClick={() => setFilterStatus(f)}
+                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-colors ${
+                            filterStatus === f 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                        }`}
+                    >
+                        {f}
+                    </button>
+                ))}
+            </div>
+
             {/* Table */}
             {loading ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
@@ -73,52 +92,73 @@ const ProjectEmployeeAllocation = ({ project, onClose }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {employees.map((emp) => {
-                                const color = getAllocationColor(emp.allocation_percentage);
-                                const isBillable = emp.project_tags && emp.project_tags.toLowerCase().includes('billable') && !emp.project_tags.toLowerCase().includes('non');
-                                return (
-                                    <tr key={emp.employee_id} className="group hover:bg-blue-50/30 transition-all duration-200">
-                                        <td className="py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs uppercase group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                                                    {(() => {
-                                                        const names = emp.employee_name.split(' ').filter(Boolean);
-                                                        if (names.length === 0) return '';
-                                                        if (names.length === 1) return names[0][0];
-                                                        return names[0][0] + names[names.length - 1][0];
-                                                    })()}
+                            {employees
+                                .map(emp => ({...emp, indicator: getOffboardingStatus(emp)}))
+                                .filter(emp => {
+                                    if (filterStatus === 'All') return true;
+                                    if (!emp.indicator) return false;
+                                    if (filterStatus === 'Notice Period' && emp.indicator.label === 'Notice Period') return true;
+                                    if (filterStatus === 'Leaving Soon' && emp.indicator.label === 'Leaving Soon') return true;
+                                    if (filterStatus === 'Allocation Ending' && emp.indicator.label === 'Allocation Ending') return true;
+                                    return false;
+                                })
+                                .map((emp) => {
+                                    const color = getAllocationColor(emp.allocation_percentage);
+                                    const isBillable = emp.project_tags && emp.project_tags.toLowerCase().includes('billable') && !emp.project_tags.toLowerCase().includes('non');
+                                    return (
+                                        <tr key={emp.employee_id} className="group hover:bg-blue-50/30 transition-all duration-200">
+                                            <td className="py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs uppercase group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                        {(() => {
+                                                            const names = emp.employee_name.split(' ').filter(Boolean);
+                                                            if (names.length === 0) return '';
+                                                            if (names.length === 1) return names[0][0];
+                                                            return names[0][0] + names[names.length - 1][0];
+                                                        })()}
+                                                    </div>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors">{emp.employee_name}</span>
+                                                            {emp.indicator && (
+                                                                <div 
+                                                                    title={emp.indicator.tooltip}
+                                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${emp.indicator.color} cursor-help`}
+                                                                >
+                                                                    {emp.indicator.icon}
+                                                                    <span className="text-[9px] font-bold uppercase tracking-wider">{emp.indicator.label}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[10px] text-gray-400 font-medium">Emp ID: {emp.employee_id}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors">{emp.employee_name}</span>
-                                                    <span className="text-[10px] text-gray-400 font-medium">Emp ID: {emp.employee_id}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 text-center">
-                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide shadow-sm ${isBillable ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
-                                                {isBillable ? 'BILLABLE' : 'INTERNAL'}
-                                            </span>
-                                        </td>
-                                        <td className="py-4">
-                                            <div className="flex flex-col items-end gap-1.5">
-                                                <span className={`text-sm font-black ${color.text}`}>
-                                                    {emp.allocation_percentage}%
+                                            </td>
+                                            <td className="py-4 text-center">
+                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide shadow-sm ${isBillable ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
+                                                    {isBillable ? 'BILLABLE' : 'INTERNAL'}
                                                 </span>
-                                                <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-50">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-500 ${color.bg.replace('bg-', 'bg-opacity-100 bg-')}`}
-                                                        style={{
-                                                            width: `${Math.min(emp.allocation_percentage, 100)}%`,
-                                                            backgroundColor: emp.allocation_percentage > 100 ? '#ef4444' :
-                                                                emp.allocation_percentage >= 70 ? '#10b981' :
-                                                                    emp.allocation_percentage > 0 ? '#3b82f6' : '#94a3b8'
-                                                        }}
-                                                    ></div>
+                                            </td>
+                                            <td className="py-4">
+                                                <div className="flex flex-col items-end gap-1.5">
+                                                    <span className={`text-sm font-black ${color.text}`}>
+                                                        {emp.allocation_percentage}%
+                                                    </span>
+                                                    <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-50">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all duration-500 ${color.bg.replace('bg-', 'bg-opacity-100 bg-')}`}
+                                                            style={{
+                                                                width: `${Math.min(emp.allocation_percentage, 100)}%`,
+                                                                backgroundColor: emp.allocation_percentage > 100 ? '#ef4444' :
+                                                                    emp.allocation_percentage >= 70 ? '#10b981' :
+                                                                        emp.allocation_percentage > 0 ? '#3b82f6' : '#94a3b8'
+                                                            }}
+                                                        ></div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
+                                            </td>
+                                        </tr>
+                                    );
                             })}
                         </tbody>
                     </table>

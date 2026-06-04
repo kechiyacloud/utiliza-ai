@@ -26,7 +26,7 @@ function formatToYYYYMMDD(dateStr) {
 }
 
 function normalizeAllocationRow(row = {}) {
-    const normalized = { 
+    const normalized = {
         ...row,
         allocation_start_date: formatToYYYYMMDD(row.allocation_start_date),
         allocation_end_date: formatToYYYYMMDD(row.allocation_end_date)
@@ -279,15 +279,15 @@ const AllocationTable = ({ projectId }) => {
 
                                         <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap min-w-[180px]">
                                             {isEditing ? (
-                                                <select 
-                                                    value={row.employee_id || ''} 
+                                                <select
+                                                    value={row.employee_id || ''}
                                                     onChange={(e) => {
                                                         const empId = e.target.value;
                                                         const emp = employees.find(ep => ep.employee_id === empId);
                                                         handleRowChange(idx, 'employee_id', empId);
                                                         handleRowChange(idx, 'name', emp?.employee_name || '');
                                                         handleRowChange(idx, 'role', emp?.role_designation || '');
-                                                    }} 
+                                                    }}
                                                     className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
                                                 >
                                                     <option value="">Select Employee</option>
@@ -314,8 +314,8 @@ const AllocationTable = ({ projectId }) => {
 
                                         <td className="px-3 py-2 text-slate-600 whitespace-nowrap min-w-[150px]">
                                             {isEditing ? (
-                                                <select 
-                                                    value={row.role || ''} 
+                                                <select
+                                                    value={row.role || ''}
                                                     onChange={(e) => handleRowChange(idx, 'role', e.target.value)}
                                                     className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
                                                 >
@@ -368,9 +368,9 @@ const AllocationTable = ({ projectId }) => {
                                             const pct = Math.min(100, Math.round((hours / 40) * 100));
                                             const barColor = hours === 0 ? 'bg-gray-200' :
                                                 pct >= 100 ? 'bg-red-400' :
-                                                pct >= 75 ? 'bg-blue-500' :
-                                                pct >= 40 ? 'bg-indigo-400' :
-                                                'bg-slate-300';
+                                                    pct >= 75 ? 'bg-blue-500' :
+                                                        pct >= 40 ? 'bg-indigo-400' :
+                                                            'bg-slate-300';
 
                                             return (
                                                 <td key={wCol} className="px-2 py-2 text-center min-w-[100px]">
@@ -466,7 +466,7 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
 
                             {/* Badges Row */}
                             <div className="flex flex-wrap items-center gap-3">
-                                <span 
+                                <span
                                     className="px-3 py-1 rounded-full text-xs font-bold border"
                                     style={typeof project.statusPillColor === 'object' ? project.statusPillColor : {
                                         backgroundColor: project.status === 'Completed' ? '#DBEAFE' : '#DCFCE7',
@@ -476,7 +476,7 @@ const ProjectDetailsPanel = ({ isOpen, onClose, project }) => {
                                 >
                                     {project.status || 'Unknown'}
                                 </span>
-                                <span 
+                                <span
                                     className="px-3 py-1 rounded-full text-xs font-bold border"
                                     style={{
                                         backgroundColor: project.billable === 'Billable' ? '#EDE9FE' : '#F3F4F6',

@@ -407,6 +407,13 @@ def _save_single_resource(cur, project_id: str, tm: TeamMemberCreate, project_bi
     alloc_start = _parse_optional_date(tm.allocation_start_date) or project_start or date.today()
     alloc_end = _parse_optional_date(tm.allocation_end_date) or project_end
 
+    if alloc_end and project_end and alloc_end > project_end:
+        raise HTTPException(status_code=422, detail=f"Allocation end date for {tm.name} ({alloc_end}) cannot be after project end date ({project_end}).")
+    if alloc_start and project_start and alloc_start < project_start:
+        raise HTTPException(status_code=422, detail=f"Allocation start date for {tm.name} ({alloc_start}) cannot be before project start date ({project_start}).")
+    if alloc_start and alloc_end and alloc_start > alloc_end:
+        raise HTTPException(status_code=422, detail=f"Allocation dates for {tm.name} are invalid: start date ({alloc_start}) cannot be after end date ({alloc_end}).")
+
     existing_weekly_load = _fetch_existing_weekly_load(cur, employee_id, alloc_start, alloc_end, ignore_allocation_id=replace_allocation_id)
     available_pct = _available_capacity_pct(existing_weekly_load)
 

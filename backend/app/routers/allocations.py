@@ -273,15 +273,23 @@ def project_employees(project_id: str):
     cur = conn.cursor()
 
     try:
+        import datetime
+        today = datetime.date.today()
+        
         cur.execute("""
             SELECT
                 pa.employee_id,
                 em.employee_name,
                 (pa.allocation_percentage) AS allocation_pct,
-                pa.project_tags
+                pa.project_tags,
+                pa.allocation_end_date,
+                em.date_of_resign,
+                ppro.notice_end_date,
+                ppro.employee_status
             FROM projects_allocation pa
             JOIN projects pj ON pa.project_id = pj.project_id
             JOIN employee_master em ON pa.employee_id = em.employee_id
+            LEFT JOIN employee_master_pro ppro ON em.employee_id = ppro.employee_id
             WHERE pa.project_id = %s
               AND pa.allocation_start_date <= CURRENT_DATE
               AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
@@ -292,15 +300,36 @@ def project_employees(project_id: str):
 
         rows = cur.fetchall()
 
-        return [
-            {
+        result = []
+        for r in rows:
+            allocation_end_date = r[4]
+            date_of_resign = r[5]
+            notice_end_date = r[6]
+            employee_status = r[7] or ""
+            
+            leaving_in_days = None
+            leaving_date = date_of_resign or notice_end_date
+            if leaving_date:
+                leaving_in_days = (leaving_date - today).days
+
+            alloc_ending_in_days = None
+            if allocation_end_date:
+                alloc_ending_in_days = (allocation_end_date - today).days
+
+            result.append({
                 "employee_id": r[0],
                 "employee_name": r[1],
                 "allocation_percentage": int(r[2]),
-                "project_tags": r[3]
-            }
-            for r in rows
-        ]
+                "project_tags": r[3],
+                "allocation_end_date": str(allocation_end_date) if allocation_end_date else None,
+                "date_of_resign": str(date_of_resign) if date_of_resign else None,
+                "notice_end_date": str(notice_end_date) if notice_end_date else None,
+                "employee_status": employee_status,
+                "leaving_in_days": leaving_in_days,
+                "allocation_ending_in_days": alloc_ending_in_days
+            })
+            
+        return result
 
     except Exception as e:
         print("Project employees DB error:", e)

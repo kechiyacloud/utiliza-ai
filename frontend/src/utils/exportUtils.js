@@ -7,17 +7,42 @@ import autoTable from 'jspdf-autotable';
  * @param {Array} data - Array of objects to export
  * @param {string} fileName - Base filename
  */
-export const exportToCSV = (data, fileName = 'export') => {
+export const exportToCSV = (data, fileName = 'export', metadata = null) => {
     if (!data || data.length === 0) return;
-    const headers = Object.keys(data[0] || {});
-    const csvRows = [
-        headers.join(','),
-        ...data.map((row) =>
+    // Derive headers from first data row, always excluding the internal sentinel key
+    const headers = Object.keys(data[0] || {}).filter(h => h !== '_isTotalRow');
+    const csvRows = [];
+
+    if (metadata) {
+        Object.entries(metadata).forEach(([key, val]) => {
+            csvRows.push(`"${key.replace(/"/g, '""')}","${String(val ?? '').replace(/"/g, '""')}"`);
+        });
+        csvRows.push(''); // Spacer row
+    }
+
+    csvRows.push(headers.join(','));
+    data.forEach((row) => {
+        const isTotalRow = row._isTotalRow === true;
+        csvRows.push(
             headers
-                .map((header) => `"${String(row[header] ?? '').replace(/"/g, '""')}"`)
+                .map((header) => {
+                    const val = row[header];
+                    let display;
+                    if (isTotalRow) {
+                        // TOTAL row: keep blanks blank, only stringify actual values
+                        display = (val === null || val === undefined || val === '') ? '' : String(val);
+                    } else {
+                        // Data rows: replace missing/dash values with N/A
+                        display = (val === null || val === undefined || val === '' || val === '--' || val === '\u2013' || val === '\u2014')
+                            ? 'N/A'
+                            : String(val);
+                    }
+                    return `"${display.replace(/"/g, '""')}"`;
+                })
                 .join(',')
-        )
-    ];
+        );
+    });
+
     const csv = csvRows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -35,14 +60,43 @@ export const exportToCSV = (data, fileName = 'export') => {
  * Exports data to Excel (.xlsx)
  * @param {Array|Object} data - Array of objects or object with sheet names as keys
  * @param {string} fileName - Base filename
+ * @param {Object} metadata - Optional project metadata to include at the top
  */
-export const exportToExcel = (data, fileName = 'export') => {
+export const exportToExcel = (data, fileName = 'export', metadata = null) => {
     if (!data) return;
     const sheets = Array.isArray(data) ? { Data: data } : data;
     const wb = XLSX.utils.book_new();
     Object.entries(sheets).forEach(([sheetName, rows]) => {
         const safeRows = Array.isArray(rows) ? rows : [];
-        const ws = XLSX.utils.json_to_sheet(safeRows);
+        let ws;
+        if (metadata && sheetName === 'Data') {
+            const aoa = [];
+            Object.entries(metadata).forEach(([key, val]) => {
+                aoa.push([key, val]);
+            });
+            aoa.push([]); // Spacer row
+            
+            if (safeRows.length > 0) {
+                const headers = Object.keys(safeRows[0]).filter(h => h !== '_isTotalRow');
+                aoa.push(headers);
+                safeRows.forEach(row => {
+                    const isTotalRow = row._isTotalRow === true;
+                    aoa.push(headers.map(h => {
+                        const val = row[h];
+                        if (isTotalRow) {
+                            // TOTAL row: keep blanks as empty, only pass real values
+                            return (val === null || val === undefined || val === '') ? '' : val;
+                        }
+                        // Data rows: substitute N/A for missing values
+                        if (val === null || val === undefined || val === '' || val === '--' || val === '\u2013' || val === '\u2014') return 'N/A';
+                        return val;
+                    }));
+                });
+            }
+            ws = XLSX.utils.aoa_to_sheet(aoa);
+        } else {
+            ws = XLSX.utils.json_to_sheet(safeRows);
+        }
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });
     XLSX.writeFile(wb, `${fileName}.xlsx`);
@@ -70,7 +124,11 @@ export const exportToPDF = async (data, columns, title = 'Export', fileName = 'e
     const sub = subtitle || `Generated: ${new Date().toLocaleString('en-GB')}`;
     const startY = buildPDFHeader(doc, logoBase64, title, sub);
 
-    const tableRows = data.map(item => columns.map(col => String(item[col.dataKey] ?? '')));
+    const tableRows = data.map(item => columns.map(col => {
+        const val = item[col.dataKey];
+        if (val === null || val === undefined || val === '' || val === '--' || val === '\u2013' || val === '\u2014') return 'N/A';
+        return String(val);
+    }));
     const tableHeaders = [columns.map(col => col.header)];
 
     autoTable(doc, {
