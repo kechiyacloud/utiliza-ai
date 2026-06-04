@@ -6,9 +6,8 @@ const StatCard = ({ label, value, icon: IconComponent, onClick, active, indicato
     return (
         <div
             onClick={onClick}
-            className={`rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between min-h-[100px] shadow-sm relative group ${
-                onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30' : 'cursor-default'
-            } ${active
+            className={`rounded-2xl p-4 border transition-all duration-300 flex flex-col justify-between min-h-[100px] shadow-sm relative group ${onClick ? 'cursor-pointer hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30' : 'cursor-default'
+                } ${active
                     ? 'bg-blue-50/80 border-blue-400 shadow-sm ring-2 ring-blue-100'
                     : 'bg-white border-slate-200'
                 }`}

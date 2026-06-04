@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 import EditProjectPanel from './EditProjectPanel';
 import { usePermissions } from '../../hooks/usePermissions';
 import SearchableDropdown from '../../components/SearchableDropdown';
+import { getViewWeeks, parseDate } from '../../utils/allocationWeeks';
 
 
 const toMessage = (val, fallback = 'Something went wrong') => {
@@ -29,101 +30,6 @@ const toMessage = (val, fallback = 'Something went wrong') => {
     return String(val);
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Returns the Monday of the ISO week containing the given date. */
-function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - day + 1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
-
-/** Returns the Monday of the ISO week specified by a "YYYY-WW" string. */
-function getMondayFromISOWeek(yearWeekStr) {
-    if (!yearWeekStr) return null;
-    const parts = yearWeekStr.split('-');
-    if (parts.length !== 2) return null;
-    const year = parseInt(parts[0], 10);
-    const week = parseInt(parts[1], 10);
-    if (isNaN(year) || isNaN(week)) return null;
-
-    // Jan 4 is always in ISO week 1.
-    const simple = new Date(year, 0, 4);
-    const dayOfWeek = simple.getDay() || 7;
-    const dayOfISOWeek1Monday = 4 - dayOfWeek + 1; // Monday of week 1
-    const mondayOfTargetWeek = new Date(year, 0, dayOfISOWeek1Monday + (week - 1) * 7);
-    mondayOfTargetWeek.setHours(0, 0, 0, 0);
-    return mondayOfTargetWeek;
-}
-
-
-function getISOWeekNumber(date) {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function getISOYear(date) {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    return d.getFullYear();
-}
-
-/** Formats a Date as "Mar 17" */
-function fmtDate(d) {
-    if (!d || !(d instanceof Date) || isNaN(d.getTime())) return '-';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function getDynamicWeekLabel(mondayDate, fallbackIndex = 1) {
-    const currentMonday = getMonday(new Date());
-    const diffWeeks = Math.round((getMonday(mondayDate).getTime() - currentMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
-
-    if (diffWeeks === 0) return 'Current Week';
-    if (diffWeeks === 1) return 'Next Week';
-    if (diffWeeks > 1) return `Week +${diffWeeks}`;
-    if (diffWeeks === -1) return 'Previous Week';
-    if (diffWeeks < -1) return `Week ${diffWeeks}`;
-    return `Week ${fallbackIndex}`;
-}
-
-function buildWeekDescriptor(mondayDate, index) {
-    const sunday = new Date(mondayDate);
-    sunday.setDate(mondayDate.getDate() + 6);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const status = getWeekStatus(mondayDate, sunday, today);
-    const isPast = status === 'previous';
-    const isCurrent = status === 'current';
-    const isFuture = status === 'upcoming';
-
-    const wkNum = getISOWeekNumber(mondayDate);
-    const yr = getISOYear(mondayDate);
-    const yearWeek = `${yr}-${wkNum}`;
-
-    const label = getDynamicWeekLabel(mondayDate, index);
-
-    return {
-        label,
-        dateRange: `${fmtDate(mondayDate)} - ${fmtDate(sunday)}`,
-        yearWeek,
-        year: yr,
-        weekNum: wkNum,
-        monday: new Date(mondayDate),
-        sunday: new Date(sunday),
-        start: new Date(mondayDate),
-        end: new Date(sunday),
-        isPast,
-        isCurrent,
-        isFuture
-    };
-}
 
 const AvatarCircle = ({ name, photo_url, size = 'w-10 h-10' }) => {
     const safeName = name || 'User';
@@ -171,68 +77,6 @@ const AvatarStack = ({ members, totalCount, size = 'w-8 h-8' }) => {
     );
 };
 
-export function getWeekStatus(weekStartDate, weekEndDate, today = new Date()) {
-    const start = new Date(weekStartDate); start.setHours(0, 0, 0, 0);
-    const end = new Date(weekEndDate); end.setHours(23, 59, 59, 999);
-    const t = new Date(today); t.setHours(0, 0, 0, 0);
-    if (end < t) return 'previous';
-    if (start <= t && t <= end) return 'current';
-    return 'upcoming';
-}
-
-function generateWeeksBetween(startMonday, endMonday) {
-    if (!startMonday || !endMonday || startMonday > endMonday) return [];
-    const weeks = [];
-    let cursor = new Date(startMonday);
-    let index = 1;
-    while (cursor <= endMonday && weeks.length < 400) {
-        weeks.push(buildWeekDescriptor(cursor, index));
-        cursor = new Date(cursor);
-        cursor.setDate(cursor.getDate() + 7);
-        index += 1;
-    }
-    return weeks;
-}
-
-function getCurrentFourWeeks(currentMonday) {
-    const out = [];
-    for (let i = 0; i < 4; i++) {
-        const monday = new Date(currentMonday);
-        monday.setDate(currentMonday.getDate() + i * 7);
-        out.push(buildWeekDescriptor(monday, i + 1));
-    }
-    return out;
-}
-
-function getViewWeeks(mode, allocationStartDate, allocationEndDate) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const currentMonday = getMonday(today);
-    const startDate = parseDate(allocationStartDate);
-    const endDate = parseDate(allocationEndDate);
-    const startMonday = startDate ? getMonday(startDate) : null;
-    const endMonday = endDate ? getMonday(endDate) : null;
-
-    if (mode === 'current') {
-        // Current tab always shows exactly current week + next 3 weeks.
-        return getCurrentFourWeeks(currentMonday);
-    }
-
-    if (mode === 'previous') {
-        // Previous tab: allocation start -> current week (read-only in UI).
-        if (!startMonday || startMonday > currentMonday) return [];
-        return generateWeeksBetween(startMonday, currentMonday);
-    }
-
-    if (mode === 'upcoming') {
-        // Upcoming tab: current week -> allocation end.
-        if (!endMonday || currentMonday > endMonday) return [];
-        return generateWeeksBetween(currentMonday, endMonday);
-    }
-
-    return getCurrentFourWeeks(currentMonday);
-}
-
 const WEEK_DEFAULT_HOURS = 40;
 // Removed UTILIZATION_FILTERS as they were replaced by View Mode Tabs
 
@@ -266,14 +110,6 @@ const clampHours = (val) => {
     const rounded = Math.round(num * 10) / 10;
     return Math.max(1, Math.min(WEEK_DEFAULT_HOURS, rounded));
 };
-
-function parseDate(value) {
-    if (!value) return null;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
 
 function isWeekWithinAllocationRange(weekDescriptor, row = {}) {
     const weekStart = new Date(weekDescriptor.monday);
@@ -1238,17 +1074,6 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         } else if (field === 'allocation_start_date' || field === 'allocation_end_date') {
             setSaveError(''); // Clear previous errors
 
-            if (field === 'allocation_start_date') {
-                if (currentRow.allocation_end_date && value && new Date(value).getTime() > new Date(currentRow.allocation_end_date).getTime()) {
-                    currentRow.allocation_end_date = '';
-                }
-            }
-            if (field === 'allocation_end_date') {
-                if (currentRow.allocation_start_date && value && new Date(value).getTime() < new Date(currentRow.allocation_start_date).getTime()) {
-                    currentRow.allocation_end_date = '';
-                }
-            }
-
             // Allow clearing end date for resources
             if (field === 'allocation_end_date' && !value) {
                 currentRow[field] = value;
@@ -1257,56 +1082,53 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 return;
             }
 
-            const newDate = new Date(value);
-            if (isNaN(newDate)) {
+            const newDate = parseDate(value);
+            if (!newDate) {
                 currentRow[field] = value;
                 newRows[index] = currentRow;
                 setLocalRows(newRows);
                 return;
             }
-            newDate.setHours(0, 0, 0, 0);
 
             if (field === 'allocation_start_date') {
                 // Validation: Start Date < Project Start Date
                 if (projectStart) {
-                    const ps = new Date(projectStart);
-                    ps.setHours(0, 0, 0, 0);
-                    if (newDate < ps) {
-                        setSaveError(`Start date cannot be before project start date (${projectStart}).`);
+                    const ps = parseDate(projectStart);
+                    if (ps && newDate < ps) {
+                        const rName = currentRow.name || 'this resource';
+                        setSaveError(`Allocation start date for ${rName} (${value}) cannot be before project start date (${projectStart}).`);
                     }
                 }
 
                 // Validation: For new resources, Start date in past
                 if (currentRow.isNew) {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    if (newDate < today) {
-                        setSaveError("Start date for new resources cannot be in the past.");
+                    const today = parseDate(new Date().toISOString());
+                    if (today && newDate < today) {
+                        setSaveError(`Start date for new resource ${currentRow.name || 'this resource'} (${value}) cannot be in the past.`);
                     }
                 }
 
                 // Ensure Start Date <= End Date
                 if (currentRow.allocation_end_date) {
-                    const ed = new Date(currentRow.allocation_end_date);
-                    if (newDate > ed) {
-                        setSaveError("Start date cannot be after end date.");
+                    const ed = parseDate(currentRow.allocation_end_date);
+                    if (ed && newDate > ed) {
+                        setSaveError(`Allocation dates for ${currentRow.name || 'this resource'} are invalid: start date (${value}) cannot be after end date (${currentRow.allocation_end_date}).`);
                     }
                 }
             } else {
-                // Validation: End date < Start date
+                // Validation: End date < Allocation Start date
                 if (currentRow.allocation_start_date) {
-                    const sd = new Date(currentRow.allocation_start_date);
-                    if (newDate < sd) {
-                        setSaveError("End date cannot be before start date.");
+                    const sd = parseDate(currentRow.allocation_start_date);
+                    if (sd && newDate < sd) {
+                        setSaveError(`Allocation dates for ${currentRow.name || 'this resource'} are invalid: start date (${currentRow.allocation_start_date}) cannot be after end date (${value}).`);
                     }
                 }
 
                 // Validation: End Date > Project End Date
                 if (projectEnd) {
-                    const pe = new Date(projectEnd);
-                    pe.setHours(23, 59, 59, 999);
-                    if (newDate > pe) {
-                        setSaveError(`End date cannot be after project end date (${projectEnd}).`);
+                    const pe = parseDate(projectEnd);
+                    if (pe && newDate > pe) {
+                        setSaveError(`Allocation end date for ${currentRow.name || 'this resource'} (${value}) cannot be after project end date (${projectEnd}).`);
                     }
                 }
             }
@@ -1400,28 +1222,31 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         const exportData = localRows.map(r => {
             const rowTotal = getRowTotal(r);
             const obj = {
-                'Resource': r.name,
-                'Employee ID': r.employee_id || '-',
-                'Role': r.role,
-                'Start Date': r.allocation_start_date || '-',
-                'End Date': r.allocation_end_date || '-',
+                'Project Name': project?.project_name || project?.name || 'N/A',
+                'Resource': r.name || 'N/A',
+                'Employee ID': r.employee_id || 'N/A',
+                'Role': r.role || 'N/A',
+                'Start Date': r.allocation_start_date || 'N/A',
+                'End Date': r.allocation_end_date || 'N/A',
             };
             visibleWeeks.forEach(wk => {
                 const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                 const safeHours = Number(hours || 0);
-                obj[wk.label] = withinRange && safeHours > 0 ? `${safeHours}h` : 'â€”';
+                obj[wk.label] = withinRange && safeHours > 0 ? `${safeHours}h` : 'N/A';
             });
             obj['Total'] = `${rowTotal}h`;
             return obj;
         });
 
         const totalRow = {
-            'Resource': 'TOTAL',
+            'Project Name': 'TOTAL',
+            'Resource': '',
             'Employee ID': '',
             'Role': '',
             'Start Date': '',
             'End Date': '',
-            'Alloc %': ''
+            'Alloc %': '',
+            _isTotalRow: true,
         };
         let csvGrandTotal = 0;
         visibleWeeks.forEach(wk => {
@@ -1435,12 +1260,22 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
         totalRow['Total'] = `${csvGrandTotal}h`;
         exportData.push(totalRow);
 
+        const projectObj = project || {};
+        const partnerVal = (projectObj.partner_name && projectObj.partner_name.trim() !== '') ? projectObj.partner_name : 'Cloud Destinations';
+        const metadata = {
+            'Project Name': projectObj.project_name || projectObj.name || 'N/A',
+            'Client Name': projectObj.client_name || projectObj.client || 'N/A',
+            'Partner Name': partnerVal,
+            'Department': projectObj.department_name || 'N/A',
+            'Project Type': projectObj.type || projectObj.project_type || 'N/A'
+        };
+
         const fileName = `Allocation_${projectId}_${new Date().toISOString().split('T')[0]}`;
 
         if (format === 'csv') {
-            exportToCSV(exportData, fileName);
+            exportToCSV(exportData, fileName, metadata);
         } else if (format === 'excel') {
-            exportToExcel(exportData, fileName);
+            exportToExcel(exportData, fileName, metadata);
         } else if (format === 'pdf') {
             try {
                 const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1453,17 +1288,46 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                 const subtitle = `Project: ${projectId}  |  Generated: ${today}`;
                 let y = buildPDFHeader(doc, logoBase64, 'Resource Allocation', subtitle);
 
+                // ── Metadata Section ──
+                doc.setFillColor(248, 250, 252);
+                doc.setDrawColor(226, 232, 240);
+                doc.setLineWidth(0.3);
+                doc.rect(13, y, pageWidth - 26, 24, 'FD');
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                doc.setTextColor(71, 85, 105);
+
+                doc.text('Project Name:', 18, y + 6);
+                doc.text('Client Name:', 18, y + 12);
+                doc.text('Partner Name:', 18, y + 18);
+
+                doc.text('Department:', 150, y + 6);
+                doc.text('Project Type:', 150, y + 12);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(15, 23, 42);
+
+                doc.text(String(metadata['Project Name']), 45, y + 6);
+                doc.text(String(metadata['Client Name']), 45, y + 12);
+                doc.text(String(metadata['Partner Name']), 45, y + 18);
+
+                doc.text(String(metadata['Department']), 175, y + 6);
+                doc.text(String(metadata['Project Type']), 175, y + 12);
+
+                y += 29;
+
                 // ── Summary strip ──
                 const grandTotal = visibleWeeks.reduce((s, wk) => s + localRows.reduce((a, r) => {
                     const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                     return a + (withinRange ? Number(hours || 0) : 0);
                 }, 0), 0);
                 doc.setFillColor(241, 245, 249);
-                doc.rect(0, y, pageWidth, 9, 'F');
+                doc.rect(13, y, pageWidth - 26, 9, 'F');
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(8.5);
                 doc.setTextColor(100, 116, 139);
-                doc.text(`Total Resources: ${localRows.length}`, 13, y + 6);
+                doc.text(`Total Resources: ${localRows.length}`, 18, y + 6);
                 doc.text(`Total Hours Allocated: ${grandTotal}h`, 75, y + 6);
                 y += 11;
 
@@ -1481,13 +1345,13 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                     const rowWeeks = visibleWeeks.map(wk => {
                         const { withinRange, hours } = getWeeklyHoursForWeek(r, wk);
                         const safeHours = Number(hours || 0);
-                        return withinRange && safeHours > 0 ? `${safeHours}h` : '\u2013';
+                        return withinRange && safeHours > 0 ? `${safeHours}h` : 'N/A';
                     });
                     return [
-                        r.name ? (r.employee_id ? `${r.name} (${r.employee_id})` : r.name) : '-',
-                        r.role || '-',
-                        r.allocation_start_date || '-',
-                        r.allocation_end_date || '-',
+                        r.name ? (r.employee_id ? `${r.name} (${r.employee_id})` : r.name) : 'N/A',
+                        r.role || 'N/A',
+                        r.allocation_start_date || 'N/A',
+                        r.allocation_end_date || 'N/A',
                         pctDisp,
                         ...rowWeeks,
                         `${total}h`,
@@ -1590,6 +1454,38 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
             return;
         }
 
+        // Validate dates against project timeline
+        const pStart = parseDate(project?.start_date);
+        const pEnd = parseDate(project?.end_date);
+
+        for (const row of localRows) {
+            const rStart = parseDate(row.allocation_start_date);
+            const rEnd = parseDate(row.allocation_end_date);
+            const resourceName = row.name || 'Unknown resource';
+
+            if (rStart && pStart && rStart < pStart) {
+                setSaveError(
+                    `Allocation start date for ${resourceName} (${row.allocation_start_date}) cannot be before project start date (${project?.start_date}).`
+                );
+                setIsSaving(false);
+                return;
+            }
+            if (rEnd && pEnd && rEnd > pEnd) {
+                setSaveError(
+                    `Allocation end date for ${resourceName} (${row.allocation_end_date}) cannot be after project end date (${project?.end_date}).`
+                );
+                setIsSaving(false);
+                return;
+            }
+            if (rStart && rEnd && rStart > rEnd) {
+                setSaveError(
+                    `Allocation dates for ${resourceName} are invalid: start date (${row.allocation_start_date}) cannot be after end date (${row.allocation_end_date}).`
+                );
+                setIsSaving(false);
+                return;
+            }
+        }
+
         try {
             const payload = {
                 resources: localRows.map((row) => ({
@@ -1680,8 +1576,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         <button
                             onClick={() => setViewMode('previous')}
                             className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'previous'
-                                    ? 'bg-rose-600 text-white shadow-md scale-105'
-                                    : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
+                                ? 'bg-rose-600 text-white shadow-md scale-105'
+                                : 'bg-rose-50/50 text-rose-700/60 hover:bg-rose-100 hover:text-rose-700'
                                 }`}
                         >
                             ← Previous
@@ -1689,8 +1585,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         <button
                             onClick={() => setViewMode('current')}
                             className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 mx-1 ${viewMode === 'current'
-                                    ? 'bg-blue-600 text-white shadow-md scale-105'
-                                    : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
+                                ? 'bg-blue-600 text-white shadow-md scale-105'
+                                : 'bg-blue-50/50 text-blue-700/60 hover:bg-blue-100 hover:text-blue-700'
                                 }`}
                         >
                             ● Current
@@ -1698,8 +1594,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                         <button
                             onClick={() => setViewMode('upcoming')}
                             className={`px-5 py-1.5 text-xs font-black rounded-lg transition-all duration-200 ${viewMode === 'upcoming'
-                                    ? 'bg-emerald-600 text-white shadow-md scale-105'
-                                    : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
+                                ? 'bg-emerald-600 text-white shadow-md scale-105'
+                                : 'bg-emerald-50/50 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-700'
                                 }`}
                         >
                             Upcoming →
@@ -1721,8 +1617,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                 onClick={() => setIsDeleteAllModalOpen(true)}
                                 disabled={validResourcesCount === 0}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${validResourcesCount === 0
-                                        ? 'bg-rose-50/50 text-rose-300 cursor-not-allowed border border-rose-100/50'
-                                        : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                    ? 'bg-rose-50/50 text-rose-300 cursor-not-allowed border border-rose-100/50'
+                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
                                     }`}
                             >
                                 <Trash2 size={14} /> Clear All Resources
@@ -1739,8 +1635,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                                     disabled={validResourcesCount === 0}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
-                                            ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
-                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                                         }`}
                                 >
                                     <Download size={14} />
@@ -1776,8 +1672,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                     onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                                     disabled={validResourcesCount === 0}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
-                                            ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
-                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        ? 'bg-slate-50 border border-slate-100 text-slate-400 cursor-not-allowed'
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                                         }`}
                                 >
                                     <Download size={14} />
@@ -1806,8 +1702,8 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                 onClick={() => setIsConfirmDeleteAllAllocationsOpen(true)}
                                 disabled={validResourcesCount === 0}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${validResourcesCount === 0
-                                        ? 'bg-rose-50/25 text-rose-300 cursor-not-allowed border border-rose-100/50'
-                                        : 'bg-rose-50 text-rose-600 hover:bg-rose-100/80 border border-rose-100'
+                                    ? 'bg-rose-50/25 text-rose-300 cursor-not-allowed border border-rose-100/50'
+                                    : 'bg-rose-50 text-rose-600 hover:bg-rose-100/80 border border-rose-100'
                                     }`}
                             >
                                 <Trash2 size={14} /> Delete
@@ -1895,73 +1791,100 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                 const ridx = row._sourceIndex;
                                 const isLastRow = rowIdx === displayRows.length - 1;
                                 const rowTotal = getRowTotal(row);
-                                const rowBg = ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+
+                                // Detect whether this row has a date violation against the project timeline
+                                const pStart = parseDate(project?.start_date);
+                                const pEnd = parseDate(project?.end_date);
+                                const rStart = parseDate(row.allocation_start_date);
+                                const rEnd = parseDate(row.allocation_end_date);
+                                const hasStartViolation = rStart && pStart && rStart < pStart;
+                                const hasEndViolation = rEnd && pEnd && rEnd > pEnd;
+                                const hasSequenceViolation = rStart && rEnd && rStart > rEnd;
+                                const hasDateViolation = hasStartViolation || hasEndViolation || hasSequenceViolation;
+
+                                const rowBg = hasDateViolation
+                                    ? 'bg-rose-50'
+                                    : ridx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
 
                                 // Business Logic for edits
                                 const pStatus = (project?.status || project?.project_status || '').toUpperCase();
-                                const isProjectNotStarted = pStatus === 'NOT STARTED' || pStatus === 'PENDING' || pStatus === '';
                                 const isProjectEnded = pStatus === 'ENDED' || pStatus === 'COMPLETED';
 
-                                const canEditStartDate = isEditing && (isProjectNotStarted || row.isNew);
+                                const canEditStartDate = isEditing && (!isProjectEnded);
                                 const canEditEndDate = isEditing && (!isProjectEnded);
 
                                 return (
                                     <React.Fragment key={ridx}>
-                                        <tr className={`border-b border-gray-50 transition-colors ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
+                                        <tr
+                                            title={hasDateViolation ? `⚠ ${row.name || 'This resource'} has allocation date violations (dates outside project timeline or start date after end date). Please correct before saving.` : undefined}
+                                            className={`border-b transition-colors ${
+                                                hasDateViolation
+                                                    ? 'border-rose-200 ring-1 ring-inset ring-rose-200'
+                                                    : 'border-gray-50'
+                                            } ${rowBg} ${!isEditing && 'hover:bg-blue-50/40'}`}>
                                             <td className="px-4 py-3 font-semibold text-slate-800 min-w-[230px]">
-                                                {isEditing ? (
-                                                    <SearchableDropdown
-                                                        items={employees}
-                                                        selectedId={row.employee_id || row.name}
-                                                        onSelect={(emp) => {
-                                                            // Prevent duplicates
-                                                            const isDuplicate = localRows.some((m, i) => i !== ridx && m.employee_id === emp.employee_id);
-                                                            if (isDuplicate) {
-                                                                alert(`${emp.employee_name} is already added to this project.`);
-                                                                return;
-                                                            }
+                                                <div className="flex items-center gap-2">
+                                                    {hasDateViolation && (
+                                                        <span title={`${row.name || 'This resource'} has allocation date violations.`} className="text-rose-500 shrink-0">
+                                                            <AlertTriangle size={16} />
+                                                        </span>
+                                                    )}
+                                                    <div className="flex-1">
+                                                        {isEditing ? (
+                                                            <SearchableDropdown
+                                                                items={employees}
+                                                                selectedId={row.employee_id || row.name}
+                                                                onSelect={(emp) => {
+                                                                    // Prevent duplicates
+                                                                    const isDuplicate = localRows.some((m, i) => i !== ridx && m.employee_id === emp.employee_id);
+                                                                    if (isDuplicate) {
+                                                                        alert(`${emp.employee_name} is already added to this project.`);
+                                                                        return;
+                                                                    }
 
-                                                            const nextRole = emp?.role || emp?.role_designation || 'No role assigned';
-                                                            setLocalRows((current) => current.map((item, index) => (
-                                                                index === ridx
-                                                                    ? normalizeAllocationRow({
-                                                                        ...item,
-                                                                        employee_id: emp?.employee_id || '',
-                                                                        name: emp?.employee_name || emp?.name || '',
-                                                                        role: nextRole,
-                                                                        billable_shadow: item.billable_shadow || 'Billable'
-                                                                    })
-                                                                    : item
-                                                            )));
-                                                            handleEmployeeSelect(emp, ridx);
-                                                        }}
-                                                        placeholder="Select Employee"
-                                                        label="Employee"
-                                                    />
-                                                ) : (
-                                                    row.employee_id ? (
-                                                        <div className="flex items-center gap-3">
-                                                            <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
-                                                            <Link
-                                                                to={`/info/employee/${row.employee_id}`}
-                                                                className="flex flex-col justify-center no-underline cursor-pointer group"
-                                                            >
-                                                                <span className="font-bold text-sm text-slate-800 truncate max-w-[150px] group-hover:underline underline-offset-2 decoration-slate-300 transition-colors">
-                                                                    {row.name || '-'}
-                                                                </span>
-                                                                <span className="text-[11px] text-gray-500 font-mono mt-0.5 group-hover:no-underline">{row.employee_id}</span>
-                                                            </Link>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
-                                                            <div className="flex flex-col justify-center">
-                                                                <span className="font-bold text-sm text-slate-800 truncate max-w-[150px]">{row.name || '-'}</span>
-                                                                {row.employee_id && <span className="text-[11px] text-gray-500 font-mono mt-0.5">{row.employee_id}</span>}
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                )}
+                                                                    const nextRole = emp?.role || emp?.role_designation || 'No role assigned';
+                                                                    setLocalRows((current) => current.map((item, index) => (
+                                                                        index === ridx
+                                                                            ? normalizeAllocationRow({
+                                                                                ...item,
+                                                                                employee_id: emp?.employee_id || '',
+                                                                                name: emp?.employee_name || emp?.name || '',
+                                                                                role: nextRole,
+                                                                                billable_shadow: item.billable_shadow || 'Billable'
+                                                                            })
+                                                                            : item
+                                                                    )));
+                                                                    handleEmployeeSelect(emp, ridx);
+                                                                }}
+                                                                placeholder="Select Employee"
+                                                                label="Employee"
+                                                            />
+                                                        ) : (
+                                                            row.employee_id ? (
+                                                                <div className="flex items-center gap-3">
+                                                                    <AvatarCircle name={row.name} photo_url={row.photo_url} size="w-8 h-8" />
+                                                                    <Link
+                                                                        to={`/info/employee/${row.employee_id}`}
+                                                                        className="flex flex-col justify-center no-underline cursor-pointer group"
+                                                                    >
+                                                                        <span className="font-bold text-sm text-slate-800 truncate max-w-[150px] group-hover:underline underline-offset-2 decoration-slate-300 transition-colors">
+                                                                            {row.name || '-'}
+                                                                        </span>
+                                                                        <span className="text-[11px] text-gray-500 font-mono mt-0.5 group-hover:no-underline">{row.employee_id}</span>
+                                                                    </Link>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
+                                                                    <div className="flex flex-col justify-center">
+                                                                        <span className="font-bold text-sm text-slate-800 truncate max-w-[150px]">{row.name || '-'}</span>
+                                                                        {row.employee_id && <span className="text-[11px] text-gray-500 font-mono mt-0.5">{row.employee_id}</span>}
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-slate-600 text-xs min-w-[140px]">
                                                 {isEditing ? (
@@ -1985,17 +1908,35 @@ const AllocationTable = ({ projectId, projectStart, projectEnd, project, rows, e
                                                         value={row.allocation_start_date || ''}
                                                         min={row.isNew ? new Date().toISOString().split('T')[0] : undefined}
                                                         onChange={(e) => handleRowChange(ridx, 'allocation_start_date', e.target.value)}
-                                                        className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white"
+                                                        className={`w-full px-2 py-1 text-xs border rounded outline-none focus:ring-1 bg-white ${
+                                                            (hasStartViolation || hasSequenceViolation)
+                                                                ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-100 bg-rose-50/30'
+                                                                : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
+                                                        }`}
                                                     />
                                                 ) : (
-                                                    row.allocation_start_date || '-'
+                                                    <span className={hasStartViolation ? 'text-rose-600 font-semibold' : ''}>
+                                                        {row.allocation_start_date || '-'}
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-slate-500 font-mono text-[11px] min-w-[120px]">
                                                 {canEditEndDate ? (
-                                                    <input type="date" value={row.allocation_end_date || ''} min={row.allocation_start_date || ''} onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)} className="w-full px-2 py-1 text-xs border rounded border-gray-200 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white" />
+                                                    <input
+                                                        type="date"
+                                                        value={row.allocation_end_date || ''}
+                                                        min={row.allocation_start_date || ''}
+                                                        onChange={(e) => handleRowChange(ridx, 'allocation_end_date', e.target.value)}
+                                                        className={`w-full px-2 py-1 text-xs border rounded outline-none focus:ring-1 bg-white ${
+                                                            (hasEndViolation || hasSequenceViolation)
+                                                                ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-100 bg-rose-50/30'
+                                                                : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'
+                                                        }`}
+                                                    />
                                                 ) : (
-                                                    row.allocation_end_date || '-'
+                                                    <span className={hasEndViolation ? 'text-rose-600 font-semibold' : ''}>
+                                                        {row.allocation_end_date || '-'}
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-2 text-slate-600 text-xs min-w-[100px]">

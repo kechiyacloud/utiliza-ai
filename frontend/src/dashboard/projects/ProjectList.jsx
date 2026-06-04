@@ -372,23 +372,27 @@ const ProjectList = ({
             // 2. Dashboard Card Filter override/combination
             let matchesCardFilter = true;
             const projectStatus = normalizeStatus(project.status || project.project_status);
+            
+            const isCompletedStatus = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => projectStatus.includes(s));
+            const isUpcomingStatus = ['not started', 'planned', 'upcoming', 'on hold', 'delayed'].some(s => projectStatus.includes(s)) || (project.startDate && new Date(project.startDate) > new Date());
+            const isActiveStatus = !isCompletedStatus && !isUpcomingStatus;
+
             if (activeCardFilter === 'Internal') {
-                matchesCardFilter = ['internal', 'poc'].includes((project.type || '').toLowerCase());
+                matchesCardFilter = isActiveStatus && ['internal', 'poc'].includes((project.type || '').toLowerCase());
             } else if (activeCardFilter === 'External') {
-                matchesCardFilter = ['external', 'client'].includes((project.type || '').toLowerCase());
+                matchesCardFilter = isActiveStatus && ['external', 'client'].includes((project.type || '').toLowerCase());
             } else if (activeCardFilter === 'Active' || activeCardFilter === 'Ongoing') {
-                matchesCardFilter = ['live', 'in progress', 'running', 'active', 'ongoing'].some(s => projectStatus.includes(s));
+                matchesCardFilter = isActiveStatus;
             } else if (activeCardFilter === 'Overdue') {
-                matchesCardFilter = projectStatus.includes('overdue');
+                matchesCardFilter = isActiveStatus && projectStatus.includes('overdue');
             } else if (activeCardFilter === 'Ending Soon') {
-                matchesCardFilter = projectStatus.includes('ending soon') && projectStatus !== 'completed';
+                matchesCardFilter = isActiveStatus && projectStatus.includes('ending soon');
             } else if (activeCardFilter === 'Partner') {
                 matchesCardFilter = (project.type || '').toLowerCase() === 'partner';
             } else if (activeCardFilter === 'Upcoming') {
-                const isFutureDate = project.startDate && new Date(project.startDate) > new Date();
-                matchesCardFilter = projectStatus === 'not started' || isFutureDate;
+                matchesCardFilter = isUpcomingStatus;
             } else if (activeCardFilter === 'Completed') {
-                matchesCardFilter = ['closed', 'completed', 'done', 'ended', 'finished'].some(s => projectStatus.includes(s));
+                matchesCardFilter = isCompletedStatus;
             }
 
             // 3. Additional Sidebar Filters
@@ -600,12 +604,12 @@ const ProjectList = ({
 
     const handleExport = async (format) => {
         const formatDate = (val) => {
-            if (!val) return '--';
+            if (!val) return 'N/A';
             if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
                 return val.substring(0, 10);
             }
             const date = new Date(val);
-            if (isNaN(date.getTime())) return '--';
+            if (isNaN(date.getTime())) return 'N/A';
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -613,11 +617,12 @@ const ProjectList = ({
         };
 
         const exportData = filteredProjects.map(p => ({
-            'Project Name': p.name,
-            'Type': p.type === 'Client' ? 'External' : p.type,
-            'Status': formatStatus(p),
-            'Billable': p.billable,
-            'Resources': p.resource_count || p.resources || 0,
+            'Project ID': p.project_id || p.id || 'N/A',
+            'Project Name': p.name || 'N/A',
+            'Type': p.type === 'Client' ? 'External' : (p.type || 'N/A'),
+            'Status': formatStatus(p) || 'N/A',
+            'Billable': p.billable || 'N/A',
+            'Resources': (p.resource_count !== undefined && p.resource_count !== null) ? (p.resource_count || p.resources || 0) : 'N/A',
             'Start Date': formatDate(p.start_date || p.startDate),
             'End Date': formatDate(p.end_date || p.endDate)
         }));
@@ -630,6 +635,7 @@ const ProjectList = ({
             exportToExcel(exportData, fileName);
         } else if (format === 'pdf') {
             const columns = [
+                { header: 'Project ID', dataKey: 'Project ID' },
                 { header: 'Project Name', dataKey: 'Project Name' },
                 { header: 'Type', dataKey: 'Type' },
                 { header: 'Status', dataKey: 'Status' },
