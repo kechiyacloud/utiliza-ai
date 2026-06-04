@@ -25,12 +25,29 @@ function Allocations() {
   const [selectedProject, setSelectedProject] = useState(null);
 
   // Filter State
-  const [filters, setFilters] = useState({
-    department: location.state?.departmentFilter 
-        ? (location.state.departmentFilter.includes(',') ? location.state.departmentFilter.split(',') : [location.state.departmentFilter])
-        : [],
-    location: 'All Locations',
-    resourceType: 'All Resources'
+  const [filters, setFilters] = useState(() => {
+    let initialDepts = [];
+    const stateDept = location.state?.departmentFilter;
+    if (stateDept) {
+      initialDepts = Array.isArray(stateDept)
+        ? stateDept
+        : (stateDept.includes(',') ? stateDept.split(',') : [stateDept]);
+    } else {
+      try {
+        const dashSaved = localStorage.getItem('dashboard_filters_v1');
+        if (dashSaved) {
+          const parsed = JSON.parse(dashSaved);
+          if (parsed && Array.isArray(parsed.departments)) {
+            initialDepts = parsed.departments;
+          }
+        }
+      } catch (e) {}
+    }
+    return {
+      department: initialDepts,
+      location: 'All Locations',
+      resourceType: 'All Resources'
+    };
   });
 
   const [forecastBench, setForecastBench] = useState([]);
@@ -39,8 +56,18 @@ function Allocations() {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const contextLabel = filters.department && filters.department.length > 0 ? 'Team' : 'Organization';
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_filters_v1');
+      const parsed = saved ? JSON.parse(saved) : { departments: [] };
+      parsed.departments = filters.department || [];
+      localStorage.setItem('dashboard_filters_v1', JSON.stringify(parsed));
+    } catch (e) {
+      console.error('Failed to sync allocations department filter to dashboard:', e);
+    }
+  }, [filters.department]);
 
+  const contextLabel = filters.department && filters.department.length > 0 ? 'Team' : 'Organization';
 
   // Fetch Logic
   useEffect(() => {

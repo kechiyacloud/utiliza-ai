@@ -14,14 +14,14 @@ import { getEmployeeStatus } from '../../utils/employeeStatus';
 const AllocationBar = ({ percentage, status }) => {
     const s = (status || '').toLowerCase().trim();
     let color = 'bg-emerald-500'; // default: Allocated
-    if (s.includes('notice')) color = 'bg-red-400';
+    if (percentage > 100) color = 'bg-red-500';
+    else if (s.includes('notice')) color = 'bg-red-400';
     else if (s.includes('pip')) color = 'bg-yellow-400';
     else if (s.includes('resign')) color = 'bg-gray-300';
     else if (s === 'bench') color = 'bg-orange-400';
     else if (s === 'partially bench') color = 'bg-blue-400';
     else if (s === 'partially allocated') color = 'bg-purple-400';
     else if (s === 'allocated') color = 'bg-emerald-500';
-    else if (percentage > 100) color = 'bg-red-500';
     else if (percentage === 0) color = 'bg-orange-400';
 
     const displayPercentage = Math.min(percentage, 100);
@@ -141,6 +141,11 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
 
                 if (cf === 'bench') return s === 'bench';
                 if (cf === 'billable') return s === 'allocated' && emp.billable === 'billable';
+                if (cf === 'internal') return (
+                    s === 'leadership' ||
+                    s === 'internal operations' ||
+                    s === 'system account'
+                );
                 if (cf === 'non-billable') return s === 'allocated' && emp.billable === 'non-billable';
                 if (cf === 'notice') return isNoticeOrPip;
                 if (cf === 'overallocated') return (emp.employee_allocations || 0) > 100;

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Award, Search, Filter } from 'lucide-react';
+import { ArrowLeft, Award } from 'lucide-react';
 import { getEmployeeList } from '../../api/employeeApi';
 import { useDataRefresh } from '../../context';
 import SkillsOverview from './insights/SkillsOverview';
@@ -12,6 +12,20 @@ const SkillsSummaryPage = () => {
     const [loading, setLoading] = useState(!employees.length);
     const [error, setError] = useState(null);
     const { refreshKey } = useDataRefresh();
+
+    // Read selected departments from localStorage to apply the active global filter
+    const [selectedDepts, setSelectedDepts] = useState(() => {
+        try {
+            const saved = localStorage.getItem('dashboard_filters_v1');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && Array.isArray(parsed.departments)) {
+                    return parsed.departments;
+                }
+            }
+        } catch (e) {}
+        return [];
+    });
 
     useEffect(() => {
         const fetchEmployees = async () => {
@@ -28,6 +42,14 @@ const SkillsSummaryPage = () => {
         fetchEmployees();
     }, [refreshKey]);
 
+    // Filter employees dynamically by the selected departments
+    const filteredEmployees = useMemo(() => {
+        if (!selectedDepts || selectedDepts.length === 0) {
+            return employees;
+        }
+        return employees.filter(emp => selectedDepts.includes(emp.department));
+    }, [employees, selectedDepts]);
+
     if (loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-500">
@@ -38,6 +60,8 @@ const SkillsSummaryPage = () => {
             </div>
         );
     }
+
+    const contextLabel = selectedDepts.length > 0 ? selectedDepts.join(', ') : 'Organization-wide';
 
     return (
         <div className="p-6 lg:p-8 flex flex-col gap-6 w-full h-full overflow-y-auto bg-slate-50 min-h-screen">
@@ -56,8 +80,10 @@ const SkillsSummaryPage = () => {
                             <Award size={20} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Skill Summary</h1>
-                            <p className="text-sm font-medium text-gray-500">Explore the talent matrix and skill concentration across your organization.</p>
+                            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{contextLabel} Skill Summary</h1>
+                            <p className="text-sm font-medium text-gray-500">
+                                Explore the talent matrix and skill concentration {selectedDepts.length > 0 ? 'for the selected teams' : 'across your organization'}.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -65,7 +91,7 @@ const SkillsSummaryPage = () => {
 
             {/* Main Content */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <SkillsOverview employees={employees} />
+                <SkillsOverview employees={filteredEmployees} />
             </div>
         </div>
     );

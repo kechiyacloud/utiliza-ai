@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Users, Briefcase, Building2, User, AlertCircle } from 'lucide-react';
+import { X, Users, Briefcase, Building2, User, AlertCircle, Activity } from 'lucide-react';
 
 const EmployeeList = ({ title, list, icon: Icon, colorClass, bgClass }) => (
   <div className="flex-1 min-w-[300px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -44,12 +44,22 @@ const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organi
 
   const bench = employees.filter(e => (e.employee_status || '').toLowerCase() === 'bench');
   const allocated = employees.filter(e => (e.billable || '').toLowerCase() === 'billable');
-  const internal = employees.filter(e => 
-    ((e.billable || '').toLowerCase() === 'non-billable' || 
-     ((e.employee_status || '').toLowerCase() === 'leadership' && (e.billable || '').toLowerCase() !== 'billable')) && 
-    (e.employee_status || '').toLowerCase() !== 'bench' &&
-    !(e.employee_status || '').toLowerCase().includes('notice')
-  );
+  
+  const internal = employees.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    return (
+      s === 'leadership' ||
+      s === 'internal operations' ||
+      s === 'system account'
+    ) && s !== 'bench' && !s.includes('notice');
+  });
+
+  const nonBillable = employees.filter(e => {
+    const s = (e.employee_status || '').toLowerCase();
+    const b = (e.billable || '').toLowerCase();
+    return b === 'non-billable' && s !== 'bench' && !s.includes('notice');
+  });
+
   const noticePeriod = employees.filter(e => (e.employee_status || '').toLowerCase().includes('notice'));
 
   return (
@@ -94,9 +104,16 @@ const WorkforceSplitView = ({ isOpen, onClose, employees, contextLabel = 'Organi
               bgClass="bg-blue-50/50"
             />
             <EmployeeList 
-              title="Internal / Non-Billable" 
+              title="Internal" 
               list={internal} 
               icon={Building2} 
+              colorClass="bg-indigo-500 text-indigo-500" 
+              bgClass="bg-indigo-50/50"
+            />
+            <EmployeeList 
+              title="Non-Billable" 
+              list={nonBillable} 
+              icon={Activity} 
               colorClass="bg-emerald-500 text-emerald-500" 
               bgClass="bg-emerald-50/50"
             />

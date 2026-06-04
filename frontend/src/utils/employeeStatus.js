@@ -19,18 +19,6 @@ export const getEmployeeStatus = (employee) => {
         return 'Leadership';
     }
 
-    // 2. Training (exact 'associate', or contains trainee/intern in type or designation)
-    const type = (employee.employee_type || '').toLowerCase().trim();
-    if (
-        desig === 'associate' ||
-        type.includes('trainee') ||
-        type.includes('intern') ||
-        desig.includes('trainee') ||
-        desig.includes('intern')
-    ) {
-        return 'Training';
-    }
-
     // 3. Internal teams -> Internal Operations
     const dept = (employee.department || '').toLowerCase().trim();
     const internalDepts = ['hr', 'finance', 'it operations', 'system operations', 'exo', 'management', 'training & development'];
