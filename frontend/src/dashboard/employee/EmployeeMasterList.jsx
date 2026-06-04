@@ -200,7 +200,7 @@ function EmployeeMasterList() {
 
       switch (cardFilter) {
         case 'billable':
-          return s === 'allocated' && billable === 'billable';
+          return ['allocated', 'partially allocated', 'partially bench'].includes(s) && billable === 'billable';
         case 'internal':
           return (
             s === 'leadership' ||
@@ -209,7 +209,7 @@ function EmployeeMasterList() {
           );
         case 'non-billable':
           return (
-            s === 'allocated' && billable.includes('non')
+            ['allocated', 'partially allocated', 'partially bench'].includes(s) && billable.includes('non')
           );
         case 'bench':
           return s === 'bench';
@@ -234,13 +234,15 @@ function EmployeeMasterList() {
 
   const billableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
-    return s === 'allocated' && (e.billable || '').toLowerCase() === 'billable';
+    const isAllocated = ['allocated', 'partially allocated', 'partially bench'].includes(s);
+    return isAllocated && (e.billable || '').toLowerCase() === 'billable';
   }).length;
 
   const nonBillableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
     const b = (e.billable || '').toLowerCase();
-    return (s === 'allocated' && b.includes('non'));
+    const isAllocated = ['allocated', 'partially allocated', 'partially bench'].includes(s);
+    return (isAllocated && b.includes('non'));
   }).length;
 
   const internalCount = baseGroup.filter(e => {

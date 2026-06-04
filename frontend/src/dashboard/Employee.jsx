@@ -193,13 +193,15 @@ function Employee() {
   const totalEmployeesCount = baseGroup.length;
   const billableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
-    return s === 'allocated' && (e.billable || '').toLowerCase() === 'billable';
+    const isAllocated = ['allocated', 'partially allocated', 'partially bench'].includes(s);
+    return isAllocated && (e.billable || '').toLowerCase() === 'billable';
   }).length;
 
   const nonBillableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
     const b = (e.billable || '').toLowerCase();
-    return (s === 'allocated' && b.includes('non'));
+    const isAllocated = ['allocated', 'partially allocated', 'partially bench'].includes(s);
+    return (isAllocated && b.includes('non'));
   }).length;
 
   const internalCount = baseGroup.filter(e => {

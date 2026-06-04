@@ -26,7 +26,7 @@ const OrganizationHighlights = ({
     contextLabel = 'Organization',
     activeTabOverride = null
 }) => {
-    const [activeTab, setActiveTab] = useState('Top Allocation');
+    const [activeTab, setActiveTab] = useState('Over Allocated');
     const [utilizationSubTab, setUtilizationSubTab] = useState('EMPLOYEE');
     const [releaseSearch, setReleaseSearch] = useState('');
 
@@ -60,7 +60,7 @@ const OrganizationHighlights = ({
 
     const tabs = [
         { id: 'Upcoming Releases', label: 'Upcoming Releases', icon: Calendar },
-        { id: 'Top Allocation', label: 'Top Allocation', icon: Zap },
+        { id: 'Over Allocated', label: 'Over Allocated', icon: Zap },
         { id: 'Recent Movements', label: 'Recent Movements', icon: Activity },
         { id: 'Bench Aging', label: 'Bench Aging', icon: Clock },
         { id: 'Certificates', label: 'Certificates', icon: Award },
@@ -70,7 +70,7 @@ const OrganizationHighlights = ({
         switch (activeTab) {
             case 'Upcoming Releases':
                 return 'Resources nearing project completion and roll-off';
-            case 'Top Allocation':
+            case 'Over Allocated':
                 return 'Employees and projects with the highest resource allocation';
             case 'Recent Movements':
                 return 'Latest resource transitions between projects';
@@ -85,8 +85,8 @@ const OrganizationHighlights = ({
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'Top Allocation':
-                return renderTopAllocation();
+            case 'Over Allocated':
+                return renderOverAllocated();
             case 'Upcoming Releases':
                 return renderUpcomingReleases();
             case 'Recent Movements':
@@ -110,8 +110,10 @@ const OrganizationHighlights = ({
         }
     }, [location.state, highlightsRef]);
 
-    const renderTopAllocation = () => {
-        const data = utilizationSubTab === 'EMPLOYEE' ? highUtilizationEmployee : highUtilizationProject;
+    const renderOverAllocated = () => {
+        const data = utilizationSubTab === 'EMPLOYEE'
+            ? highUtilizationEmployee.filter(item => (item.allocation || 0) > 100)
+            : highUtilizationProject;
 
         return (
             <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
