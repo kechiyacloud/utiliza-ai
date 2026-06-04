@@ -106,33 +106,50 @@ def allocation_metrics(
                 GROUP BY pa.employee_id
             ),
             EmpBase AS (
-                SELECT em.employee_id, em.department, em.location
+                SELECT em.employee_id, em.department, em.location, em.role_designation
                 FROM employee_master em
                 WHERE {emp_where}
                 {rt_filter}
             ),
             EmpStatus AS (
                 SELECT eb.employee_id,
-                       CASE WHEN (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%') THEN 1 ELSE 0 END as is_notice
+                       CASE WHEN (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%') THEN 1 ELSE 0 END as is_notice,
+                       CASE WHEN (
+                           p.employee_status IN ('Leadership', 'Internal Operations', 'System account', 'system_account', 'System_account', 'internal operations')
+                           OR LOWER(eb.role_designation) LIKE '%%director%%'
+                           OR LOWER(eb.role_designation) LIKE '%%vp%%'
+                           OR LOWER(eb.role_designation) LIKE '%%head%%'
+                           OR LOWER(eb.role_designation) LIKE '%%ceo%%'
+                           OR LOWER(eb.role_designation) LIKE '%%chief executive%%'
+                           OR LOWER(eb.role_designation) LIKE '%%founder%%'
+                           OR LOWER(eb.role_designation) LIKE '%%president%%'
+                           OR LOWER(eb.department) LIKE '%%hr%%'
+                           OR LOWER(eb.department) LIKE '%%finance%%'
+                           OR LOWER(eb.department) LIKE '%%it operations%%'
+                           OR LOWER(eb.department) LIKE '%%system operations%%'
+                           OR LOWER(eb.department) LIKE '%%exo%%'
+                           OR LOWER(eb.department) LIKE '%%management%%'
+                           OR LOWER(eb.department) LIKE '%%training & development%%'
+                       ) THEN 1 ELSE 0 END as is_internal
                 FROM EmpBase eb
                 LEFT JOIN employee_master_pro p ON eb.employee_id = p.employee_id
             )
             SELECT
-                COUNT(DISTINCT eb.employee_id)                                                          AS total_resources,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1
+                COUNT(DISTINCT CASE WHEN es.is_internal = 0 THEN eb.employee_id END)                    AS total_resources,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 1
                                     THEN eb.employee_id END)                                            AS billable_count,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1
                                     THEN eb.employee_id END)                                            AS non_billable_count,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND (aa.employee_id IS NULL OR COALESCE(aa.total_pct, 0) <= 0)
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND (aa.employee_id IS NULL OR COALESCE(aa.total_pct, 0) <= 0)
                                     THEN eb.employee_id END)                                            AS bench_strength,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 1 THEN eb.employee_id END)                      AS notice_count,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 1 AND es.is_internal = 0 THEN eb.employee_id END) AS notice_count,
                 ROUND(
-                    (COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) +
-                     COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END)
+                    (COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) +
+                     COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END)
                     ) * 100.0 /
-                    NULLIF(COUNT(DISTINCT eb.employee_id), 0),
+                    NULLIF(COUNT(DISTINCT CASE WHEN es.is_internal = 0 THEN eb.employee_id END), 0),
                 1)                                                                                      AS avg_utilization,
-                COUNT(DISTINCT CASE WHEN COALESCE(aa.total_pct, 0) > 100
+                COUNT(DISTINCT CASE WHEN es.is_internal = 0 AND COALESCE(aa.total_pct, 0) > 100
                                     THEN eb.employee_id END)                                            AS overallocated
             FROM EmpBase eb
             JOIN EmpStatus es ON eb.employee_id = es.employee_id
@@ -361,21 +378,38 @@ def organization_utilization(
                 GROUP BY pa.employee_id
             ),
             EmpBase AS (
-                SELECT em.employee_id
+                SELECT em.employee_id, em.department, em.role_designation
                 FROM employee_master em
                 WHERE {emp_where}
                 {rt_filter}
             ),
             EmpStatus AS (
                 SELECT eb.employee_id,
-                       CASE WHEN (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%') THEN 1 ELSE 0 END AS is_notice
+                       CASE WHEN (p.employee_status ILIKE '%%notice%%' OR p.employee_status ILIKE '%%pip%%') THEN 1 ELSE 0 END AS is_notice,
+                       CASE WHEN (
+                           p.employee_status IN ('Leadership', 'Internal Operations', 'System account', 'system_account', 'System_account', 'internal operations')
+                           OR LOWER(eb.role_designation) LIKE '%%director%%'
+                           OR LOWER(eb.role_designation) LIKE '%%vp%%'
+                           OR LOWER(eb.role_designation) LIKE '%%head%%'
+                           OR LOWER(eb.role_designation) LIKE '%%ceo%%'
+                           OR LOWER(eb.role_designation) LIKE '%%chief executive%%'
+                           OR LOWER(eb.role_designation) LIKE '%%founder%%'
+                           OR LOWER(eb.role_designation) LIKE '%%president%%'
+                           OR LOWER(eb.department) LIKE '%%hr%%'
+                           OR LOWER(eb.department) LIKE '%%finance%%'
+                           OR LOWER(eb.department) LIKE '%%it operations%%'
+                           OR LOWER(eb.department) LIKE '%%system operations%%'
+                           OR LOWER(eb.department) LIKE '%%exo%%'
+                           OR LOWER(eb.department) LIKE '%%management%%'
+                           OR LOWER(eb.department) LIKE '%%training & development%%'
+                       ) THEN 1 ELSE 0 END as is_internal
                 FROM EmpBase eb
                 LEFT JOIN employee_master_pro p ON eb.employee_id = p.employee_id
             )
             SELECT
-                COUNT(DISTINCT eb.employee_id) AS total_hc,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) AS billable_hc,
-                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END) AS non_billable_hc
+                COUNT(DISTINCT CASE WHEN es.is_internal = 0 THEN eb.employee_id END) AS total_hc,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 1 THEN eb.employee_id END) AS billable_hc,
+                COUNT(DISTINCT CASE WHEN es.is_notice = 0 AND es.is_internal = 0 AND COALESCE(aa.has_billable, 0) = 0 AND COALESCE(aa.has_non_billable, 0) = 1 THEN eb.employee_id END) AS non_billable_hc
             FROM EmpBase eb
             JOIN EmpStatus es ON eb.employee_id = es.employee_id
             LEFT JOIN ActiveAlloc aa ON aa.employee_id = eb.employee_id

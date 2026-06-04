@@ -99,7 +99,6 @@ function Projects() {
     };
     fetchOptions();
   }, []);
-
   useEffect(() => {
     loadData();
   }, [loadData]);

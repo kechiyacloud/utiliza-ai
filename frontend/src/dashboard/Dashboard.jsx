@@ -4,7 +4,7 @@ import {
   TrendingUp, Users as UsersIcon, Briefcase, Activity,
   AlertCircle, ChevronRight, BarChart2, DollarSign, Clock, UserCheck, UserMinus,
   PieChart as PieChartIcon, ShieldAlert, AlertTriangle, ArrowRight, UserPlus, Plus, Trophy,
-  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft, Building2, Check
+  CheckCircle2, Trash2, Download, Send, ArrowUpRight, ListTodo, SquarePen, UserCog, X, ArrowLeft, Building2, Check, RefreshCw, Hourglass
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -45,7 +45,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-xl text-sm z-50">
-        <p className="text-gray-800 font-bold mb-2">{label}</p>
+        {label && <p className="text-gray-800 font-bold mb-2">{label}</p>}
         {payload.map((entry, index) => (
           <div key={index} className="flex items-center gap-2 mb-1">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
@@ -63,12 +63,22 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 function Dashboard() {
-  const { refreshKey } = useDataRefresh();
+  const { refreshKey, triggerRefresh } = useDataRefresh();
   const lastHandledRefreshKeyRef = useRef(-1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+
+  const [targetPercentage, setTargetPercentage] = useState(() => {
+    try {
+      const saved = localStorage.getItem('utilization_target_percentage');
+      if (saved) return parseInt(saved, 10);
+    } catch (e) {}
+    return 85;
+  });
+
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
 
   // Interaction States
   const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(false);
@@ -114,6 +124,10 @@ function Dashboard() {
   const [todoToDelete, setTodoToDelete] = useState(null);
   const [isDeletingTodo, setIsDeletingTodo] = useState(false);
   const [editingTodoId, setEditingTodoId] = useState(null);
+  const [todoFilter, setTodoFilter] = useState('ALL');
+  const [highlightsTabOverride, setHighlightsTabOverride] = useState(null);
+  const [timelineMonths, setTimelineMonths] = useState(6);
+  const [benchViewTab, setBenchViewTab] = useState('RESOURCE');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -304,6 +318,15 @@ function Dashboard() {
 
   // Map Backend Executive Metrics to UI Arrays
   const _metrics = data?.executiveMetrics || {};
+  const utilizationVal = _metrics?.companyUtilization || 0;
+
+  const avgBenchTenureText = useMemo(() => {
+    const aging = data?.executiveMetrics?.benchAging || [];
+    if (aging.length === 0) return '';
+    const total = aging.reduce((sum, item) => sum + (item.days_in_year || 0), 0);
+    const avg = Math.round(total / aging.length);
+    return `Avg. tenure: ${avg} days`;
+  }, [data]);
 
   const contextLabel = Array.isArray(selectedDepartments) && selectedDepartments.length === 0 ? 'Organization' : 'Team';
 
@@ -331,11 +354,22 @@ function Dashboard() {
       state: { cardFilter: 'billable', fromDashboard: true, departmentFilter: selectedDepartments }
     },
     {
-      title: "Non-Billable Headcount",
+      title: "Internal Headcount",
       value: _metrics?.internalHeadcount || 0,
-      subtext: "Internal & Shared services",
+      subtext: "Leadership & admin operations",
+      icon: Building2,
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+      border: "border-indigo-100",
+      route: "/info/employees/list",
+      state: { cardFilter: 'internal', fromDashboard: true, departmentFilter: selectedDepartments }
+    },
+    {
+      title: "Non-Billable Headcount",
+      value: _metrics?.nonBillableHeadcount || 0,
+      subtext: "On internal projects",
       icon: Activity,
-      color: "text-emerald-500",
+      color: "text-emerald-600",
       bg: "bg-emerald-50",
       border: "border-emerald-100",
       route: "/info/employees/list",
@@ -344,7 +378,7 @@ function Dashboard() {
     {
       title: "Bench Headcount",
       value: _metrics?.benchHeadcount || 0,
-      subtext: "resources currently idle",
+      subtext: `resources currently idle${_metrics?.noticePeriod > 0 ? ` (${_metrics.noticePeriod} leaving soon)` : ''}${avgBenchTenureText ? ` • ${avgBenchTenureText}` : ''}`,
       icon: UserMinus,
       color: "text-rose-500",
       bg: "bg-rose-50",
@@ -353,15 +387,26 @@ function Dashboard() {
       state: { cardFilter: 'bench', fromDashboard: true, departmentFilter: selectedDepartments }
     },
     {
+      title: "Notice Period",
+      value: _metrics?.noticePeriod || 0,
+      subtext: "Employees leaving soon",
+      icon: Hourglass,
+      color: "text-red-500",
+      bg: "bg-red-50",
+      border: "border-red-100",
+      route: "/info/employees/list",
+      state: { cardFilter: 'notice', fromDashboard: true, departmentFilter: selectedDepartments }
+    },
+    {
       title: `${String(contextLabel)} Allocation`,
       value: `${_metrics?.companyUtilization || 0}%`,
-      subtext: "Target 85%",
+      subtext: `Target ${targetPercentage}%`,
       icon: TrendingUp,
       color: "text-emerald-500",
       bg: "bg-emerald-50",
       border: "border-emerald-100",
       route: "/info/allocation",
-      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true }
+      state: { showUtilizationOnly: true, showBack: true, fromDashboard: true, departmentFilter: selectedDepartments }
     },
     {
       title: "Active Clients",
@@ -372,7 +417,7 @@ function Dashboard() {
       bg: "bg-blue-50",
       border: "border-blue-100",
       route: "/info/client",
-      state: { showBack: true, fromDashboard: true }
+      state: { showBack: true, fromDashboard: true, departmentFilter: selectedDepartments }
     },
     {
       title: "Running Projects",
@@ -383,7 +428,7 @@ function Dashboard() {
       bg: "bg-amber-50",
       border: "border-amber-100",
       route: "/info/projects",
-      state: { showBack: true, fromDashboard: true }
+      state: { showBack: true, fromDashboard: true, departmentFilter: selectedDepartments }
     },
     {
       title: "Upcoming Bench (30days)",
@@ -399,11 +444,15 @@ function Dashboard() {
     }
   ];
 
-  const allocateAvailableData = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
+  const allocateAvailableData = useMemo(() => {
+    const rawForecast = Array.isArray(_metrics.forecast) && _metrics.forecast.length > 0 ? _metrics.forecast : [];
+    return rawForecast.slice(0, timelineMonths);
+  }, [_metrics.forecast, timelineMonths]);
 
   const dynamicAllocationData = [
     { name: 'Billable', value: _metrics.billableHeadcount || 0, color: '#3b82f6' },
-    { name: 'Non-billable', value: _metrics.internalHeadcount || 0, color: '#10b981' },
+    { name: 'Internal', value: _metrics.internalHeadcount || 0, color: '#6366f1' },
+    { name: 'Non-billable', value: _metrics.nonBillableHeadcount || 0, color: '#10b981' },
     { name: 'Bench', value: _metrics.benchHeadcount || 0, color: '#f59e0b' },
     { name: 'Notice Period', value: _metrics.noticePeriod || 0, color: '#ef4444' },
   ].filter(item => item.value > 0);
@@ -443,12 +492,52 @@ function Dashboard() {
   // Derive bench employees with their skills from the filtered employee list
   const dynamicBenchIndividualSkills = useMemo(() => {
     return filteredDashboardEmployees
-      .filter(emp => (emp.employee_allocations || 0) <= 0)
+      .filter(emp => {
+        const isBench = (emp.employee_allocations || 0) <= 0;
+        const status = emp.employee_status || '';
+        const isDelivery = status !== 'Leadership' && 
+                           status !== 'Internal Operations' && 
+                           status !== 'System account' &&
+                           status !== 'system_account' &&
+                           status !== 'System_account';
+        return isBench && isDelivery;
+      })
       .slice(0, 4)
       .map(emp => ({
         name: emp.employee_name,
-        skills: Array.isArray(emp.skills) && emp.skills.length > 0 ? emp.skills.join(', ') : 'No skills listed'
+        role: emp.role_designation,
+        skills: Array.isArray(emp.skills) ? emp.skills.filter(Boolean) : []
       }));
+  }, [filteredDashboardEmployees]);
+
+  // Aggregate bench skills for Skill View
+  const benchSkillsAggregated = useMemo(() => {
+    const benchEmployees = filteredDashboardEmployees.filter(emp => {
+      const isBench = (emp.employee_allocations || 0) <= 0;
+      const status = emp.employee_status || '';
+      const isDelivery = status !== 'Leadership' && 
+                         status !== 'Internal Operations' && 
+                         status !== 'System account' &&
+                         status !== 'system_account' &&
+                         status !== 'System_account';
+      return isBench && isDelivery;
+    });
+
+    const counts = {};
+    benchEmployees.forEach(emp => {
+      if (Array.isArray(emp.skills)) {
+        emp.skills.forEach(skill => {
+          if (skill) {
+            counts[skill] = (counts[skill] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
   }, [filteredDashboardEmployees]);
 
   const deptCounts = useMemo(() => {
@@ -459,6 +548,15 @@ function Dashboard() {
       return acc;
     }, {});
   }, [allEmployees]);
+
+  const filteredTodos = useMemo(() => {
+    return actionableTodos.filter(todo => {
+      const isSystem = todo.isSystemSuggestion || todo.type === 'warning' || todo.type === 'alert';
+      if (todoFilter === 'ALERTS') return isSystem;
+      if (todoFilter === 'TASKS') return !isSystem;
+      return true;
+    });
+  }, [actionableTodos, todoFilter]);
 
   if (error && !data) {
     return (
@@ -514,7 +612,18 @@ function Dashboard() {
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={() => {
+                clearDashboardCache();
+                triggerRefresh();
+              }}
+              disabled={loading}
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center disabled:opacity-50"
+              title="Refresh Dashboard Data"
+            >
+              <RefreshCw size={18} className={`${loading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
             <MultiSelectDropdown
               options={allDepts}
               selectedValues={selectedDepartments}
@@ -536,7 +645,7 @@ function Dashboard() {
         {/* --- EXECUTIVE SECTION --- */}
         <div className="flex flex-col w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="dashboard-cards">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" id="dashboard-cards">
             {dynamicKpiData.map((kpi, idx) => (
               <div
                 key={idx}
@@ -570,7 +679,7 @@ function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
             {/* Allocated vs Availability (Span 3 for 60% split) */}
             <div
-              className="lg:col-span-3 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors"
+              className="lg:col-span-3 bg-white border border-slate-100 p-5 rounded-2xl shadow-md flex flex-col cursor-pointer group hover:border-slate-300 transition-colors h-[490px]"
               onClick={() => navigate('/info/allocation', { state: { showBack: true } })}
             >
               <div className="flex justify-between items-center mb-4">
@@ -580,6 +689,25 @@ function Dashboard() {
                     Allocated vs Available
                   </h2>
                   <p className="text-sm font-medium text-gray-500 mt-1">Comparing how many people are working versus who is available</p>
+                </div>
+                <div className="flex gap-1 bg-slate-100/80 p-0.5 rounded-lg border border-slate-100" onClick={(e) => e.stopPropagation()}>
+                  {[
+                    { val: 3, label: '3M' },
+                    { val: 6, label: '6M' },
+                    { val: 12, label: '1Y' }
+                  ].map(item => (
+                    <button
+                      key={item.val}
+                      onClick={() => setTimelineMonths(item.val)}
+                      className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded transition-all ${
+                        timelineMonths === item.val
+                          ? 'bg-white text-blue-600 shadow-sm border border-slate-100/50'
+                          : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px]">
@@ -604,7 +732,7 @@ function Dashboard() {
             </div>
 
             {/* Actionable Todo List — Dashboard Theme (Span 2 for 40% split) */}
-            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-md flex flex-col overflow-hidden min-h-[380px]">
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-md flex flex-col overflow-hidden h-[490px]">
               <div className="flex flex-col h-full">
 
                 {/* ── Header ── */}
@@ -626,6 +754,23 @@ function Dashboard() {
                         {actionableTodos.filter(t => t.status !== 'done' && t.status !== 'completed').length} Pending
                       </span>
                     </div>
+                  </div>
+
+                  {/* Filter toggle buttons */}
+                  <div className="flex gap-1 mt-3 bg-slate-100/80 p-0.5 rounded-lg border border-slate-100 max-w-[240px]">
+                    {['ALL', 'ALERTS', 'TASKS'].map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setTodoFilter(f)}
+                        className={`flex-1 text-[9px] font-black uppercase tracking-wider py-1 rounded transition-all ${
+                          todoFilter === f 
+                            ? 'bg-white text-blue-600 shadow-sm border border-slate-100/50' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        {f === 'ALL' ? 'All' : f === 'ALERTS' ? 'Alerts' : 'My Tasks'}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Progress bar */}
@@ -683,8 +828,8 @@ function Dashboard() {
 
                 {/* ── Task List ── */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
-                  {actionableTodos.length > 0 ? (
-                    actionableTodos.map((todo) => {
+                  {filteredTodos.length > 0 ? (
+                    filteredTodos.map((todo) => {
                       const isDone = todo.status === 'done' || todo.status === 'completed';
                       const isEditing = editingTodoId === todo.id;
                       const isWarning = todo.type === 'warning' || todo.type === 'alert';
@@ -854,7 +999,7 @@ function Dashboard() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip content={<CustomTooltip />} />
+                      <RechartsTooltip content={<CustomTooltip />} position={{ y: 0 }} allowEscapeViewBox />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -877,71 +1022,205 @@ function Dashboard() {
               </div>
 
               {/* Strategic Predictor Tip */}
-              {data?.executiveMetrics?.utilizationPrediction && (
-                <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                  <div className={`mt-0.5 ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    <Trophy size={14} />
+              {data?.executiveMetrics && (() => {
+                const targetGap = Math.max(0, targetPercentage - utilizationVal);
+                const isWarning = targetGap > 0;
+                return (
+                  <div className={`mt-auto p-3 rounded-xl border flex items-start gap-2.5 transition-all group-hover:scale-[1.02] ${isWarning ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                    <div className={`mt-0.5 ${isWarning ? 'text-amber-500' : 'text-emerald-500'}`}>
+                      <Trophy size={14} />
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-[10px] font-bold uppercase tracking-tight ${isWarning ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
+                      <p 
+                        className={`text-[10px] font-bold leading-tight ${isWarning ? 'text-amber-600/80' : 'text-emerald-600/80'} flex items-center flex-wrap`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>Target </span>
+                        {isEditingTarget ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={targetPercentage}
+                            autoFocus
+                            onChange={(e) => {
+                              const val = Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1));
+                              setTargetPercentage(val);
+                              try {
+                                localStorage.setItem('utilization_target_percentage', val.toString());
+                              } catch (err) {}
+                            }}
+                            onBlur={() => setIsEditingTarget(false)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                setIsEditingTarget(false);
+                              }
+                            }}
+                            className="w-12 text-center bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 font-black mx-1 inline-block text-slate-800 px-1 py-0.5"
+                          />
+                        ) : (
+                          <span 
+                            className="relative inline-block cursor-pointer group/target peer mx-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsEditingTarget(true);
+                            }}
+                          >
+                            <span className="font-black hover:text-slate-900 transition-colors">
+                              {targetPercentage}
+                            </span>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 bg-slate-800 text-white text-[9px] font-bold uppercase rounded shadow-lg whitespace-nowrap z-50 transition-all animate-in fade-in slide-in-from-bottom-1 pointer-events-none hidden group-hover/target:block">
+                              Edit
+                            </span>
+                          </span>
+                        )}
+                        <span>% utilization.</span>
+                        <span className={`transition-all ${isEditingTarget ? 'inline' : 'hidden peer-hover:inline'} ml-1`}>
+                          {targetGap > 0 ? `Current: ${utilizationVal}% (Gap: ${targetGap}%)` : `Current: ${utilizationVal}% (Optimal)`}
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Strategic Tip</p>
-                    <p className={`text-[10px] font-bold leading-tight ${data.executiveMetrics.utilizationPrediction.gap > 0 ? 'text-amber-600/80' : 'text-emerald-600/80'}`}>
-                      {data.executiveMetrics.utilizationPrediction.tip}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="mt-2 text-slate-400" />
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Top Skills on Bench */}
             <div
-              className="bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col transition-all overflow-hidden cursor-pointer group hover:border-blue-300"
-              onClick={() => navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } })}
+              className="bg-white border border-slate-100 rounded-2xl shadow-md flex flex-col transition-all overflow-hidden group hover:border-blue-300 min-h-[300px]"
             >
-              <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <ShieldAlert size={18} className="text-emerald-500" />
-                  Top Skills on Bench
-                </h2>
+              <div className="flex justify-between items-start p-6 pb-4 border-b border-gray-50 bg-slate-50/30">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <ShieldAlert size={18} className="text-emerald-500" />
+                    Top Skills on Bench
+                  </h2>
+                  {/* View toggle tabs */}
+                  <div className="flex gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setBenchViewTab('RESOURCE')}
+                      className={`px-2 py-0.5 rounded-lg text-[9px] font-bold tracking-widest uppercase transition-all ${benchViewTab === 'RESOURCE' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Resource View
+                    </button>
+                    <button
+                      onClick={() => setBenchViewTab('SKILL')}
+                      className={`px-2 py-0.5 rounded-lg text-[9px] font-bold tracking-widest uppercase transition-all ${benchViewTab === 'SKILL' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Skill View
+                    </button>
+                  </div>
+                </div>
               </div>
+
               <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
-                      <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee</th>
-                      <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skill Set</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
-                      <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
-                        <td className="py-2.5 px-3">
-                          <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex flex-wrap gap-1">
-                            {row.skills.split(', ').map((skill, sIdx) => (
-                              <span key={sIdx} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
+                {benchViewTab === 'RESOURCE' ? (
+                  <table className="w-full">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                        <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee</th>
+                        <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skill Set</th>
                       </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
-                          <ShieldAlert opacity={0.5} size={24} />
-                          No resources currently on bench with skills listed.
-                        </td>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {dynamicBenchIndividualSkills.length > 0 ? dynamicBenchIndividualSkills.map((row, idx) => (
+                        <tr key={idx} className="group hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate('/info/employees/list', { state: { search: row.name, showBack: true } })}>
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-slate-800 text-xs uppercase tracking-tight">{row.name}</span>
+                              {row.role && (
+                                <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 self-start px-1 py-0.5 bg-slate-50 border border-slate-100/50 rounded">
+                                  {row.role}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-wrap gap-1">
+                              {row.skills.length > 0 ? (
+                                row.skills.map((skill, sIdx) => (
+                                  <button
+                                    key={sIdx}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate('/info/employees/list', { state: { search: skill, showBack: true } });
+                                    }}
+                                    className="px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 border border-blue-100 text-[8px] font-black uppercase transition-all cursor-pointer"
+                                    title={`Search ${skill}`}
+                                  >
+                                    {skill}
+                                  </button>
+                                ))
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-400 border border-slate-200 text-[8px] font-black uppercase tracking-wider animate-pulse">
+                                  Skills Pending Update
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                            <ShieldAlert opacity={0.5} size={24} />
+                            No resources currently on bench.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="text-[9px] font-black tracking-widest text-slate-400 uppercase border-b border-gray-50 bg-white">
+                        <th className="text-left py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Skill Name</th>
+                        <th className="text-right py-2 px-3 bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bench Count</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {benchSkillsAggregated.length > 0 ? benchSkillsAggregated.map((row, idx) => (
+                        <tr
+                          key={idx}
+                          className="group hover:bg-slate-50 transition-colors cursor-pointer"
+                          onClick={() => navigate('/info/employees/list', { state: { search: row.name, cardFilter: 'bench', showBack: true } })}
+                        >
+                          <td className="py-2.5 px-3">
+                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[9px] font-black uppercase">
+                              {row.name}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className="font-bold text-slate-800 text-xs">{row.count} Resource{row.count > 1 ? 's' : ''}</span>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="2" className="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                            <ShieldAlert opacity={0.5} size={24} />
+                            No skills recorded on the bench.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* View All Footer */}
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-end mt-auto">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/info/employees/list', { state: { cardFilter: 'bench', showBack: true, departmentFilter: selectedDepartments.length > 0 ? selectedDepartments.join(',') : undefined } });
+                  }}
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest transition-all"
+                >
+                  View All Bench
+                  <ArrowRight size={11} />
+                </button>
               </div>
             </div>
-
-
           </div>
         </div>
 
@@ -960,6 +1239,7 @@ function Dashboard() {
               benchAging={data?.executiveMetrics?.benchAging || []}
               highUtilizationEmployee={data?.topPerformers || []}
               highUtilizationProject={data?.highAllocationProjects || []}
+              activeTabOverride={highlightsTabOverride}
             />
           </div>
         </div>

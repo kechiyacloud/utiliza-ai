@@ -27,17 +27,44 @@ const ResourceHighlights = () => {
     const fromDashboard = location.state?.fromDashboard || false;
 
     // Local filters for the table
-    const [filters, setFilters] = useState({
-        departments: Array.isArray(departmentFilter) ? departmentFilter : (departmentFilter ? [departmentFilter] : []),
-        types: [],
-        skills: [],
-        locations: [],
-        statusTags: [],
-        designations: [],
-        cardFilter: cardType === 'total' ? null : cardType
+    const [filters, setFilters] = useState(() => {
+        let initialDepts = [];
+        if (departmentFilter && departmentFilter.length > 0) {
+            initialDepts = Array.isArray(departmentFilter) ? departmentFilter : [departmentFilter];
+        } else {
+            try {
+                const dashSaved = localStorage.getItem('dashboard_filters_v1');
+                if (dashSaved) {
+                    const parsed = JSON.parse(dashSaved);
+                    if (parsed && Array.isArray(parsed.departments)) {
+                        initialDepts = parsed.departments;
+                    }
+                }
+            } catch (e) {}
+        }
+        return {
+            departments: initialDepts,
+            types: [],
+            skills: [],
+            locations: [],
+            statusTags: [],
+            designations: [],
+            cardFilter: cardType === 'total' ? null : cardType
+        };
     });
 
     const [searchQuery, setSearchQuery] = useState("");
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('dashboard_filters_v1');
+            const parsed = saved ? JSON.parse(saved) : { departments: [] };
+            parsed.departments = filters.departments || [];
+            localStorage.setItem('dashboard_filters_v1', JSON.stringify(parsed));
+        } catch (e) {
+            console.error('Failed to sync resource highlights department filter to dashboard:', e);
+        }
+    }, [filters.departments]);
 
     useEffect(() => {
         const fetchEmployees = async () => {
@@ -64,13 +91,21 @@ const ResourceHighlights = () => {
                     bg: 'bg-blue-50',
                     description: 'See team members currently on billable engagements.'
                 };
+            case 'internal':
+                return {
+                    title: 'Internal Headcount',
+                    icon: Building2,
+                    color: 'text-indigo-600',
+                    bg: 'bg-indigo-50',
+                    description: 'See leadership, admin, and internal operations resources.'
+                };
             case 'non-billable':
                 return {
                     title: 'Non-Billable Headcount',
                     icon: Activity,
                     color: 'text-emerald-600',
                     bg: 'bg-emerald-50',
-                    description: 'See internal and shared operations resources.'
+                    description: 'See team members currently on non-billable engagements.'
                 };
             case 'bench':
                 return {

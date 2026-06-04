@@ -163,7 +163,6 @@ def _sync_employee_allocations(cur, employee_ids):
                 WHEN p.employee_status ILIKE '%%resign%%' THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%leadership%%' THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%internal operations%%' THEN p.employee_status
-                WHEN p.employee_status ILIKE '%%training%%' THEN p.employee_status
                 WHEN p.employee_status ILIKE '%%system account%%' THEN p.employee_status
                 WHEN (
                     LOWER(m.role_designation) LIKE '%%director%%'
@@ -175,13 +174,6 @@ def _sync_employee_allocations(cur, employee_ids):
                     OR LOWER(m.role_designation) LIKE '%%founder%%'
                     OR LOWER(m.role_designation) LIKE '%%president%%'
                 ) THEN 'Leadership'
-                WHEN (
-                    LOWER(m.employee_type) LIKE '%%trainee%%'
-                    OR LOWER(m.employee_type) LIKE '%%intern%%'
-                    OR LOWER(m.role_designation) LIKE '%%trainee%%'
-                    OR LOWER(m.role_designation) LIKE '%%intern%%'
-                    OR LOWER(m.role_designation) = 'associate'
-                ) THEN 'Training'
                 WHEN (
                     LOWER(m.department) LIKE '%%hr%%'
                     OR LOWER(m.department) LIKE '%%finance%%'
@@ -487,20 +479,13 @@ def get_all_employees(include_resigned: bool = False, include_deleted: bool = Fa
             "            OR LOWER(m.role_designation) LIKE '%%president%%' "
             "        ) THEN 'Leadership' "
             "        WHEN ( "
-            "            LOWER(m.employee_type) LIKE '%%trainee%%' "
-            "            OR LOWER(m.employee_type) LIKE '%%intern%%' "
-            "            OR LOWER(m.role_designation) LIKE '%%trainee%%' "
-            "            OR LOWER(m.role_designation) LIKE '%%intern%%' "
-            "            OR LOWER(m.role_designation) = 'associate' "
-            "        ) THEN 'Training' "
-            "        WHEN ( "
-            "            LOWER(m.department) LIKE '%%hr%%' "
-            "            OR LOWER(m.department) LIKE '%%finance%%' "
-            "            OR LOWER(m.department) LIKE '%%it operations%%' "
-            "            OR LOWER(m.department) LIKE '%%system operations%%' "
-            "            OR LOWER(m.department) LIKE '%%exo%%' "
-            "            OR LOWER(m.department) LIKE '%%management%%' "
-            "            OR LOWER(m.department) LIKE '%%training & development%%' "
+                "            LOWER(m.department) LIKE '%%hr%%' "
+                "            OR LOWER(m.department) LIKE '%%finance%%' "
+                "            OR LOWER(m.department) LIKE '%%it operations%%' "
+                "            OR LOWER(m.department) LIKE '%%system operations%%' "
+                "            OR LOWER(m.department) LIKE '%%exo%%' "
+                "            OR LOWER(m.department) LIKE '%%management%%' "
+                "            OR LOWER(m.department) LIKE '%%training & development%%' "
             "        ) THEN 'Internal Operations' "
             "        WHEN COALESCE(al.total_alloc, 0) > 0 THEN 'Allocated' "
             "        ELSE 'Bench' "
@@ -905,13 +890,6 @@ def get_employee_by_id(employee_id: str, _user: dict = Depends(_require_viewer))
                         OR LOWER(m.role_designation) LIKE '%%founder%%'
                         OR LOWER(m.role_designation) LIKE '%%president%%'
                     ) THEN 'Leadership'
-                    WHEN (
-                        LOWER(m.employee_type) LIKE '%%trainee%%'
-                        OR LOWER(m.employee_type) LIKE '%%intern%%'
-                        OR LOWER(m.role_designation) LIKE '%%trainee%%'
-                        OR LOWER(m.role_designation) LIKE '%%intern%%'
-                        OR LOWER(m.role_designation) = 'associate'
-                    ) THEN 'Training'
                     WHEN (
                         LOWER(m.department) LIKE '%%hr%%'
                         OR LOWER(m.department) LIKE '%%finance%%'

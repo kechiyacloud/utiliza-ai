@@ -70,12 +70,21 @@ function EmployeeMasterList() {
     setCardFilter(prev => prev === filterType ? null : filterType);
   };
 
-  // Department chip selector
   const [selectedDepts, setSelectedDepts] = useState(() => {
     const initialDepartment = location.state?.departmentFilter;
     if (initialDepartment && initialDepartment !== 'Overall') {
+      if (Array.isArray(initialDepartment)) return initialDepartment;
       return initialDepartment.includes(',') ? initialDepartment.split(',') : [initialDepartment];
     }
+    try {
+      const dashSaved = localStorage.getItem('dashboard_filters_v1');
+      if (dashSaved) {
+        const parsed = JSON.parse(dashSaved);
+        if (parsed && Array.isArray(parsed.departments)) {
+          return parsed.departments;
+        }
+      }
+    } catch (e) {}
     try {
       const saved = localStorage.getItem('employee_department_filter');
       if (saved) return JSON.parse(saved);
@@ -87,6 +96,14 @@ function EmployeeMasterList() {
 
   useEffect(() => {
     localStorage.setItem('employee_department_filter', JSON.stringify(selectedDepts));
+    try {
+      const saved = localStorage.getItem('dashboard_filters_v1');
+      const parsed = saved ? JSON.parse(saved) : { departments: [] };
+      parsed.departments = selectedDepts;
+      localStorage.setItem('dashboard_filters_v1', JSON.stringify(parsed));
+    } catch (e) {
+      console.error('Failed to sync employee department filter to dashboard:', e);
+    }
   }, [selectedDepts]);
 
   // Clear stale department filter if none of the saved departments exist in the loaded data
@@ -184,8 +201,16 @@ function EmployeeMasterList() {
       switch (cardFilter) {
         case 'billable':
           return s === 'allocated' && billable === 'billable';
+        case 'internal':
+          return (
+            s === 'leadership' ||
+            s === 'internal operations' ||
+            s === 'system account'
+          );
         case 'non-billable':
-          return s === 'allocated' && billable.includes('non');
+          return (
+            s === 'allocated' && billable.includes('non')
+          );
         case 'bench':
           return s === 'bench';
         case 'overallocated':
@@ -214,7 +239,17 @@ function EmployeeMasterList() {
 
   const nonBillableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
-    return s === 'allocated' && (e.billable || '').toLowerCase().includes('non');
+    const b = (e.billable || '').toLowerCase();
+    return (s === 'allocated' && b.includes('non'));
+  }).length;
+
+  const internalCount = baseGroup.filter(e => {
+    const s = getEmployeeStatus(e).toLowerCase();
+    return (
+      s === 'leadership' ||
+      s === 'internal operations' ||
+      s === 'system account'
+    );
   }).length;
 
   const benchEmployeesCount = baseGroup.filter(e => {
@@ -319,7 +354,7 @@ function EmployeeMasterList() {
 
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard
           label="TOTAL EMPLOYEES"
           value={totalEmployeesCount}
@@ -339,6 +374,16 @@ function EmployeeMasterList() {
           error={error}
           isActive={cardFilter === 'billable'}
           onClick={() => handleCardClick('billable')}
+        />
+        <StatCard
+          label="INTERNAL"
+          value={internalCount}
+          icon={Building2}
+          colorClass="bg-indigo-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'internal'}
+          onClick={() => handleCardClick('internal')}
         />
         <StatCard
           label="NON-BILLABLE"

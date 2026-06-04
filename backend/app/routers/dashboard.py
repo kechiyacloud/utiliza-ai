@@ -242,6 +242,7 @@ def get_dashboard_all(
                     (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND billable = 'billable'),
                     (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Bench'),
                     (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND billable = 'non-billable'),
+                    (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status IN ('Leadership', 'Internal Operations', 'System account')),
                     (SELECT COUNT(*) FROM emp_status_cte WHERE employee_status = 'Allocated' AND employee_id IN (
                         SELECT DISTINCT pa.employee_id FROM projects_allocation pa
                         JOIN projects pj ON pa.project_id = pj.project_id
@@ -272,7 +273,7 @@ def get_dashboard_all(
             """)
             cur.execute(core_metrics_query, dept_params)
             core_row = cur.fetchone()
-            total_emp, notice_p, billable_hc, bench_hc, non_billable_hc, upcoming_bench, new_join_hc, total_alloc_pct = core_row
+            total_emp, notice_p, billable_hc, bench_hc, non_billable_hc, internal_hc, upcoming_bench, new_join_hc, total_alloc_pct = core_row
             
             infocards = {
                 "totalEmployees": {"value": total_emp, "label": "Total Employees", "change": "+0% this month"},
@@ -282,10 +283,46 @@ def get_dashboard_all(
                 "newJoiners": {"value": new_join_hc, "label": "New Joiners", "change": "Last 30 days"}
             }
             
-            cur.execute("SELECT (SELECT COUNT(*) FROM clients), (SELECT COUNT(*) FROM projects)")
-            client_proj = cur.fetchone()
-            infocards["activeClients"]["value"] = client_proj[0]
-            infocards["runningProjects"]["value"] = client_proj[1]
+            # Filter clients and projects by matching allocations if filters are applied
+            if dept_list or desig_list or loc_list or type_list or skill_list or status_list:
+                client_query = f"""
+                    SELECT COUNT(DISTINCT pj.client_id)
+                    FROM projects pj
+                    JOIN projects_allocation pa ON pj.project_id = pa.project_id
+                    JOIN employee_master m ON pa.employee_id = m.employee_id
+                    WHERE pa.allocation_start_date <= CURRENT_DATE
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                      AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                      AND pj.client_id IS NOT NULL AND pj.client_id <> ''
+                      {m_filter}
+                """
+                cur.execute(client_query, dept_params)
+                active_clients_count = cur.fetchone()[0]
+
+                project_query = f"""
+                    SELECT COUNT(DISTINCT pj.project_id)
+                    FROM projects pj
+                    JOIN projects_allocation pa ON pj.project_id = pa.project_id
+                    JOIN employee_master m ON pa.employee_id = m.employee_id
+                    WHERE pa.allocation_start_date <= CURRENT_DATE
+                      AND (pa.allocation_end_date IS NULL OR pa.allocation_end_date >= CURRENT_DATE)
+                      AND COALESCE(LOWER(pj.project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold')
+                      {m_filter}
+                """
+                cur.execute(project_query, dept_params)
+                running_projects_count = cur.fetchone()[0]
+            else:
+                cur.execute("""
+                    SELECT 
+                        (SELECT COUNT(*) FROM clients),
+                        (SELECT COUNT(*) FROM projects WHERE COALESCE(LOWER(project_status), '') NOT IN ('end', 'ended', 'completed', 'cancelled', 'on hold'))
+                """)
+                row = cur.fetchone()
+                active_clients_count = row[0]
+                running_projects_count = row[1]
+
+            infocards["activeClients"]["value"] = active_clients_count
+            infocards["runningProjects"]["value"] = running_projects_count
 
         except Exception as e:
             print("Error in Core Metrics:")
@@ -303,17 +340,37 @@ def get_dashboard_all(
                 WITH months AS (
                     SELECT generate_series(
                         DATE_TRUNC('month', CURRENT_DATE),
-                        DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '5 months',
+                        DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '11 months',
                         INTERVAL '1 month'
                     ) AS month_start
                 ),
                 ActiveEmployees AS (
                     -- Total HC: same filter as totalEmployees KPI card.
                     -- Notice/PIP employees are still headcount, so they are included here.
-                    -- allocate + available for any month = HC for that month.
+                    -- Exclude non-delivery special roles to match the bench headcount card logic.
                     SELECT m.employee_id, m.date_of_resign, m.date_of_joining
                     FROM employee_master m
+                    LEFT JOIN employee_master_pro p ON m.employee_id = p.employee_id
                     WHERE (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account', 'system_account'))
+                      AND (m.role_designation IS NULL OR NOT (
+                          LOWER(m.role_designation) LIKE '%%director%%'
+                          OR LOWER(m.role_designation) LIKE '%%vp%%'
+                          OR LOWER(m.role_designation) LIKE '%%head%%'
+                          OR LOWER(m.role_designation) LIKE '%%ceo%%'
+                          OR LOWER(m.role_designation) LIKE '%%chief executive%%'
+                          OR LOWER(m.role_designation) LIKE '%%founder%%'
+                          OR LOWER(m.role_designation) LIKE '%%president%%'
+                      ))
+                      AND (m.department IS NULL OR NOT (
+                          LOWER(m.department) LIKE '%%hr%%'
+                          OR LOWER(m.department) LIKE '%%finance%%'
+                          OR LOWER(m.department) LIKE '%%it operations%%'
+                          OR LOWER(m.department) LIKE '%%system operations%%'
+                          OR LOWER(m.department) LIKE '%%exo%%'
+                          OR LOWER(m.department) LIKE '%%management%%'
+                          OR LOWER(m.department) LIKE '%%training & development%%'
+                      ))
                       {m_filter}
                 ),
                 MonthEmployeeStatus AS (
@@ -412,7 +469,7 @@ def get_dashboard_all(
 
             # Upcoming Availability
             cur.execute(f"""
-                SELECT m.employee_name, pj.project_name, pa.allocation_end_date, pa.allocation_percentage, m.employee_id, pj.project_id
+                SELECT m.employee_name, pj.project_name, pa.allocation_end_date, pa.allocation_percentage, m.employee_id, pj.project_id, m.role_designation
                 FROM employee_master m
                 JOIN projects_allocation pa ON m.employee_id = pa.employee_id
                 JOIN projects pj ON pa.project_id = pj.project_id
@@ -423,7 +480,7 @@ def get_dashboard_all(
                   {m_filter}
                 ORDER BY pa.allocation_end_date ASC
             """, dept_params)
-            availability = [{"name": r[0], "project": r[1], "releaseDate": r[2].isoformat() if r[2] else None, "allocation": r[3], "id": r[4], "project_id": r[5]} for r in cur.fetchall()]
+            availability = [{"name": r[0], "project": r[1], "releaseDate": r[2].isoformat() if r[2] else None, "allocation": r[3], "id": r[4], "project_id": r[5], "role": r[6]} for r in cur.fetchall()]
 
         except Exception as e:
             print("Error in Batch 3 Lists:")
@@ -561,7 +618,25 @@ def get_dashboard_all(
                     LEFT JOIN employee_master_pro p ON e.employee_id = p.employee_id
                     LEFT JOIN projects_allocation pa ON e.employee_id = pa.employee_id
                     WHERE (p.employee_status NOT ILIKE CHR(37) || 'notice' || CHR(37) OR p.employee_status IS NULL)
-                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
+                      AND (p.employee_status IS NULL OR p.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account', 'system_account', 'System_account', 'internal operations'))
+                      AND (e.role_designation IS NULL OR NOT (
+                          LOWER(e.role_designation) LIKE '%%director%%'
+                          OR LOWER(e.role_designation) LIKE '%%vp%%'
+                          OR LOWER(e.role_designation) LIKE '%%head%%'
+                          OR LOWER(e.role_designation) LIKE '%%ceo%%'
+                          OR LOWER(e.role_designation) LIKE '%%chief executive%%'
+                          OR LOWER(e.role_designation) LIKE '%%founder%%'
+                          OR LOWER(e.role_designation) LIKE '%%president%%'
+                      ))
+                      AND (e.department IS NULL OR NOT (
+                          LOWER(e.department) LIKE '%%hr%%'
+                          OR LOWER(e.department) LIKE '%%finance%%'
+                          OR LOWER(e.department) LIKE '%%it operations%%'
+                          OR LOWER(e.department) LIKE '%%system operations%%'
+                          OR LOWER(e.department) LIKE '%%exo%%'
+                          OR LOWER(e.department) LIKE '%%management%%'
+                          OR LOWER(e.department) LIKE '%%training & development%%'
+                      ))
                       AND e.date_of_resign IS NULL AND (e.is_deleted IS FALSE OR e.is_deleted IS NULL)
                       AND COALESCE((
                           SELECT SUM(pa2.allocation_percentage) 
@@ -588,8 +663,27 @@ def get_dashboard_all(
                 JOIN employee_master m ON es.employee_id = m.employee_id
                 LEFT JOIN employee_master_pro emp ON emp.employee_id = m.employee_id
                 WHERE (emp.employee_status NOT ILIKE CHR(37)||'notice'||CHR(37) OR emp.employee_status IS NULL)
-                  AND (emp.employee_status IS NULL OR emp.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account'))
+                  AND (emp.employee_status IS NULL OR emp.employee_status NOT IN ('Leadership', 'Internal Operations', 'System account', 'system_account', 'System_account', 'internal operations'))
+                  AND (m.role_designation IS NULL OR NOT (
+                      LOWER(m.role_designation) LIKE '%%director%%'
+                      OR LOWER(m.role_designation) LIKE '%%vp%%'
+                      OR LOWER(m.role_designation) LIKE '%%head%%'
+                      OR LOWER(m.role_designation) LIKE '%%ceo%%'
+                      OR LOWER(m.role_designation) LIKE '%%chief executive%%'
+                      OR LOWER(m.role_designation) LIKE '%%founder%%'
+                      OR LOWER(m.role_designation) LIKE '%%president%%'
+                  ))
+                  AND (m.department IS NULL OR NOT (
+                      LOWER(m.department) LIKE '%%hr%%'
+                      OR LOWER(m.department) LIKE '%%finance%%'
+                      OR LOWER(m.department) LIKE '%%it operations%%'
+                      OR LOWER(m.department) LIKE '%%system operations%%'
+                      OR LOWER(m.department) LIKE '%%exo%%'
+                      OR LOWER(m.department) LIKE '%%management%%'
+                      OR LOWER(m.department) LIKE '%%training & development%%'
+                  ))
                   AND (m.is_deleted IS FALSE OR m.is_deleted IS NULL)
+                  AND m.date_of_resign IS NULL
                   AND COALESCE((
                       SELECT SUM(pa_b.allocation_percentage) 
                       FROM projects_allocation pa_b 
@@ -628,16 +722,17 @@ def get_dashboard_all(
             """, dept_params)
             utilization_trends = [{"month": r[0], "value": float(r[1])} for r in cur.fetchall()]
 
-            # Team Utilization: Headcount ratio (Allocated HC / Total HC * 100)
+            # Team Utilization: Headcount ratio (Allocated HC / (Total HC - Internal HC) * 100)
             allocated_hc = billable_hc + non_billable_hc
-            utilization = int((allocated_hc * 100) / max(1, total_emp))
+            utilization = int((allocated_hc * 100) / max(1, total_emp - internal_hc))
             utilization = min(100, utilization)  # Cap at 100% for the main KPI
             executive = {
                 "companyUtilization": utilization,
                 "billableHeadcount": billable_hc,
                 "benchHeadcount": bench_hc,
                 "noticePeriod": notice_p,
-                "internalHeadcount": non_billable_hc,
+                "internalHeadcount": internal_hc,
+                "nonBillableHeadcount": non_billable_hc,
                 "totalEmployees": total_emp,
                 "newJoiners": new_join_hc,
                 "upcomingBench": upcoming_bench,

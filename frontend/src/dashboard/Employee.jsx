@@ -71,8 +71,18 @@ function Employee() {
   const [selectedDepts, setSelectedDepts] = useState(() => {
     const initialDepartment = location.state?.departmentFilter;
     if (initialDepartment && initialDepartment !== 'Overall') {
+      if (Array.isArray(initialDepartment)) return initialDepartment;
       return initialDepartment.includes(',') ? initialDepartment.split(',') : [initialDepartment];
     }
+    try {
+      const dashSaved = localStorage.getItem('dashboard_filters_v1');
+      if (dashSaved) {
+        const parsed = JSON.parse(dashSaved);
+        if (parsed && Array.isArray(parsed.departments)) {
+          return parsed.departments;
+        }
+      }
+    } catch (e) {}
     try {
       const saved = localStorage.getItem('employee_department_filter');
       if (saved) return JSON.parse(saved);
@@ -82,6 +92,14 @@ function Employee() {
 
   useEffect(() => {
     localStorage.setItem('employee_department_filter', JSON.stringify(selectedDepts));
+    try {
+      const saved = localStorage.getItem('dashboard_filters_v1');
+      const parsed = saved ? JSON.parse(saved) : { departments: [] };
+      parsed.departments = selectedDepts;
+      localStorage.setItem('dashboard_filters_v1', JSON.stringify(parsed));
+    } catch (e) {
+      console.error('Failed to sync employee department filter to dashboard:', e);
+    }
   }, [selectedDepts]);
   const allDepts = useMemo(() =>
     [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort()
@@ -180,7 +198,17 @@ function Employee() {
 
   const nonBillableCount = baseGroup.filter(e => {
     const s = getEmployeeStatus(e).toLowerCase();
-    return s === 'allocated' && (e.billable || '').toLowerCase().includes('non');
+    const b = (e.billable || '').toLowerCase();
+    return (s === 'allocated' && b.includes('non'));
+  }).length;
+
+  const internalCount = baseGroup.filter(e => {
+    const s = getEmployeeStatus(e).toLowerCase();
+    return (
+      s === 'leadership' ||
+      s === 'internal operations' ||
+      s === 'system account'
+    );
   }).length;
 
   const benchEmployeesCount = baseGroup.filter(e => {
@@ -264,7 +292,7 @@ function Employee() {
 
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard
           label="Total Talent"
           value={totalEmployeesCount}
@@ -284,6 +312,16 @@ function Employee() {
           error={error}
           isActive={cardFilter === 'billable'}
           onClick={() => setCardFilter('billable')}
+        />
+        <StatCard
+          label="Internal"
+          value={internalCount}
+          icon={Building2}
+          colorClass="bg-indigo-500"
+          loading={loading}
+          error={error}
+          isActive={cardFilter === 'internal'}
+          onClick={() => setCardFilter('internal')}
         />
         <StatCard
           label="Non-Billable"

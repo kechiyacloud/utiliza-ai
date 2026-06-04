@@ -212,9 +212,29 @@ const Availability = () => {
         const loadInitialData = async () => {
             setLoading(true);
             try {
+                let initialDept = '';
+                const stateDept = location.state?.departmentFilter;
+                if (stateDept) {
+                    initialDept = Array.isArray(stateDept) ? stateDept[0] : stateDept;
+                } else {
+                    try {
+                        const dashSaved = localStorage.getItem('dashboard_filters_v1');
+                        if (dashSaved) {
+                            const parsed = JSON.parse(dashSaved);
+                            if (parsed && Array.isArray(parsed.departments)) {
+                                initialDept = parsed.departments[0] || '';
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                if (initialDept !== undefined) {
+                    setSelectedDept(initialDept);
+                }
+
                 const [filterData, availabilityData] = await Promise.all([
                     getAvailabilityFilters(),
-                    getAvailabilityData()
+                    getAvailabilityData({ department: initialDept || undefined })
                 ]);
                 if (controller.signal.aborted) return;
                 setFilters(filterData);
@@ -314,6 +334,17 @@ const Availability = () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isCalendarOpen]);
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('dashboard_filters_v1');
+            const parsed = saved ? JSON.parse(saved) : { departments: [] };
+            parsed.departments = selectedDept ? [selectedDept] : [];
+            localStorage.setItem('dashboard_filters_v1', JSON.stringify(parsed));
+        } catch (e) {
+            console.error('Failed to sync availability department filter to dashboard:', e);
+        }
+    }, [selectedDept]);
 
     const handleDeptChange = async (value) => {
         setSelectedDept(value);
