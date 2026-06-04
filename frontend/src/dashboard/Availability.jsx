@@ -383,7 +383,14 @@ const Availability = () => {
         setFilterLoading(false);
     };
 
-    const getProjectColor = (index) => projectColors[index % projectColors.length];
+    const getProjectColor = (percentage) => {
+        const pct = parseInt(percentage, 10) || 0;
+        if (pct > 100) return projectColors.find(c => c.name === 'rose') || projectColors[4];
+        if (pct >= 71) return projectColors.find(c => c.name === 'emerald') || projectColors[1];
+        if (pct >= 41) return projectColors.find(c => c.name === 'purple') || projectColors[3];
+        if (pct >= 1) return projectColors.find(c => c.name === 'blue') || projectColors[0];
+        return projectColors.find(c => c.name === 'amber') || projectColors[2];
+    };
 
     const getBarStyle = (startDate, endDate) => {
         if (!startDate || !timelineStart || !timelineEnd) return null;
@@ -986,7 +993,7 @@ const Availability = () => {
                             return (
                                 <React.Fragment key={employee.employee_id}>
                                     {allocations.map((allocation, allocationIndex) => {
-                                        const color = getProjectColor(allocationIndex);
+                                        const color = getProjectColor(allocation.allocation_percentage);
                                         const barStyle = getBarStyle(allocation.start_date, allocation.end_date);
                                         const showBar = barStyle && (allocation.allocation_percentage ?? 0) > 0;
                                         const rowBackground = employeeIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50';
@@ -1070,7 +1077,9 @@ const Availability = () => {
                                                                 }}
                                                                 title={`${allocation.project_name}: ${allocation.allocation_percentage}% (${formatDate(allocation.start_date)} to ${formatDate(allocation.end_date)})`}
                                                             >
-                                                                <span className="whitespace-nowrap text-[9px] font-bold text-white drop-shadow-sm">{allocation.allocation_percentage}%</span>
+                                                                {parseFloat(barStyle?.width || '0') >= 3.0 && (
+                                                                    <span className="whitespace-nowrap text-[9px] font-bold text-white drop-shadow-sm">{allocation.allocation_percentage}%</span>
+                                                                )}
                                                                 <div className="availability-stripes absolute inset-0 opacity-15"></div>
                                                             </div>
                                                         </div>

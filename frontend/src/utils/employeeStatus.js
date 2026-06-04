@@ -26,10 +26,14 @@ export const getEmployeeStatus = (employee) => {
         return 'Internal Operations';
     }
 
-    // 4. Allocated delivery employees -> Allocated
+    // 4. Allocated delivery employees -> Partially Bench, Partially Allocated, Allocated
     const allocation = employee.employee_allocations || 0;
-    if (allocation > 0) {
+    if (allocation >= 71) {
         return 'Allocated';
+    } else if (allocation >= 41) {
+        return 'Partially Allocated';
+    } else if (allocation >= 1) {
+        return 'Partially Bench';
     }
 
     // 5. Unallocated delivery employees -> Bench

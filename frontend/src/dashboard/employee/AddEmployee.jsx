@@ -910,7 +910,7 @@ const AddEmployee = () => {
         setFormData(prev => {
             // Calculate what the auto-status SHOULD be based on project list
             let autoStatus = 'Bench';
-            if (totalAllocation >= 81) {
+            if (totalAllocation >= 71) {
                 autoStatus = 'Allocated';
             } else if (totalAllocation >= 41) {
                 autoStatus = 'Partially allocated';

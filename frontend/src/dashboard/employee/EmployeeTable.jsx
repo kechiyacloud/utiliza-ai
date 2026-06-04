@@ -140,13 +140,13 @@ const EmployeeTable = ({ employees = [], loading = false, onEmployeeClick, onEmp
                 const isNoticeOrPip = s.includes('notice') || s.includes('pip');
 
                 if (cf === 'bench') return s === 'bench';
-                if (cf === 'billable') return s === 'allocated' && emp.billable === 'billable';
+                if (cf === 'billable') return ['allocated', 'partially allocated', 'partially bench'].includes(s) && emp.billable === 'billable';
                 if (cf === 'internal') return (
                     s === 'leadership' ||
                     s === 'internal operations' ||
                     s === 'system account'
                 );
-                if (cf === 'non-billable') return s === 'allocated' && emp.billable === 'non-billable';
+                if (cf === 'non-billable') return ['allocated', 'partially allocated', 'partially bench'].includes(s) && emp.billable === 'non-billable';
                 if (cf === 'notice') return isNoticeOrPip;
                 if (cf === 'overallocated') return (emp.employee_allocations || 0) > 100;
                 if (cf === 'certifications') return (emp.cert_count || 0) > 0;
