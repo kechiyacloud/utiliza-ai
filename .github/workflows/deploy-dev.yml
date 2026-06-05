@@ -1,0 +1,27 @@
+name: Deploy Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Print Test Message
+        run: |
+          echo "Deployment Started"
+          pwd
+          whoami
+          date
+
+      - name: Show Files
+        run: ls -la
+
+      - name: Deployment Successful
+        run: echo "CI/CD Pipeline Working"
