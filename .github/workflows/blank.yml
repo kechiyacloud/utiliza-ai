@@ -18,3 +18,8 @@ jobs:
           pwd
           whoami
           uname -a
+      - name: Show Repository Files
+        run: ls -la
+
+      - name: Print Message
+        run: echo "My first GitHub Actions pipeline is working!"
