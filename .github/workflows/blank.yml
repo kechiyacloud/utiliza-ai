@@ -1,5 +1,20 @@
-- name: Show Runner Information
-  run: |
-    pwd
-    whoami
-    uname -a
+name: My First Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Show Runner Information
+        run: |
+          pwd
+          whoami
+          uname -a
