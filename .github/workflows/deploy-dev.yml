@@ -46,3 +46,8 @@ jobs:
         run: |
           cd frontend
           npm run build
+     
+      - name: Run Frontend Lint
+        run: |
+          cd frontend
+          npm run lint
