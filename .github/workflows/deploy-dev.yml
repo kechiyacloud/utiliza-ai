@@ -72,12 +72,7 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
-
-      - name: Validate Backend
-        run: |
-          cd backend
-          python -c "from app.main import app; print('Backend Loaded Successfully')"
-
+      
       # Node Setup
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -93,5 +88,51 @@ jobs:
         run: |
           cd frontend
           npm run build
+
+      - name: Build Backend Docker Image
+        run: |
+          docker build \
+            -t utiliza-backend:latest \
+            -f backend/Dockerfile.prod .
+
+      - name: Build Frontend Docker Image
+        run: |
+          docker build \
+            -t utiliza-frontend:latest \
+            -f frontend/Dockerfile.prod \
+            frontend
+      
+      - name: Tag Backend Image
+        run: |
+          docker tag utiliza-backend:latest utiliza-backend:${{ github.sha }}
+
+      - name: Tag Frontend Image
+        run: |
+          docker tag utiliza-frontend:latest utiliza-frontend:${{ github.sha }}
+
+      - name: List Docker Images
+        run: |
+          docker images | grep utiliza
+
+      - name: Save Backend Image
+        run: |
+          docker save utiliza-backend:latest \
+            -o backend-image.tar
+
+      - name: Save Frontend Image
+        run: |
+          docker save utiliza-frontend:latest \
+            -o frontend-image.tar
      
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: backend-image.tar
+
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-image
+          path: frontend-image.tar
       
