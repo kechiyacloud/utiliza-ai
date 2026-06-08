@@ -26,6 +26,28 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Create Backend .env
+        run: |
+          cat > backend/.env << EOF
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          REDIS_PORT=${{ secrets.REDIS_PORT }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASS=${{ secrets.SMTP_PASS }}
+          SMTP_FROM=${{ secrets.SMTP_FROM }}
+          TEAM_EMAILS=${{ secrets.TEAM_EMAILS }}
+          EOF
+
+      - name: Verify Backend Env
+        run: |
+          ls -la backend/.env
+
       - name: Install Backend Dependencies
         run: |
           cd backend
