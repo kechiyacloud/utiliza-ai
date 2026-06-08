@@ -1,0 +1,20 @@
+name: My First Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  learn:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print Hello
+        run: echo "Hello from GitHub Actions"
+
+      - name: Show Date
+        run: date
+
+      - name: Show Current User
+        run: whoami
