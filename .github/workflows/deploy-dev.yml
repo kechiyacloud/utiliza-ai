@@ -79,6 +79,21 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify AWS Identity
+        run: |
+          aws sts get-caller-identity
+
       - name: Install Frontend Dependencies
         run: |
           cd frontend
@@ -102,14 +117,25 @@ jobs:
             -f frontend/Dockerfile.prod \
             frontend
       
-      - name: Tag Backend Image
+      - name: Tag Backend Image For ECR
         run: |
-          docker tag utiliza-backend:latest utiliza-backend:${{ github.sha }}
+           docker tag utiliza-backend:latest \
+           ${{ secrets.ECR_BACKEND_REPO }}:latest    
 
-      - name: Tag Frontend Image
+      - name: Tag Frontend Image For ECR
         run: |
-          docker tag utiliza-frontend:latest utiliza-frontend:${{ github.sha }}
+          docker tag utiliza-frontend:latest \
+          ${{ secrets.ECR_FRONTEND_REPO }}:latest
 
+      - name: Push Backend Image
+        run: |
+          docker push ${{ secrets.ECR_BACKEND_REPO }}:latest
+
+      - name: Push Frontend Image
+        run: |
+          docker push ${{ secrets.ECR_FRONTEND_REPO }}:latest
+
+          
       - name: List Docker Images
         run: |
           docker images | grep utiliza
@@ -135,4 +161,6 @@ jobs:
         with:
           name: frontend-image
           path: frontend-image.tar
+          
+     
       
